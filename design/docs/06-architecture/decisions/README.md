@@ -1,0 +1,24 @@
+# 📝 Architecture Decision Records (ADR)
+
+> Ghi nhận các quyết định kiến trúc quan trọng và lý do đằng sau chúng.
+
+## Cách tạo ADR mới
+
+1. Copy template từ [`../../../_templates/adr.md`](../../../_templates/adr.md)
+2. Đặt tên file: `ADR-XXX-ten-quyet-dinh.md`
+3. Cập nhật bảng index bên dưới
+
+## ADR Index
+
+| ID | Tiêu đề | Status | Date | Link |
+|----|---------|--------|------|------|
+| ADR-001 | Xác thực ở edge, dữ liệu cục bộ có thời hạn tin cậy (lease) | Proposed | 2026-10-16 | [→](ADR-001-xac-thuc-o-edge-va-lease.md) |
+| ADR-004 | Mô hình Profile OS dùng chung và phân tách danh tính xác thực | Proposed | 2026-11-05 | [→](ADR-004-mo-hinh-profile-os-dung-chung.md) |
+| ADR-007 | Khóa so khớp UID thẻ và phạm vi lưu UID gốc | Proposed | 2026-10-16 | [→](ADR-007-khoa-so-khop-uid.md) |
+
+## Status Legend
+
+- **Proposed** — Đang đề xuất, chưa quyết định
+- **Accepted** — Đã chấp nhận và đang áp dụng
+- **Deprecated** — Không còn áp dụng
+- **Superseded** — Đã bị thay thế bởi ADR khác
