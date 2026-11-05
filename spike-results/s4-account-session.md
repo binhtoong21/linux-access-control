@@ -37,8 +37,8 @@ Thông báo cảnh báo hết hạn ca học xuất hiện trực tiếp trên t
 
 ## Kết luận & Quyết định Kiến trúc
 
-> [!NOTE] Cập nhật định hướng kiến trúc sau Spike (D-006, D-009)
-> Phương án B (Tài khoản riêng theo user `stu_<id>`) trong kết luận mục 1 dưới đây là **kết quả của giai đoạn thử nghiệm ban đầu (PoC)** nhằm kiểm chứng tính khả thi của DAC permissions và user slice. Trong quyết định chuẩn hóa thiết kế sản phẩm (D-006, D-009), hệ thống **chuyển sang áp dụng mô hình Tài khoản OS dùng chung (Shared Workstation Profile)** do các ưu thế vượt trội về thực tế vận hành: giảng viên chuẩn bị sẵn môi trường/tooling/dataset dùng chung cho cả lớp, không làm đầy ổ đĩa khi có hàng ngàn sinh viên, loại bỏ hoàn toàn độ trễ khởi tạo home directory lần đầu (First-run latency 8-10s ở S6). Bằng chứng kỹ thuật về cơ chế dọn dẹp cgroup và thông báo D-Bus của S4 vẫn được kế thừa nguyên vẹn cho mô hình mới.
+> [!NOTE] Cập nhật định hướng kiến trúc sau Spike (ADR-004, D-006, D-009, A6)
+> Phương án B (Tài khoản riêng theo user `stu_<id>`) trong kết luận mục 1 dưới đây là **kết quả của giai đoạn thử nghiệm ban đầu (PoC)** nhằm kiểm chứng tính khả thi của DAC permissions và user slice. Trong quyết định chuẩn hóa thiết kế sản phẩm (ADR-004, D-006, D-009), hệ thống **chuyển sang áp dụng mô hình Tài khoản OS dùng chung (Shared Workstation Profile)** do các ưu thế vượt trội về thực tế vận hành: giảng viên chuẩn bị sẵn môi trường/tooling/dataset dùng chung cho cả lớp, không làm đầy ổ đĩa khi có hàng ngàn sinh viên, loại bỏ hoàn toàn độ trễ khởi tạo home directory lần đầu (First-run latency 8-10s ở S6). Bằng chứng kỹ thuật về cơ chế dọn dẹp cgroup và thông báo D-Bus của S4 vẫn được kế thừa nguyên vẹn cho mô hình mới. Phương án B (`stu_*`) chính thức bị thay thế bởi ADR-004.
 
 1. **Lựa chọn Mô hình Tài khoản (Bản ghi thử nghiệm PoC):** **CHỌN PHƯƠNG ÁN B (Tài khoản theo User có Namespace)**
    - *Lý do tại thời điểm thử nghiệm:* Tận dụng cơ chế bảo mật tự nhiên cấp nhân Linux (DAC permissions `750`). Mỗi sinh viên có một thư mục riêng biệt, sinh viên khác tuyệt đối không thể đọc bài tập, token duyệt web hay cookie cá nhân. Không phải đối mặt với rủi ro rò rỉ dữ liệu như tài khoản dùng chung (Phương án A).
@@ -62,8 +62,8 @@ Thông báo cảnh báo hết hạn ca học xuất hiện trực tiếp trên t
 - **Trường hợp chưa kiểm chứng:** Chưa kiểm chứng trường hợp sinh viên cố tình bật cờ lưu trữ dịch vụ người dùng (`loginctl enable-linger`) kết hợp với `systemd-run --user` trực tiếp từ ứng dụng GUI terminal để duy trì tiến trình sau khi đăng xuất.
 
 ## ADR bị ảnh hưởng
-- **ADR "Ánh xạ tài khoản OS & Namespace":** Chốt phương án B (Tạo tài khoản Linux tiền tố `stu_` dựa trên snapshot, không cấp sudo, khóa mật khẩu).
-- **ADR "Kết thúc phiên và Cưỡng chế dọn dẹp":** Quy định thuật toán dọn phiên 2 bước dựa trên `loginctl kill-user -s SIGKILL` theo user slice, dọn sạch toàn bộ ứng dụng người dùng.
+- **ADR-004 "Mô hình Profile OS dùng chung":** Thay thế hoàn toàn Phương án B (`stu_*` động) bằng mô hình tài khoản dùng chung (`WorkstationProfile`, ví dụ `student`, `labuser`) tạo sẵn trong Master Image.
+- **ADR "Kết thúc phiên và Cưỡng chế dọn dẹp (A6)":** Quy định thuật toán dọn phiên 2 bước dựa trên `loginctl terminate-user` và `kill-user -s SIGKILL` theo user slice, dọn sạch toàn bộ ứng dụng người dùng. SSHD cấu hình `DenyGroups labstudent` và tắt linger (`loginctl disable-linger`).
 - **ADR "Thông báo Desktop và Tương tác người dùng (BR-009)":** Chuẩn hóa cơ chế giao tiếp IPC qua User D-Bus Session Bus.
 
 ## Giả định trong 01-05 bị lung lay

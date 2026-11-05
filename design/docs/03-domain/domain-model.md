@@ -58,7 +58,7 @@ classDiagram
 **EnrollmentToken**: id, note, max_uses (≥ 1, mặc định 1), uses (danh sách máy và thời điểm đã dùng), expires_at, status (`active`, `revoked`), created_by.
 
 ### Scheduling
-**Schedule**: id, name, subject (Subject), target (Target), recurrence (RecurrenceRule), target_profile_id (tùy chọn, trỏ tới WorkstationProfile; nếu rỗng thì nhận default profile của máy), status (`enabled`, `disabled`). Một Schedule là một dòng "ai, ở đâu, khi nào, profile nào".
+**Schedule**: id, name, subject (Subject), target (Target), recurrence (RecurrenceRule), target_os_username (TEXT, tùy chọn; nếu rỗng thì nhận default profile của máy), status (`enabled`, `disabled`). Một Schedule là một dòng "ai, ở đâu, khi nào, profile nào".
 
 ### Distribution
 **Snapshot** (bản dẫn xuất, theo từng máy): workstation_id, version (tăng dần theo máy), generated_at, content (SnapshotContent gồm: thẻ, lịch, allowlist profile của máy), parameters (thời hạn tin cậy, thời gian cảnh báo trước hạn phiên).
@@ -68,18 +68,18 @@ classDiagram
 ### Operations
 **WorkstationStatus**: workstation_id, connectivity (`online`, `offline`), last_heartbeat, boot_id; kèm trạng thái đối soát sau reboot theo từng máy (`Idle`, `Draining`). "Đang dùng" suy ra từ Session `active`, không lưu.
 
-**Session** (bản server nhận từ báo cáo của Edge): id, decision_id (bắt buộc, khớp entry_id của lần quẹt), user_id, card_id, workstation_id, target_profile_id, os_username, started_at, expires_at, status (`active`, `completed`, `forced_logout`, `abandoned`), ended_at, end_reason, end_source (`reported`, `reconstructed`, `inferred`).
+**Session** (bản server nhận từ báo cáo của Edge): id, decision_id (bắt buộc, khớp entry_id của lần quẹt), user_id, card_id, workstation_id, os_username, started_at, expires_at, status (`active`, `completed`, `forced_logout`, `abandoned`), ended_at, end_reason, end_source (`reported`, `reconstructed`, `inferred`).
 
 **AuditLog**: id, entry_id (do Edge sinh, dùng để loại trùng), occurred_at, received_at, outcome (`granted`, `denied`, `error`), reason, detail (chi tiết bổ sung, ví dụ: `no_data`, `lease_expired`, `clock_suspect`, `ambiguous_profile`), card_uid, reader_raw (hex cắt ngắn, chỉ khi lỗi đọc), user (UserSnapshot), card (CardSnapshot), workstation (WorkstationSnapshot), target_os_username, data_version (phiên bản snapshot đã dùng). Bất biến.
 
 ### Edge
 > Toàn bộ thực thể và kho lưu trữ của Edge được hợp nhất trong một cơ sở dữ liệu SQLite duy nhất (`edge.db`, chế độ WAL). Mọi thao tác cập nhật dữ liệu, ghi nhật ký và đối soát phiên đều thực thi trong các giao dịch nguyên tử.
 
-**LocalSnapshot**: snapshot đang dùng (version, content, parameters), received_at, trusted_until (UTC), lease_duration, verified_floor (tính từ `server_time + CLOCK_BOOTTIME`). Lưu trữ trong bảng `local_snapshot`. Thay thế nguyên tử; chỉ nhận bản có version lớn hơn.
+**LocalSnapshot**: snapshot đang dùng (version, content, parameters), received_at, trusted_until (UTC), lease_duration. Lưu trữ trong bảng `local_snapshot`. Thay thế nguyên tử; chỉ nhận bản có version lớn hơn.
 
 **LocalWorkstationProfile**: danh sách profile được phép dùng cục bộ theo allowlist đã được Server đồng bộ: profile_id, workstation_id, os_username, is_default, status (`enabled`, `disabled`). Lưu trong bảng `workstation_profile`. Agent và PAM chỉ mở phiên cho profile nằm trong bảng này và có status `enabled`.
 
-**LocalSession**: session_id, decision_id (bắt buộc, khớp entry_id), user_id, card_id, target_profile_id, os_username, started_at, expires_at (UTC), boottime_limit (hạn đo theo `CLOCK_BOOTTIME`), boot_id, status (`pending`, `active`, `discarded`). Lưu trong bảng `local_session`. Tối đa một phiên active và một pending.
+**LocalSession**: session_id, decision_id (bắt buộc, khớp entry_id), user_id, card_id, os_username, started_at, expires_at (UTC), boottime_limit (hạn đo theo `CLOCK_BOOTTIME`), boot_id, status (`pending`, `active`, `discarded`). Lưu trong bảng `local_session`. Tối đa một phiên active và một pending.
 
 **LocalLiveness**: `last_alive_at` ghi định kỳ xuống đĩa; dùng làm cận dưới `ended_at` khi dựng lại phiên sau crash đột ngột.
 
@@ -154,12 +154,12 @@ classDiagram
 5. Lấy Schedule `enabled` khớp user hoặc nhóm của user và máy hoặc zone của máy. Rỗng → `no_schedule`.
 6. Lọc theo khung giờ chứa thời điểm hiện tại `now`. Rỗng → `out_of_schedule`.
 7. Xác định Profile đích (D-009):
-   - Gom các `target_profile_id` từ các Schedule khớp ở bước 6 (Schedule nào rỗng thì lấy `default_profile_id` của máy trạm).
-   - Nếu gom được nhiều hơn 1 profile khác nhau → từ chối `denied(ambiguous_profile)` (cấm mơ hồ profile, BR-016).
-   - Tra cứu profile được chọn trong bảng allowlist `workstation_profile`: không có → `denied(profile_not_found)`; `status = disabled` → `denied(profile_disabled)`.
-8. Còn lại → `granted`, xác định duy nhất `target_profile` (`os_username`). Hạn phiên là điểm kết thúc của chuỗi khung giờ liên tục (nối nhau không hở, kể cả qua đêm) từ các Schedule khớp và cùng profile, nhưng không vượt quá hạn phiên tối đa (tham số). Hạn phiên gắn với cả UTC tuyệt đối (`expires_at`) và hạn đo `CLOCK_BOOTTIME`.
+   - Gom các `target_os_username` từ các Schedule khớp ở bước 6 (Schedule nào rỗng thì lấy `os_username` của default profile máy trạm).
+   - Nếu gom được nhiều hơn 1 `os_username` khác nhau → từ chối `denied(ambiguous_profile)` (cấm mơ hồ profile, BR-016).
+   - Tra cứu profile theo `os_username` được chọn trong bảng allowlist `workstation_profile` cục bộ: không có → `denied(profile_not_found)`; `status = disabled` → `denied(profile_disabled)`.
+8. Còn lại → `granted`, xác định duy nhất `target_profile` (`os_username`). Hạn phiên là điểm kết thúc của chuỗi khung giờ liên tục (nối nhau không hở trong cùng một ngày, D-011) từ các Schedule khớp và cùng profile, nhưng không vượt quá hạn phiên tối đa (tham số). Hạn phiên gắn với cả UTC tuyệt đối (`expires_at`) và hạn đo `CLOCK_BOOTTIME`.
 
-Kết quả là LoginDecision, luôn kèm phát `LoginDecided`. Ghi bền vững một lần: bản ghi nhật ký (entry_id, kết quả, lý do, chi tiết, version dữ liệu, target_os_username) và, nếu granted, LocalSession pending (target_profile_id, os_username, expires_at, boottime_limit) vào kho SQLite cục bộ trước khi trả LoginDecision.
+Kết quả là LoginDecision, luôn kèm phát `LoginDecided`. Ghi bền vững một lần: bản ghi nhật ký (entry_id, kết quả, lý do, chi tiết, version dữ liệu, target_os_username) và, nếu granted, LocalSession pending (os_username, expires_at, boottime_limit) vào kho SQLite cục bộ trước khi trả LoginDecision.
 
 ### SessionLifecycleService (Edge)
 - Sau khi PAM thành công và `expires_at` còn hạn: chuyển LocalSession `pending` thành `active`; đóng phiên cũ nếu còn (`abandoned` kèm lý do `superseded`), phát `SessionEnded(superseded)` và `SessionStarted` vào outbox. Nếu `expires_at` đã qua: kết thúc phiên OS ngay, chuyển `pending` thành `discarded`.

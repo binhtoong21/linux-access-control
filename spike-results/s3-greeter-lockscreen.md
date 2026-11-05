@@ -24,6 +24,7 @@ Có thể hiển thị đúng các trạng thái của FR-010 và đăng nhập 
 | **Ca 5: Cơ chế thay thế phiên (BR-008)** | Cưỡng chế kết thúc phiên cũ để người mới đăng nhập | `sudo loginctl terminate-session <ID>` dọn sạch phiên Desktop cũ trong < 0.2s, đưa màn hình về Greeter sạch sẽ | ✅ Đạt |
 | **Ca 6: Fallback khi Agent tắt** | Màn hình tự phục hồi hỏi mật khẩu cục bộ (BR-004) | Khi Agent chết, `pam_nfc.so` trả `PAM_IGNORE`, LightDM tự động làm xuất hiện lại ô nhập mật khẩu | ✅ Đạt |
 | **Ca 7: Xác thực Danh tính Động (`PAM_USER`)** | LightDM chấp nhận đổi user từ Greeter sang user quẹt thẻ | Khởi tạo auth cho `dummyuser`, module PAM đổi `PAM_USER` thành `binhtong`. LightDM đọc lại thành công, cấp quyền `User authorized` và mở phiên `c6` cho `binhtong` | ✅ Đạt (Kiểm chứng Giai đoạn 1.1) |
+| **Ca 8: Đăng nhập tài khoản bị khóa mật khẩu (`passwd -l`) (A3)** | Tài khoản shared profile bị `passwd -l` vẫn đăng nhập bình thường qua `pam_nfc.so` | Thành công 100%: `pam_nfc.so` trả `PAM_SUCCESS` và gán `PAM_USER`, bỏ qua `pam_unix.so` nên trạng thái khóa mật khẩu không ảnh hưởng đến quẹt thẻ | ✅ Đạt |
 
 ## Số liệu
 - **Thời gian xử lý xác thực của `pam_nfc.so` trong LightDM:** ~0.03 giây (từ khi nhận request đến khi cấp `User authorized`).
@@ -47,7 +48,12 @@ Có thể hiển thị đúng các trạng thái của FR-010 và đăng nhập 
 2. **Cơ chế xác thực không mật khẩu:** Hoàn toàn khả thi và mượt mà. LightDM tự động ẩn ô nhập mật khẩu khi module PAM đầu tiên là `auth sufficient pam_nfc.so`.
 3. **Màn hình khóa và quy tắc BR-008 (`superseded`):** 
    - Bác bỏ phương án dựa vào màn hình khóa của Desktop OS (GNOME Shell / screensaver), vì cơ chế này xung đột mạnh với Display Manager bên ngoài.
-   - **Chốt phương án kiến trúc:** Quyền kiểm soát phiên và thay thế phiên (`superseded`) được giao cho **Agent daemon**. Khi phát hiện quẹt thẻ của người dùng khác lúc máy đang có phiên, Agent trực tiếp gọi `loginctl terminate-session <old_session>` để dọn sạch phiên cũ, giải phóng seat về lại LightDM cho phiên mới.
+   - **Chốt phương án kiến trúc & Vô hiệu hóa Lock Screen (A3):** 
+     - Vì tài khoản đã bị khóa mật khẩu (`passwd -l`), nếu màn hình khóa GNOME kích hoạt, sinh viên sẽ không thể mở khóa (tự nhốt mình đến hết ca học).
+     - **Bắt buộc cấu hình Master Image (Checklist):** Vô hiệu hóa triệt để màn hình khóa và screensaver lock trong dconf:
+       * `dconf write /org/gnome/desktop/screensaver/lock-enabled false`
+       * `dconf write /org/gnome/desktop/lockdown/disable-lock-screen true`
+     - Quyền kiểm soát phiên và thay thế phiên (`superseded`) được giao cho **Agent daemon**. Khi phát hiện quẹt thẻ của người dùng khác lúc máy đang có phiên, Agent trực tiếp điều phối kết thúc phiên cũ theo quy trình BR-008/BR-009.
 
 ## ADR bị ảnh hưởng
 - **ADR "PAM và Greeter":** Chốt sử dụng LightDM; chốt cấu hình `auth sufficient pam_nfc.so` trước `common-auth`; ghi nhận cơ chế pre-authentication của LightDM Greeter.

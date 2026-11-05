@@ -163,7 +163,7 @@ flowchart LR
 **Nhánh:**
 - AF-1 Đăng ký bằng Enrollment Token: Kỹ thuật viên cấu hình token theo lô (`batch_token`) trong file cấu hình local; server xác thực token và tự động duyệt cấp credential mà không cần Admin bấm tay.
 - EF-1 Token hết hạn, hết lượt hoặc đã thu hồi: từ chối.
-- AF-2 MAC đã có trong hệ thống (cài lại máy / clone lại): gắn vào bản ghi cũ, giữ lịch sử, vô hiệu hóa credential cũ và cấp credential mới.
+- AF-2 MAC đã có trong hệ thống (cài lại máy / clone lại): gắn vào bản ghi cũ, giữ lịch sử, vô hiệu hóa credential cũ và cấp credential mới (kèm tăng `key_version` của máy để quay vòng `K_m` theo ADR-007).
 - AF-3 Chưa nhận snapshot đầu: quẹt thẻ bị `data_stale` đến khi nhận.
 
 **Truy vết:** FR-040 đến 043, 053; BR-018; XINV-009; NFR-SEC02, D01; D-010.

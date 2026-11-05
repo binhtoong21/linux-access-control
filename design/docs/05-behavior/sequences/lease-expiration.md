@@ -39,7 +39,7 @@ sequenceDiagram
     participant L as Greeter và PAM
     participant D as Distribution (server)
 
-    Note over A,K: Nhận snapshot hoặc gia hạn hợp lệ: ghi trusted_until (UTC) và mốc đo (BOOTTIME)
+    Note over A,K: Nhận snapshot hoặc gia hạn hợp lệ: ghi trusted_until (UTC)
     Note over A: Không liên lạc được server, hạn tin cậy đến
     A->>A: Tính lại trạng thái tin cậy: Expired
     U->>A: Quẹt thẻ
@@ -51,7 +51,7 @@ sequenceDiagram
     D-->>A: Gia hạn hoặc snapshot, kèm giờ server
     A->>A: Kiểm tra giờ server so với đồng hồ
     alt Lệch trong ngưỡng
-        A->>K: Ghi trusted_until mới, cập nhật mốc sàn xác minh
+        A->>K: Ghi trusted_until mới
         Note over A: Fresh, quẹt thẻ bình thường
     else Lệch quá ngưỡng
         Note over A: Từ chối gia hạn, ClockSuspect, báo qua heartbeat, thử lại ở heartbeat sau
@@ -60,14 +60,13 @@ sequenceDiagram
 
 ## Nguyên tắc
 
-1. **Còn hạn** nghĩa là chưa tới `trusted_until` (mốc tuyệt đối UTC, ghi bền vững, sống qua khởi động lại) **và**, trong cùng lần khởi động, chưa trôi quá thời lượng D theo đồng hồ đo (`CLOCK_BOOTTIME`). Cái nào đến trước thắng.
+1. **Còn hạn** nghĩa là chưa tới `trusted_until` (mốc tuyệt đối UTC, ghi bền vững trong SQLite, sống qua khởi động lại). Hạn tính từ lúc Agent nhận, thời lượng D do server cấp (D-012, BR-006). Bộ đếm thời lượng phiên (Session Timer) sử dụng riêng đồng hồ đơn điệu `CLOCK_BOOTTIME` để đo thời gian phiên kể từ lúc mở.
 2. **Hạn tính từ lúc Agent nhận**, thời lượng D do server cấp (cấu hình tập trung, NFR-M02). Mọi snapshot và phản hồi gia hạn đều kèm `server_time`.
-3. **Đồng hồ hợp lý** khi thỏa mãn đồng thời ba điều kiện:
-   - **(a) Giờ hiện tại >= Mốc sàn xác minh (verified floor) trừ dung sai.** Mốc sàn là cận dưới của giờ thật: `server_time` ở lần xác minh gần nhất cộng với thời gian đồng hồ đo đã trôi từ đó (`server_time + CLOCK_BOOTTIME_elapsed`), được ghi định kỳ xuống đĩa. Nó không bao giờ lấy từ giờ hệ thống nên bước nhảy lùi giờ sai không "đầu độc" được nó.
-   - **(b) Trong cùng lần khởi động**, độ chênh lệch giữa giờ hệ thống và đồng hồ đo (`CLOCK_BOOTTIME`) kể từ lần xác minh gần nhất nhỏ hơn ngưỡng cho phép (bắt cả tua lùi lẫn tua tới).
-   - **(c) Mỗi lần liên lạc server**, `|giờ hệ thống - server_time| < ngưỡng`. Nếu không thỏa mãn, Agent từ chối nhận gia hạn, không dùng giờ sai làm mốc cho hạn mới.
-4. **Khởi động lại khi offline:** Đồng hồ ở trạng thái "chưa xác minh trực tiếp với server" nhưng vẫn được tin nếu qua điều kiện (a) và chưa vượt quá `trusted_until`. Nếu bắt buộc phải liên lạc server sau mỗi lần khởi động lại thì sự cố server sập kèm mất điện phòng máy sẽ khóa cứng toàn bộ thẻ dù lease còn hạn, vi phạm NFR-A01.
-5. **Agent không tự chỉnh giờ OS.** Khi giờ sai do pin RTC chết, Agent chuyển `ClockSuspect` cho đến khi OS (hoặc NTP) sửa được giờ, rồi heartbeat kế tiếp sẽ xác minh lại.
+3. **Đồng hồ hợp lý (D-012):** Loại bỏ cơ chế mốc sàn xác minh ghi đĩa liên tục gây hao mòn ổ cứng. Thay bằng quy tắc thực tế:
+   - **(a) Giờ hệ thống không lùi về quá khứ:** `local_time >= snapshot.created_at`. Nếu nhỏ hơn, xác định pin CMOS kiệt khiến đồng hồ quay về 1970/2020 → từ chối `data_stale (clock_invalid)`.
+   - **(b) Khi kết nối server:** Agent đối chiếu với `server_time` trong Heartbeat. Nếu `|local_time - server_time| > 60s`, Agent gửi cờ cảnh báo `clock_skew_detected` lên dashboard để kỹ thuật viên can thiệp. Cờ NTP của OS chỉ để báo cáo, không làm điều kiện cổng. Agent không tự chỉnh giờ OS.
+4. **Khởi động lại khi offline:** Đồng hồ được tin nếu `local_time >= snapshot.created_at` và `local_time <= trusted_until`. Cho phép quẹt thẻ bình thường theo lịch đã cache (D-012).
+5. **Agent không tự chỉnh giờ OS.** Khi giờ sai do pin RTC chết, Agent từ chối quẹt thẻ cho đến khi OS (hoặc NTP) sửa được giờ, rồi heartbeat kế tiếp sẽ xác minh lại.
 6. **Một lần đánh giá chỉ lấy `now` đúng một lần** (cả giờ hệ thống lẫn đồng hồ đo) cho cả việc kiểm tra độ tin cậy và khớp khung giờ Schedule, tránh tình trạng quẹt thẻ ở biên thời gian mà hai bước thấy hai giá trị khác nhau.
 7. **Phiên đang chạy không bị ảnh hưởng** (BR-006). Hết hạn lease chỉ chặn các lần quẹt thẻ mới.
 8. **Agent báo `trust_state` và lỗi áp snapshot gần nhất qua heartbeat.** Máy online mà bị `Expired` (ví dụ do lỗi áp snapshot liên tục) sẽ hiển thị cảnh báo ngay trên dashboard mà không cần thêm thông điệp báo lỗi riêng.
@@ -75,9 +74,9 @@ sequenceDiagram
 ## Ngoại lệ
 | ID | Tình huống | Hành vi |
 |----|-----------|---------|
-| EF-1 | Máy khởi động lại khi offline, pin RTC tốt | Đạt điều kiện (a), chưa tới `trusted_until`: Agent vẫn ở `Fresh` (nguyên tắc 4). |
-| EF-2 | Pin RTC chết, máy mất điện bật lại giờ về 1970/2000 | Giờ hệ thống nhỏ hơn mốc sàn: rơi vào `ClockSuspect`, từ chối quẹt thẻ cho đến khi OS sửa giờ và heartbeat xác minh thành công. |
-| EF-3 | Giờ hệ thống bị đổi đột ngột giữa chừng (chỉnh tay hoặc NTP nhảy bước lớn) | Vi phạm điều kiện (b): chuyển `ClockSuspect`. Khi có mạng lại, heartbeat kế tiếp xác minh với server và đặt lại mốc. |
+| EF-1 | Máy khởi động lại khi offline, pin RTC tốt | `local_time >= snapshot.created_at`, chưa tới `trusted_until`: Agent vẫn ở `Fresh` (nguyên tắc 4). |
+| EF-2 | Pin RTC chết, máy mất điện bật lại giờ về 1970/2000 | `local_time < snapshot.created_at`: từ chối quẹt thẻ với `data_stale(clock_invalid)` cho đến khi OS sửa giờ và heartbeat xác minh thành công. |
+| EF-3 | Giờ hệ thống bị đổi đột ngột giữa chừng lúc offline | Đồng hồ đơn điệu `CLOCK_BOOTTIME` bảo vệ timer phiên không bị kéo dài; khi có mạng lại, heartbeat phát hiện lệch > 60s và cảnh báo dashboard. |
 | EF-4 | Phản hồi gia hạn từ server đến muộn | Vẫn được áp dụng bình thường nếu thông điệp hợp lệ và khớp phiên bản dữ liệu. |
 | EF-5 | Máy mới đăng ký, chưa có snapshot | Trạng thái `NoData`, quẹt thẻ bị từ chối; thoát khỏi `NoData` ngay khi nhận snapshot đầu tiên (UC-007). |
 | EF-6 | Gia hạn bị từ chối do máy tụt phiên bản nhưng snapshot mới tải về bị lỗi | Dữ liệu cũ hết hạn dần và chuyển sang `Expired`; dashboard nhận biết qua heartbeat theo nguyên tắc 8. |
@@ -85,12 +84,10 @@ sequenceDiagram
 ## Tham số chốt sau (06)
 - Thời lượng lease D (gợi ý mặc định 24h).
 - Ngưỡng lệch đồng hồ tối đa cho phép (ví dụ 60 giây).
-- Dung sai của mốc sàn xác minh.
-- Chu kỳ ghi mốc sàn xác minh xuống đĩa (ghi thưa để tránh hao mòn ổ cứng flash).
 
 ## Câu hỏi cho 06
 | ADR | Câu hỏi |
 |-----|---------|
-| Lưu trữ cục bộ | Vị trí và cơ chế ghi bền vững cho `trusted_until`, `lease_duration`, và mốc sàn xác minh. |
+| Lưu trữ cục bộ | Vị trí và cơ chế ghi bền vững cho `trusted_until` và `lease_duration`. |
 | Đồng hồ | Cách đọc `CLOCK_BOOTTIME` trên Linux; xử lý bước nhảy NTP hợp lệ mà không gây hiểu nhầm thành `ClockSuspect`. |
 | Giao thức MQTT | Cấu trúc trường `server_time` trong envelope của snapshot / phản hồi gia hạn; các trường `trust_state` và `last_apply_error` trong heartbeat. |

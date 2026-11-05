@@ -1,5 +1,8 @@
 # Kết quả Spike S6: Walking Skeleton (Tích hợp Luồng Đầu-Cuối)
 
+> [!NOTE] Cập nhật định hướng kiến trúc sau Spike (ADR-004, D-006, D-009, A6)
+> Trong thử nghiệm tích hợp Walking Skeleton (S6), các user `binhtong` và `labuser` được sử dụng đóng vai hai tài khoản thử nghiệm độc lập trên máy ảo. Phương án B (tạo động tài khoản theo sinh viên `stu_*` từng thử nghiệm ở S4 và đo đạc phân rã độ trễ `student_firstrun`) đã chính thức bị **ADR-004 thay thế bằng Mô hình Profile OS dùng chung (Shared Workstation Profile)**. Lệnh dọn phiên được chuẩn hóa thành `loginctl terminate-user` / `kill-user -s SIGKILL` theo user slice (A6), thay vì `kill-session` (vốn chỉ diệt scope của phiên GUI trong môi trường test máy ảo).
+
 ## Câu hỏi
 Có thể ghép nối toàn bộ các thành phần độc lập từ S2 đến S5 thành một hệ thống tích hợp chạy luồng xuyên suốt tự động hay không? Từ sự kiện quẹt thẻ → đánh giá Snapshot (CR-001) → ghi nhật ký SQLite WAL → PAM cấp quyền mở cửa Desktop qua LightDM → theo dõi phiên đồ họa → bắn cảnh báo trước hạn qua D-Bus → tự động kết thúc phiên và dọn sạch tiến trình → trả về màn hình đăng nhập LightDM ban đầu?
 

@@ -58,14 +58,18 @@ Chúng tôi quyết định áp dụng **Mô hình Profile OS Dùng Chung (Share
    - Tài khoản Linux dùng chung được tạo sẵn trên máy trạm thông qua Master Image (Clonezilla/PXE) hoặc do kỹ thuật viên tạo trực tiếp (`adduser`).
    - Khi khởi động (Hello) hoặc gửi Heartbeat, Agent tự động quét các user hợp lệ trên máy (thuộc nhóm `labstudent` hoặc khai báo trong config máy) và gửi danh mục profile hiện có lên Server.
    - Server tự động lưu trữ và cập nhật danh mục allowlist profile của máy trạm mà không cần lệnh can thiệp tạo từ xa. Kỹ thuật viên có thể bổ sung tài khoản mới bất kỳ lúc nào; Agent sẽ tự động cập nhật với Server trong lần kết nối tiếp theo.
-   - Agent và PAM từ chối tuyệt đối việc mở phiên vào tài khoản không nằm trong allowlist đã được phê duyệt (`profile_not_found`, `profile_disabled`).
-2. **Quy định Schedule và Giải quyết Profile Đích (Target Profile Resolution):**
-   - Mỗi Schedule có thể chỉ định `target_profile_id` (hoặc kế thừa `default_profile_id` của máy trạm).
-   - Khi hợp quyền nhiều Schedule khớp cho một lần quẹt (BR-016), nếu các Schedule này trỏ tới nhiều profile khác nhau, kết quả là **mơ hồ và bị từ chối tuyệt đối** (`denied(ambiguous_profile)`). Cấm chọn ngầm theo thứ tự ưu tiên.
-3. **Chính sách kết thúc phiên và dọn dẹp tiến trình:**
-   - Khi hết giờ phiên hoặc khi có người khác thay thế phiên hợp lệ: Agent kích hoạt Two-Phase Teardown tiêu diệt 100% tiến trình chạy ngầm thuộc phiên làm việc (`loginctl terminate-session` / `terminate-user`, chờ 2s, cưỡng chế `SIGKILL` cgroup slice).
+   - Agent và PAM từ chối tuyệt đối việc mở phiên vào tài khoản không nằm trong allowlist hợp lệ (`profile_not_found`, `profile_disabled`).
+2. **Quy định Schedule và Giải quyết Profile Đích (Target Profile Resolution - A1):**
+   - Mỗi Schedule có thể chỉ định `target_os_username` (ví dụ `student`, `labuser`) hoặc để trống để kế thừa profile mặc định của máy trạm. Thiết kế này giải quyết triệt để vấn đề một Schedule gán cho cả Zone nhiều máy mà không bị ràng buộc bởi `target_profile_id` cục bộ theo máy. Khi dựng snapshot, Server resolve `target_os_username` vào allowlist của từng máy.
+   - Khi hợp quyền nhiều Schedule khớp cho một lần quẹt (BR-016), nếu các Schedule này trỏ tới nhiều `target_os_username` khác nhau, kết quả là **mơ hồ và bị từ chối tuyệt đối** (`denied(ambiguous_profile)`). Cấm chọn ngầm theo thứ tự ưu tiên.
+3. **Chính sách kết thúc phiên và dọn dẹp tiến trình (A6):**
+   - Khi hết giờ phiên hoặc khi có người khác thay thế phiên hợp lệ: Agent kích hoạt Two-Phase Teardown tiêu diệt 100% tiến trình chạy ngầm thuộc user slice (`loginctl terminate-user <UID>`, chờ 2s, cưỡng chế `loginctl kill-user <UID> -s SIGKILL` hoặc `pkill -9 -u <UID>`). Cấu hình SSHD có `DenyGroups labstudent` và tắt linger (`loginctl disable-linger`).
    - **Tuyệt đối KHÔNG tự động xóa thư mục `/home` hay dữ liệu file cục bộ** của profile dùng chung sau phiên. Sinh viên lưu bài tập trên máy; việc dọn dẹp file do giảng viên hoặc kỹ thuật viên thực hiện định kỳ.
-4. **Nhận thức rủi ro & Khuyến nghị vận hành:**
+4. **Vô hiệu hóa Lock Screen cho Profile dùng chung (A3):**
+   - Do tài khoản dùng chung đã bị khóa mật khẩu (`passwd -l`) và GNOME lock screen trên LightDM không hỗ trợ quẹt thẻ mở khóa, sinh viên có thể tự khóa mình cho đến hết ca học nếu màn hình bị khóa.
+   - Master Image bắt buộc cấu hình dconf vô hiệu hóa màn hình khóa: `org.gnome.desktop.screensaver lock-enabled=false` và `org.gnome.desktop.lockdown disable-lock-screen=true`.
+5. **Nhận thức rủi ro & Khuyến nghị vận hành (A4):**
+   - Thừa nhận rủi ro `workstation_busy` (A4): Sinh viên rời máy mà quên đăng xuất thì máy tiếp tục bận đến hết hạn ca học; kỹ thuật viên xử lý bằng đăng xuất thủ công (fallback).
    - Thừa nhận giới hạn: Các ứng dụng chạy trong cùng một user OS sẽ chia sẻ cookie, session trình duyệt và lịch sử terminal.
    - Khuyến nghị quy trình: Sinh viên nộp bài chính thức lên hệ thống trực tuyến (LMS, Google Classroom, Git...) và chủ động đăng xuất tài khoản web cá nhân trước khi rời máy.
 

@@ -87,7 +87,7 @@ Liên quan: BR-004, 005, 006, 010, 011, 012; FR-002, 055, 056; NFR-A01 đến A0
 |-----------|------|------|
 | Chỉ giờ hệ thống | Đơn giản, sống qua khởi động lại | Pin RTC chết, NTP lệch hoặc đổi giờ làm lease và lịch sai |
 | Chỉ đồng hồ đo | Không bị đổi giờ | Reset khi khởi động lại, không khớp khung giờ tuyệt đối |
-| **Kết hợp: hạn UTC bền vững, đồng hồ đo trong cùng lần khởi động, mốc sàn xác minh** | Bắt đổi giờ trong lần chạy và RTC chết; không phụ thuộc NTP | Logic phức tạp hơn; không phát hiện đồng hồ chạy tới khi offline sau reboot |
+| **Kết hợp: hạn UTC bền vững cho lease, đồng hồ đo CLOCK_BOOTTIME cho phiên** | Bắt đổi giờ trong phiên và phát hiện RTC lùi về quá khứ; không phụ thuộc NTP | Cần hai cơ chế đồng hồ riêng biệt |
 | Bắt buộc xác minh với server sau mỗi lần khởi động | An toàn nhất | Server sập cộng mất điện thì mọi đầu đọc vô dụng (vi phạm NFR-A01) |
 
 ## Decision
@@ -107,7 +107,7 @@ Chọn **Option 4** với hai quyết định con **gia hạn qua phản hồi h
 7. **Lease chỉ chặn lần quẹt mới.** Phiên đang chạy không bị ảnh hưởng (BR-006) và kết thúc theo hạn riêng (BR-009). Thu hồi không buộc đăng xuất (BR-010).
 8. **Đường dự phòng độc lập với lease** (BR-004).
 
-Tham số chốt sau, theo thứ tự ưu tiên: `D` (gợi ý bắt đầu từ 24 giờ, cân giữa thời gian server được phép sập và cửa sổ thu hồi trên máy offline), ngưỡng lệch đồng hồ, dung sai mốc sàn, chu kỳ ghi mốc sàn, chu kỳ heartbeat và số lần bỏ lỡ.
+Tham số chốt sau, theo thứ tự ưu tiên: `D` (gợi ý bắt đầu từ 24 giờ, cân giữa thời gian server được phép sập và cửa sổ thu hồi trên máy offline), ngưỡng lệch đồng hồ, chu kỳ heartbeat và số lần bỏ lỡ.
 
 ## Consequences
 
@@ -123,7 +123,7 @@ Tham số chốt sau, theo thứ tự ưu tiên: `D` (gợi ý bắt đầu từ
 
 - Thu hồi thẻ hoặc user trên máy offline trễ tối đa `D`, và chỉ có hiệu lực khi PC nhận snapshot mới (BR-010).
 - Máy offline quá `D` thì thẻ ngừng dùng được; chỉ còn đăng nhập dự phòng.
-- Agent mang nhiều logic hơn (hai hạn, mốc sàn, ba điều kiện đồng hồ) và dữ liệu nhạy cảm nằm ở máy (NFR-SEC03: root đọc được).
+- Agent mang dữ liệu nhạy cảm nằm ở máy (NFR-SEC03: root đọc được).
 - Heartbeat trở thành một phần giao thức có ngữ nghĩa; ADR-002 phụ thuộc quyết định này.
 
 ### Risks
@@ -133,4 +133,3 @@ Tham số chốt sau, theo thứ tự ưu tiên: `D` (gợi ý bắt đầu từ
 - **Bước nhảy NTP hợp lệ** làm Agent vào `ClockSuspect` oan. Giảm thiểu: heartbeat kế tiếp xác minh lại và đặt lại mốc.
 - **Phản hồi gia hạn giả** (broker bị chiếm) kéo dài lease. Giảm thiểu: TLS và ACL theo máy (ADR-002); việc ký snapshot và phản hồi xét ở ADR-003.
 - **Lỗi reconcile hoặc SyncState** làm máy tụt phiên bản vĩnh viễn nên không bao giờ được gia hạn. Giảm thiểu: trạng thái `Stuck` và `last_apply_error` trong heartbeat hiện lên dashboard.
-- **Mốc sàn ghi thưa** bị mất khi mất điện nên mốc cũ hơn: chỉ làm phát hiện RTC lùi yếu đi, không gây cho vào sai.

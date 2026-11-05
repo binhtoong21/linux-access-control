@@ -55,9 +55,9 @@ sequenceDiagram
 2. **Phiên không phụ thuộc server và không phụ thuộc trạng thái tin cậy** (BR-009, BR-006). Trạng thái `ClockSuspect` hay `Expired` của lease không ép đăng xuất phiên đang chạy; chỉ có hai hạn trên mới quyết định.
 3. **Cảnh báo một lần trước hạn W phút.** Nếu phiên mở ra khi thời gian còn lại ít hơn W thì Agent hiển thị cảnh báo ngay lập tức.
 4. **Trạng thái phản ánh thực tế (INV-017).** `LocalSession` chỉ chuyển sang trạng thái kết thúc khi phiên OS tương ứng đã thật sự kết thúc. Nếu đăng xuất thất bại, Agent thực hiện cưỡng bức (kill process), ghi log lỗi và thử lại; không bao giờ đánh dấu "đã kết thúc" khi người dùng vẫn còn trong phiên OS.
-5. **Dọn sạch tiến trình của phiên khi đăng xuất, KHÔNG xóa dữ liệu cục bộ (BR-009, D-006).** Đăng xuất phải tiêu diệt toàn bộ tiến trình GUI và nền (tmux, script ngầm, systemd user service) của phiên làm việc bằng `loginctl terminate-session` (hoặc `terminate-user`) và `kill-session -s SIGKILL`, tránh việc người vào sau kế thừa quyền hoặc tài nguyên bị chiếm dụng ngầm. **Tuyệt đối không xóa thư mục home hay file dữ liệu cục bộ của profile dùng chung.**
+5. **Dọn sạch tiến trình của phiên khi đăng xuất, KHÔNG xóa dữ liệu cục bộ (BR-009, D-006, A6).** Đăng xuất phải tiêu diệt toàn bộ tiến trình GUI và nền (tmux, script ngầm, systemd user service) của phiên làm việc bằng `loginctl terminate-user <UID>` và cưỡng bức `loginctl kill-user <UID> -s SIGKILL` (theo user slice), tránh việc người vào sau kế thừa quyền hoặc tài nguyên bị chiếm dụng ngầm. Đảm bảo SSHD cấu hình `DenyGroups labstudent` và tắt linger (`loginctl disable-linger`). **Tuyệt đối không xóa thư mục home hay file dữ liệu cục bộ của profile dùng chung.**
 6. **Thời điểm kết thúc `ended_at` là lúc Agent xác nhận phiên OS đã kết thúc**, nhãn nguồn `end_source` là `reported`.
-7. **Hạn phiên tính theo chuỗi khung giờ liên tục (CR-001 bước 7).** Hạn phiên là điểm kết thúc của chuỗi các khung giờ nối tiếp nhau không hở (kể cả qua nửa đêm sang hôm sau) từ các Schedule khớp và cùng target profile, nhưng không vượt quá `hạn phiên tối đa` (tham số).
+7. **Hạn phiên tính theo chuỗi khung giờ liên tục (CR-001 bước 7, D-011).** Hạn phiên là điểm kết thúc của chuỗi các khung giờ nối tiếp nhau không hở trong cùng một ngày (không qua nửa đêm) từ các Schedule khớp và cùng target profile (`target_os_username`), nhưng không vượt quá `hạn phiên tối đa` (tham số).
 
 ## Ngoại lệ
 | ID | Tình huống | Hành vi |
@@ -80,5 +80,5 @@ sequenceDiagram
 | ADR | Câu hỏi |
 |-----|---------|
 | PAM và greeter | Cơ chế đẩy thông báo cảnh báo vào phiên desktop của user (Agent chạy root, giao tiếp qua D-Bus user bus: `unix:path=/run/user/<UID>/bus`). |
-| Ánh xạ tài khoản OS | Quy chuẩn dọn dẹp tiến trình phiên triệt để (`loginctl terminate-session` và `SIGKILL` cgroup slice) đảm bảo tiêu diệt toàn bộ ứng dụng GNOME, tmux và tiến trình nền mà không xóa file home |
+| Ánh xạ tài khoản OS | Quy chuẩn dọn dẹp tiến trình phiên triệt để (`loginctl terminate-user` và `kill-user -s SIGKILL` theo user slice) đảm bảo tiêu diệt toàn bộ ứng dụng GNOME, tmux và tiến trình nền mà không xóa file home |
 | Lưu trữ cục bộ | Hợp nhất lưu trữ hạn đo (`CLOCK_BOOTTIME`), `boot_id`, lease và snapshot vào một CSDL SQLite WAL duy nhất. |
