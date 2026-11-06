@@ -39,7 +39,11 @@ Bản ghi nhật ký phản ánh quyết định của Agent (`LoginDecision`), 
    - Tài khoản dùng chung thuộc nhóm hạn chế, không cấp quyền sudo không mật khẩu, khóa mật khẩu cục bộ (`passwd -l`) nếu chỉ cho phép đăng nhập qua quẹt thẻ NFC.
 4. **Hợp nhất kho lưu trữ cục bộ (INV-011, INV-013, INV-014):** Snapshot, Lease, LocalSession, Profile Allowlist và AuditOutbox được quản lý tập trung trong một cơ sở dữ liệu SQLite WAL duy nhất (`edge.db`), loại bỏ file JSON rời để đảm bảo tính nguyên tử ACID.
 5. **Cơ chế phục hồi Greeter (BR-004):** Bỏ khẳng định "tự động chuyển về greeter chuẩn". Khi Custom Greeter gặp sự cố khởi động hoặc crash, LightDM sẽ dừng display-manager. Khôi phục thông qua script launcher wrapper kiểm tra tính khả dụng trước khi start hoặc kỹ thuật viên can thiệp thủ công qua TTY/SSH để cấu hình lại `/etc/lightdm/lightdm.conf`.
-6. **Vô hiệu hóa Lock Screen đối với Profile dùng chung (A3):** Spike S3 xác nhận GNOME lock screen trên LightDM không hỗ trợ quẹt thẻ mở khóa và tài khoản dùng chung đã bị khóa mật khẩu (`passwd -l`), khiến người dùng có thể tự khóa mình cho đến hết ca học nếu màn hình bị khóa. Trong Master Image, bắt buộc vô hiệu hóa màn hình khóa và screensaver lock thông qua dconf (`org.gnome.desktop.screensaver lock-enabled=false` và `org.gnome.desktop.lockdown disable-lock-screen=true`). Khi rời máy, sinh viên chỉ cần bấm Đăng xuất (Logout) hoặc để phiên tự động kết thúc khi hết ca.
+6. **Vô hiệu hóa Lock Screen và User Switching đối với Profile dùng chung (A3, P1-3):** Spike S3 xác nhận GNOME lock screen trên LightDM không hỗ trợ quẹt thẻ mở khóa và tài khoản dùng chung đã bị khóa mật khẩu (`passwd -l`), khiến người dùng có thể tự khóa mình cho đến hết ca học nếu màn hình bị khóa. Trong Master Image, bắt buộc vô hiệu hóa màn hình khóa, screensaver lock và tính năng chuyển đổi người dùng qua dconf:
+   - `org.gnome.desktop.screensaver lock-enabled=false`
+   - `org.gnome.desktop.lockdown disable-lock-screen=true`
+   - `org.gnome.desktop.lockdown disable-user-switching=true`
+   Việc tắt Switch User triệt tiêu hoàn toàn trạng thái lửng lơ "về Greeter nhưng Desktop cũ vẫn chạy ngầm", bảo đảm sinh viên chỉ có thể rời máy bằng Đăng xuất (Logout) hoặc chờ phiên tự kết thúc khi hết ca.
 **Nguồn:** BR-004, BR-008, BR-009, BR-020, NFR-A02, NFR-C01, NFR-SEC07, kết luận điều chỉnh từ Spike S3-S6.
 
 ### D-007: Phạm vi vai trò hệ thống và cơ chế Fallback mật khẩu
@@ -51,29 +55,31 @@ Bản ghi nhật ký phản ánh quyết định của Agent (`LoginDecision`), 
 Đánh giá quyền quẹt thẻ tại PC (CR-001) tuân thủ chính xác khoảng thời gian `[bắt đầu, kết thúc)` của Schedule được kích hoạt. Không tự ý áp dụng buffer thời gian 15 phút đầu/cuối ca. Hạn phiên là cuối chuỗi khung giờ liên tục không vượt quá `Max Session Duration`.
 
 ### D-009: Quản lý Profile máy trạm và cơ chế giải quyết Profile đích (Target Profile Resolution)
-1. **Khai báo và Tự phát hiện Profile (Auto-Discovery):** Tài khoản OS dùng chung được kỹ thuật viên tạo sẵn trên máy trạm (qua cài đặt thủ công hoặc clone từ Master Image). Khi khởi động (Hello) hoặc gửi Heartbeat, Agent tự động quét danh sách tài khoản hợp lệ trên máy (các user thuộc nhóm hạn chế `labstudent` hoặc khai báo trong config local) và báo cáo danh mục profile hiện có lên Server. Server tự động cập nhật danh mục profile của máy trạm mà không cần tạo từ xa. Kỹ thuật viên có thể tạo thêm hoặc xóa bớt tài khoản trên PC bất kỳ lúc nào; Agent sẽ tự động đồng bộ lại với Server trong lần kết nối tiếp theo.
-2. **Chỉ định Profile đích qua `target_os_username` (A1):** Schedule có thể chỉ định `target_os_username` (ví dụ `student`, `labuser`) hoặc để trống để kế thừa profile mặc định (`default_profile_id` / `os_username` mặc định) của máy trạm. Thiết kế này cho phép một Schedule áp dụng cho cả Zone 40 máy mà không bị xung đột khóa ngoại `target_profile_id` theo từng máy. Khi dựng snapshot, Server resolve `target_os_username` vào allowlist của máy tương ứng.
+1. **Khai báo và Tự phát hiện Profile (Auto-Discovery, P2-1, P2-3):** Tài khoản OS dùng chung được kỹ thuật viên tạo sẵn trên máy trạm (qua Master Image hoặc `adduser`). Khi khởi động (Hello) hoặc gửi Heartbeat, Agent tự động quét danh sách tài khoản hợp lệ trên máy (các user thuộc nhóm hạn chế `labstudent`, UID ≥ 1000) và báo cáo danh mục profile hiện có lên Server (`WorkstationProfilesDiscovered`). Server quản lý metadata của profile: cờ bật/tắt (`enabled`/`disabled`) và profile mặc định (`is_default`) do Admin cấu hình.
+2. **Chỉ định Profile đích qua `target_os_username` và Agent-side Resolve (A1, P2-1):** Schedule chỉ định `target_os_username` (ví dụ `student`, `labuser`) hoặc để trống để nhận profile mặc định của máy. Khi dựng Snapshot, server chỉ gửi chuỗi `target_os_username` thô kèm cờ metadata. Việc ánh xạ và thẩm định profile được thực hiện tại **Agent (Agent-side resolve)** đối chiếu với allowlist cục bộ của máy trạm. Dashboard hiển thị cảnh báo tĩnh nếu phát hiện máy trong Zone thiếu profile mà Schedule yêu cầu.
 3. **Cấm mơ hồ Profile (No Ambiguity):** Khi hợp quyền nhiều Schedule khớp cho một lần quẹt (BR-016), nếu các Schedule này trỏ tới nhiều `target_os_username` khác nhau, kết quả là **mơ hồ và bị từ chối tuyệt đối** (`denied(ambiguous_profile)`). Không chọn ngầm theo thứ tự hay độ ưu tiên ngầm định.
 4. **Giới hạn an toàn dữ liệu dùng chung (Non-Goals):** Hệ thống chỉ đóng vai trò Gatekeeper (kiểm soát truy cập), tuyệt đối không can thiệp, không quét, không xóa file/thư mục home cục bộ. Dữ liệu duyệt web (cookies), lịch sử terminal và file bài tập nằm trong `/home/<os_username>` là đặc thù dùng chung của phòng lab; việc dọn dẹp file định kỳ thuộc trách nhiệm của kỹ thuật viên/giảng viên (ngoài phạm vi hệ thống). Khuyến nghị sinh viên nộp bài qua LMS/hệ thống trực tuyến và chủ động đăng xuất tài khoản web cá nhân trước khi kết thúc ca.
 
-### D-010: Quy trình Đăng ký máy tự động và Phê duyệt tập trung (Zero-Touch Auto-Enrollment & Approval Flow)
-1. **Chuẩn hóa Master Image (Sysprep sạch):** Đĩa mẫu được làm sạch trước khi nhân bản (clone hàng loạt qua Clonezilla/PXE): xóa trắng `/etc/machine-id` (hoặc để uninitialized theo khuyến cáo của systemd), xóa mọi credential/keypair cũ của Agent (`/var/lib/nfc-agent/identity.key`, `agent.token`).
-2. **Khởi động lần đầu (First Boot) & Tự sinh khóa:** Khi máy trạm được nhân bản bật nguồn lần đầu, systemd tự động sinh `machine-id` mới duy nhất; Agent khởi chạy phát hiện chưa có định danh sẽ tự sinh cặp khóa riêng biệt (Ed25519 Keypair) và gửi bản tin đăng ký (`POST /api/v1/workstations/enroll`) gồm: `machine_id`, `hostname`, `mac_address` và `public_key`.
-3. **Trạng thái Chờ phê duyệt (PendingApproval):** Server lưu máy trạm ở trạng thái `pending_approval`. Tuyệt đối không dùng MAC hay Hostname làm credential xác thực (vì MAC có thể bị spoof và Hostname có thể trùng lặp), chúng chỉ là thông tin hỗ trợ nhận diện trực quan cho Admin.
-4. **Phê duyệt tập trung trên Web Dashboard:** Admin mở Dashboard thấy danh sách các máy mới đang chờ duyệt, đối chiếu vị trí/tên máy và bấm phê duyệt (hỗ trợ duyệt hàng loạt "Approve All for Room X") và gán Zone. Sau khi duyệt, Server cấp `agent_token` / chứng chỉ chính thức cho Agent. Kỹ thuật viên không phải gõ token thủ công trên từng máy.
+### D-010: Quy trình Đăng ký máy tự động, Duyệt Re-enroll và Xác thực mTLS (P1-4)
+1. **Chuẩn hóa Master Image (Sysprep sạch):** Đĩa mẫu được làm sạch trước khi nhân bản (clone hàng loạt qua Clonezilla/PXE): xóa trắng `/etc/machine-id` (hoặc để uninitialized theo khuyến cáo của systemd), xóa mọi credential/keypair cũ của Agent (`/var/lib/nfc-agent/identity.key`, chứng chỉ).
+2. **Khởi động lần đầu (First Boot) & Tự sinh khóa mTLS:** Khi máy trạm được nhân bản bật nguồn lần đầu, systemd tự động sinh `machine-id` mới duy nhất; Agent khởi chạy phát hiện chưa có định danh sẽ tự sinh cặp khóa Ed25519 và Certificate Signing Request (CSR), gửi bản tin đăng ký (`POST /api/v1/workstations/enroll`) gồm: `machine_id`, `hostname`, `mac_address` và `csr`.
+3. **Trạng thái Chờ phê duyệt (PendingApproval):** Server lưu máy trạm ở trạng thái `pending_approval`. Mọi trường hợp đăng ký lại bị trùng MAC hoặc machine-id với bản ghi cũ cũng bắt buộc rơi vào `pending_approval` để ngăn chặn giả mạo MAC cướp credential máy trạm (P1-4).
+4. **Phê duyệt tập trung trên Web Dashboard:** Admin mở Dashboard thấy danh sách các máy mới/đăng ký lại đang chờ duyệt, đối chiếu vị trí/tên máy và bấm phê duyệt (hỗ trợ duyệt hàng loạt). Sau khi duyệt, Server ký cấp Client Certificate mang `CN = workstation_id` và cấp khóa `K_m`. Mosquitto Broker xác thực máy trạm qua mTLS và phân quyền topic theo `%u`. Kỹ thuật viên không phải gõ token thủ công.
 
 ### D-011: Ràng buộc Lịch trong ngày (Single-Day Schedule Constraint)
 1. **Cấm ca qua nửa đêm:** Ràng buộc chặt chẽ trong cùng một ngày lịch: `start_time < end_time` (`CHECK (start_time < end_time)`). Không hỗ trợ cấu hình ca học vắt qua nửa đêm (23:00 hôm trước sang 02:00 hôm sau) vì trái với thực tế vận hành đóng cửa phòng lab trường học trước 22:00.
 2. **Chuẩn hóa Múi giờ:** Hệ thống chuẩn hóa duy nhất một múi giờ triển khai là `Asia/Ho_Chi_Minh` (UTC+7). Mọi tính toán giờ hiển thị, xếp lịch và đánh giá tại Edge đều đồng nhất theo múi giờ này.
 3. **Đơn giản hóa Rule Evaluator (CR-001):** Hạn phiên được tính là cuối chuỗi khung giờ liên tục trong ngày, không cần thuật toán phức tạp nối khung giờ xuyên ngày hay bước nhảy ngày UTC/Local.
 
-### D-012: Tách biệt Đồng hồ và Đơn giản hóa Kiểm tra RTC / Giờ hệ thống
+### D-012: Tách biệt Đồng hồ và Mốc sàn Cải tiến (Điểm 8)
 1. **Tách biệt 2 cơ chế đồng hồ:**
-   - **Bộ đếm thời lượng phiên (Session Timer):** Bắt buộc sử dụng đồng hồ đơn điệu (`CLOCK_BOOTTIME` / `CLOCK_MONOTONIC`). Timer này đếm tick phần cứng kể từ lúc boot, hoàn toàn miễn nhiễm với việc đổi giờ hệ thống (bước nhảy NTP hay can thiệp `settimeofday`).
+   - **Bộ đếm thời lượng phiên (Session Timer):** Bắt buộc sử dụng đồng hồ đơn điệu `CLOCK_BOOTTIME`. Timer này đếm tick phần cứng kể từ lúc boot, hoàn toàn miễn nhiễm với việc đổi giờ hệ thống (bước nhảy NTP hay can thiệp `settimeofday`) và tính cả thời gian hệ thống suspend.
    - **Đánh giá Lịch & Lease:** Sử dụng giờ hệ thống (wall-clock UTC).
-2. **Đơn giản hóa kiểm tra RTC & Phát hiện pin CMOS kiệt:** Loại bỏ cơ chế mốc sàn xác minh `verified_floor` ghi đĩa liên tục gây hao mòn SSD. Thay bằng quy tắc thực tế:
-   - Khi quẹt thẻ lúc Offline: Nếu `local_time < snapshot.created_at`, từ chối ngay với lý do `clock_invalid` (phát hiện pin CMOS mainboard bị kiệt khiến giờ quay về 1970/2020). Nếu `local_time` nằm trong `[snapshot.created_at, snapshot.trusted_until]`, chấp nhận đánh giá lịch bình thường.
-   - Khi Online: Heartbeat gửi kèm `server_time`. Nếu `|local_time - server_time| > 60s`, Agent ghi nhận và gửi cảnh báo `clock_skew_detected` lên dashboard để kỹ thuật viên kiểm tra pin CMOS / NTP.
+2. **Mốc sàn cải tiến (Điểm 8):** Loại bỏ cơ chế mốc sàn ghi đĩa liên tục gây hao mòn SSD. Thay bằng quy tắc thực tế:
+   - Khi nhận snapshot hoặc gia hạn lease, Agent lưu bền vững `trusted_until` cùng với `last_server_time` (không tốn thêm lần ghi đĩa riêng).
+   - Mốc sàn đồng hồ được tính: `floor = max(snapshot.created_at, last_server_time - 60s)`.
+   - Khi quẹt thẻ lúc Offline: Nếu `local_time < floor`, từ chối ngay với lý do `data_stale (clock_invalid)` (phát hiện pin CMOS mainboard bị kiệt khiến giờ quay về 1970/2020). Nếu `local_time >= floor`, chấp nhận đánh giá lịch bình thường.
+   - Khi Online: Heartbeat gửi kèm `server_time`. Nếu `|local_time - server_time| > 60s`, Agent ghi nhận và gửi cảnh báo `clock_skew_detected` lên dashboard để kỹ thuật viên kiểm tra pin CMOS / NTP. Agent vẫn chấp nhận gia hạn lease bình thường.
 
 ### D-013: Định vị Phạm vi Bảo mật UID Thẻ (Security Scope & Threat Model)
 1. **Bản chất UID:** UID thẻ NFC là định danh công khai (Public Identifier), không phải bí mật chia sẻ (Shared Secret). Bất kỳ ai cũng có thể đọc UID bằng đầu đọc hoặc điện thoại NFC ở khoảng cách gần.
@@ -83,11 +89,11 @@ Bản ghi nhật ký phản ánh quyết định của Agent (`LoginDecision`), 
    - Cơ chế HMAC theo máy (`CardMatchKey` trong [ADR-007](06-architecture/decisions/ADR-007-khoa-so-khop-uid.md)) được định vị đúng vai trò: **Khoanh vùng thiệt hại (Blast-radius reduction)** để snapshot của máy này không đối chiếu được trên máy khác khi kẻ tấn công lấy được đĩa cứng; không tuyên bố là cơ chế chống khôi phục UID đối với kẻ đã chiếm được quyền root trên chính máy đó (do UID 4 byte dễ bị vét cạn).
 
 ### ADR-001 (Proposed): Xác thực ở edge, dữ liệu cục bộ có thời hạn tin cậy (lease)
-Quyết định ở Agent theo CR-001 từ snapshot cục bộ, không hỏi server khi quẹt thẻ. Dữ liệu cục bộ có thời hạn tin cậy (lease) được gia hạn qua phản hồi heartbeat khi `acked_version == desired_version`. Kiểm tra đồng hồ kết hợp hai hạn (UTC tuyệt đối bền vững và `CLOCK_BOOTTIME` trong cùng lần chạy) kèm mốc sàn xác minh. Cần thầy xác nhận: giá trị lease `D` và việc tin RTC sau khi khởi động lại lúc offline.
+Quyết định ở Agent theo CR-001 từ snapshot cục bộ, không hỏi server khi quẹt thẻ. Dữ liệu cục bộ có thời hạn tin cậy (lease) được gia hạn qua phản hồi heartbeat khi `acked_version == desired_version`. Kiểm tra đồng hồ kết hợp hai hạn (UTC tuyệt đối bền vững và `CLOCK_BOOTTIME` cho phiên) kèm mốc sàn cải tiến `floor = max(snapshot.created_at, last_server_time - 60s)`. Cần thầy xác nhận: giá trị lease `D` và việc tin RTC sau khi khởi động lại lúc offline.
 **Nguồn:** [ADR-001](06-architecture/decisions/ADR-001-xac-thuc-o-edge-va-lease.md).
 
 ### ADR-007 (Proposed): Khóa so khớp UID thẻ và phạm vi lưu UID gốc
-Server lưu UID mã hóa (AES-256-GCM) kèm chỉ mục mù (HMAC-SHA256). Snapshot chứa `CardMatchKey` = HMAC theo khóa riêng của máy, không chứa UID gốc. Nhật ký mang UID của lần quẹt qua TLS. Admin giải mã khi xem dashboard. Phạm vi bảo vệ: chiếm root một máy không làm lộ thẻ của người không liên quan tới máy đó.
+Server lưu UID mã hóa (AES-256-GCM) kèm chỉ mục mù (HMAC-SHA256). Snapshot chứa `CardMatchKey` = HMAC theo khóa riêng của máy (`K_m = HKDF(master_key, workstation_id || ":" || key_version)`), không chứa UID gốc. Nhật ký mang UID của lần quẹt qua TLS. Admin giải mã khi xem dashboard. Phạm vi bảo vệ: chiếm root một máy không làm lộ thẻ của người không liên quan tới máy đó.
 **Nguồn:** [ADR-007](06-architecture/decisions/ADR-007-khoa-so-khop-uid.md); giải quyết PD-002.
 
 ## Điểm chuyển sang 06
@@ -96,14 +102,14 @@ Các quyết định sau được xác định trong 01–04 nhưng thuộc ki�
 
 | Điểm | Phát hiện từ | Ghi chú |
 |------|-------------|---------|
-| Giao thức MQTT 5: topic, QoS, Clean Start / Session Expiry, LWT với Will Delay, Response Topic + Correlation Data | bounded-contexts, UC-004, reconnect.md | Chốt dùng MQTT 5; LWT là gợi ý bổ trợ, BR-019 vẫn là nguồn sự thật |
+| Giao thức MQTT 5 & mTLS: Client Certificate Ed25519, topic, QoS, Clean Start / Session Expiry, LWT với Will Delay | bounded-contexts, UC-004, reconnect.md | Chốt dùng MQTT 5 + mTLS; LWT là gợi ý bổ trợ, BR-019 vẫn là nguồn sự thật |
 | Giao thức đẩy Outbox: thứ tự `outbox_seq`, kích thước lô (mục + byte), stop-and-wait | reconnect.md | Ack theo `outbox_seq` tăng đơn điệu; server điều tiết tốc độ |
-| Lưu trữ cục bộ: format file, giao dịch nguyên tử (nhật ký + pending), vị trí lưu mốc sàn xác minh, fsync vs write | BR-006, swipe-login.md, lease-expiration.md | Cần hỗ trợ transaction atomic write |
-| PAM và greeter: kênh Unix domain socket, ai khởi xướng, timeout cho phép một lần, quan hệ với lock screen | UC-001, swipe-login.md | Agent khóa trạng thái Waiting/Processing/Authorizing |
-| Ánh xạ tài khoản OS & Recovery: tài khoản Linux nào, cách nhận biết phiên OS thực tế khi restart | UC-001, swipe-login.md | Đối chiếu bảng recovery Agent restart |
-| Khóa so khớp UID (PD-002): **chốt bởi ADR-007** | PD-002, domain-model.md | HMAC có khóa theo máy, server mã hóa + chỉ mục mù |
-| Định danh máy & Nhân bản đĩa: sinh định danh riêng lúc enroll, Hello mang hostname + MAC | UC-007, reconnect.md | Phát hiện 2 máy cùng ID kết nối đè nhau |
-| Đồng hồ: cách đọc `CLOCK_BOOTTIME`, xử lý bước nhảy NTP hợp lệ | BR-012, lease-expiration.md | Tránh báo ClockSuspect oan |
+| Lưu trữ cục bộ: format SQLite WAL, giao dịch nguyên tử (nhật ký + pending), lưu `last_server_time`, fsync vs write | BR-006, swipe-login.md, lease-expiration.md | Cần hỗ trợ transaction atomic write |
+| PAM và greeter: kênh Unix domain socket, ai khởi xướng, timeout cho phép một lần, vô hiệu hóa lock screen & switch user | UC-001, swipe-login.md | Agent khóa trạng thái Waiting/Processing/Authorizing |
+| Ánh xạ tài khoản OS & Recovery: tài khoản dùng chung `student`, cách nhận biết phiên OS thực tế khi restart | UC-001, swipe-login.md | Đối chiếu bảng recovery Agent restart |
+| Khóa so khớp UID (PD-002): **chốt bởi ADR-007** | PD-002, domain-model.md | HMAC có khóa theo máy kèm `key_version`, server mã hóa + chỉ mục mù |
+| Định danh máy & mTLS CSR: sinh cặp khóa Ed25519 lúc enroll, CSR gửi server ký | UC-007, reconnect.md | Phát hiện 2 máy cùng ID kết nối đè nhau |
+| Đồng hồ: cách đọc `CLOCK_BOOTTIME`, xử lý bước nhảy NTP hợp lệ | BR-012, lease-expiration.md | Chỉ cảnh báo `clock_skew_detected`, không từ chối lease |
 
 ## Pending Decisions (phát hiện từ Use Cases)
 

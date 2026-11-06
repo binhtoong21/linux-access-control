@@ -100,10 +100,10 @@ Chọn **Option 4** với hai quyết định con **gia hạn qua phản hồi h
 4. **Tách biệt bộ đếm phiên và hạn dữ liệu (D-012):**
    - **Thời lượng phiên (Session Timer):** Bắt buộc dùng đồng hồ đơn điệu `CLOCK_BOOTTIME` để đếm thời gian kể từ lúc boot. Timer này không bị kéo dài hay rút ngắn khi người dùng hoặc NTP thay đổi giờ hệ thống (`settimeofday`).
    - **Hạn dữ liệu (Snapshot Lease):** Hạn UTC tuyệt đối `trusted_until` bền vững qua các lần khởi động lại.
-5. **Đồng hồ hợp lý và đơn giản hóa kiểm tra RTC (D-012):** Loại bỏ cơ chế mốc sàn xác minh ghi đĩa liên tục gây hao mòn SSD. Thay bằng quy tắc thực tế:
-   - (a) Giờ hệ thống không được nhỏ hơn ngày tạo snapshot (`local_time >= snapshot.created_at`). Nếu nhỏ hơn, xác định pin CMOS bị kiệt làm đồng hồ quay về quá khứ (1970 hoặc năm sản xuất mainboard) → từ chối `data_stale (clock_invalid)`.
-   - (b) Khi kết nối với server, Agent đối chiếu với `server_time` trong Heartbeat. Nếu |giờ hệ thống − `server_time`| > 60s, Agent gửi cờ cảnh báo `clock_skew_detected` lên dashboard để kỹ thuật viên can thiệp. Cờ NTP của OS chỉ để báo cáo, không làm điều kiện cổng. Agent không tự chỉnh giờ OS.
-6. **Khởi động lại khi offline:** Đồng hồ được tin nếu `local_time >= snapshot.created_at` và `local_time <= trusted_until`. Cho phép quẹt thẻ bình thường theo lịch đã cache.
+5. **Đồng hồ hợp lý và mốc sàn cải tiến (D-012, Điểm 8):** Loại bỏ cơ chế mốc sàn xác minh ghi đĩa liên tục gây hao mòn SSD. Thay bằng quy tắc thực tế:
+   - (a) Giờ hệ thống không được nhỏ hơn mốc sàn: `local_time >= floor`, trong đó `floor = max(snapshot.created_at, last_server_time - 60s)`. Giá trị `last_server_time` được lưu bền vững cùng bản ghi với `trusted_until` mỗi lần gia hạn lease (không phát sinh I/O đĩa riêng). Mốc sàn luôn tiến theo thời gian thực và có dung sai 60 giây. Nếu `local_time < floor`, xác định pin CMOS bị kiệt làm đồng hồ quay về quá khứ (1970 hoặc năm sản xuất mainboard) → từ chối `data_stale (clock_invalid)`.
+   - (b) Khi kết nối với server, Agent đối chiếu với `server_time` trong Heartbeat. Nếu |giờ hệ thống − `server_time`| > 60s, Agent gửi cờ cảnh báo `clock_skew_detected` lên dashboard để kỹ thuật viên can thiệp. Agent vẫn chấp nhận gia hạn lease. Cờ NTP của OS chỉ để báo cáo, không làm điều kiện cổng. Agent không tự chỉnh giờ OS.
+6. **Khởi động lại khi offline:** Đồng hồ được tin nếu `local_time >= floor` và `local_time <= trusted_until`. Cho phép quẹt thẻ bình thường theo lịch đã cache.
 7. **Lease chỉ chặn lần quẹt mới.** Phiên đang chạy không bị ảnh hưởng (BR-006) và kết thúc theo hạn riêng (BR-009). Thu hồi không buộc đăng xuất (BR-010).
 8. **Đường dự phòng độc lập với lease** (BR-004).
 
@@ -130,6 +130,5 @@ Tham số chốt sau, theo thứ tự ưu tiên: `D` (gợi ý bắt đầu từ
 
 - **Đồng hồ chạy tới khi offline sau reboot** không bị phát hiện: người có quyền chỉnh BIOS có thể vào ca sớm hơn, chỉ trong phạm vi quyền sẵn có trong snapshot và trước `trusted_until`. Giảm thiểu: khuyến nghị đặt mật khẩu BIOS (11-operations); tùy chọn cờ `clock_anomaly` khi nạp nhật ký (`occurred_at` ở tương lai so với `received_at`, hoặc không đơn điệu theo `outbox_seq`).
 - **Chọn `D` sai:** quá ngắn thì server sập là thẻ ngừng dùng được; quá dài thì thu hồi chậm. Cần xin ý kiến thầy trước khi chốt.
-- **Bước nhảy NTP hợp lệ** làm Agent vào `ClockSuspect` oan. Giảm thiểu: heartbeat kế tiếp xác minh lại và đặt lại mốc.
 - **Phản hồi gia hạn giả** (broker bị chiếm) kéo dài lease. Giảm thiểu: TLS và ACL theo máy (ADR-002); việc ký snapshot và phản hồi xét ở ADR-003.
 - **Lỗi reconcile hoặc SyncState** làm máy tụt phiên bản vĩnh viễn nên không bao giờ được gia hạn. Giảm thiểu: trạng thái `Stuck` và `last_apply_error` trong heartbeat hiện lên dashboard.

@@ -65,14 +65,14 @@ sequenceDiagram
 | EF-1 | Mất kết nối server | Không ảnh hưởng; `SessionEnded` được lưu vào outbox để đẩy sau (UC-005). |
 | EF-2 | Agent khởi động lại giữa phiên | Áp dụng bảng recovery của `swipe-login`: nếu phiên OS còn thì đặt lại bộ đếm cảnh báo/hết giờ; nếu đã quá hạn thì ép đăng xuất ngay. |
 | EF-3 | Đăng xuất bị kẹt (tiến trình không chịu thoát) | Cưỡng bức (`SIGKILL` theo user slice) sau thời gian chờ; nếu vẫn không thoát được thì ghi log lỗi và tiếp tục thử lại, phiên vẫn giữ `active`. |
-| EF-4 | User đang khóa màn hình | Đến giờ hết hạn, Agent vẫn gửi lệnh đăng xuất phiên OS bình thường. |
+| EF-4 | Màn hình khóa hoặc Switch User | Không xảy ra do Master Image đã vô hiệu hóa hoàn toàn qua dconf (A3, P1-3: `lock-enabled=false`, `disable-user-switching=true`); sinh viên chỉ có thể Logout hoặc chờ hết hạn ca học. |
 | EF-5 | Phiên mở ra khi khung giờ chỉ còn vài giây | Cảnh báo ngay lập tức và tự động đăng xuất đúng hạn. Không đặt quy tắc "thời lượng tối thiểu" ở MVP. |
 | EF-6 | Schedule bị sửa hoặc tắt giữa phiên | Hạn phiên đã cố định tại thời điểm quyết định (BR-010); thay đổi lịch chỉ áp dụng cho các lần quẹt thẻ sau. |
 | EF-7 | Agent bị treo/sập không đăng xuất được và không báo gì | Server không thể ép máy từ xa, nhưng nếu thấy máy online mà `expires_at` đã qua một khoảng thời gian chờ thì dashboard gắn cờ "quá hạn chưa kết thúc" (UC-008). |
 
 ## Tham số chốt sau (06)
 - Thời gian cảnh báo trước hạn W (mặc định ví dụ 5 phút).
-- Thời gian chờ trước khi cưỡng bức đăng xuất (ví dụ 15 giây).
+- Thời gian chờ trước khi cưỡng bức đăng xuất (chốt 2.0 giây theo kết quả thực nghiệm Spike S4).
 - Hạn phiên tối đa (Max Session Duration, ví dụ 8 giờ hoặc 12 giờ) để chặn lịch 24/7 sinh phiên vô hạn.
 - Thời gian chờ để server gắn cờ "quá hạn chưa kết thúc" trên dashboard.
 

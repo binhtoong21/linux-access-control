@@ -1,5 +1,8 @@
 # Kết quả Spike S5: Agent, MQTT và Lưu trữ Nguyên tử (Crash-Safety)
 
+> [!NOTE] Cập nhật định hướng kiến trúc sau Spike (D-012, Điểm 8)
+> Cơ chế mốc sàn xác minh ghi đĩa liên tục (`verification_floor` với 3 điều kiện thẩm định ban đầu) đã được chuẩn hóa theo **D-012 / Điểm 8** thành mốc sàn cải tiến: `floor = max(snapshot.created_at, last_server_time - 60s)`, lưu bền vững cùng bản ghi với `trusted_until` mỗi lần gia hạn lease mà không phát sinh thêm I/O đĩa riêng.
+
 ## Câu hỏi
 Daemon Agent có chịu được mất kết nối mạng và mất điện đột ngột mà không bao giờ làm hỏng dữ liệu cục bộ không? Kích thước Snapshot danh sách thẻ qua MQTT có nằm trong giới hạn không? SQLite WAL và kỹ thuật ghi file nguyên tử có đảm bảo tính toàn vẹn (0% hỏng file, 0 phiên mồ côi) sau hàng trăm lần `kill -9` không? Thuật toán kiểm tra đồng hồ (BR-006 & BR-012) có phát hiện được lỗi pin CMOS hoặc gian lận lùi giờ không?
 
@@ -78,4 +81,4 @@ Daemon Agent có chịu được mất kết nối mạng và mất điện đ�
 ## ADR bị ảnh hưởng
 - **ADR "Giao thức MQTT":** Xác nhận Snapshot truyền trong 1 message đơn lẻ qua TLS cổng 8883.
 - **ADR "Lưu trữ cục bộ và Giao dịch nguyên tử (ADR-003)":** Chốt sử dụng SQLite WAL mode + PRAGMA synchronous=FULL cho Outbox và Session; bắt buộc POSIX directory fsync cho Snapshot file.
-- **ADR "Thẩm định thời hạn Snapshot và An toàn Đồng hồ (ADR-001)":** Chuẩn hóa công thức 3 điều kiện thẩm định với `CLOCK_BOOTTIME` và `verification_floor`.
+- **ADR "Thẩm định thời hạn Snapshot và An toàn Đồng hồ (ADR-001)":** Chuẩn hóa công thức kiểm tra đồng hồ kép kết hợp mốc sàn cải tiến (D-012, Điểm 8).

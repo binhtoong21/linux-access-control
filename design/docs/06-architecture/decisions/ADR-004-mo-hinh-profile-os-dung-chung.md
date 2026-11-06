@@ -59,15 +59,21 @@ Chúng tôi quyết định áp dụng **Mô hình Profile OS Dùng Chung (Share
    - Khi khởi động (Hello) hoặc gửi Heartbeat, Agent tự động quét các user hợp lệ trên máy (thuộc nhóm `labstudent` hoặc khai báo trong config máy) và gửi danh mục profile hiện có lên Server.
    - Server tự động lưu trữ và cập nhật danh mục allowlist profile của máy trạm mà không cần lệnh can thiệp tạo từ xa. Kỹ thuật viên có thể bổ sung tài khoản mới bất kỳ lúc nào; Agent sẽ tự động cập nhật với Server trong lần kết nối tiếp theo.
    - Agent và PAM từ chối tuyệt đối việc mở phiên vào tài khoản không nằm trong allowlist hợp lệ (`profile_not_found`, `profile_disabled`).
-2. **Quy định Schedule và Giải quyết Profile Đích (Target Profile Resolution - A1):**
-   - Mỗi Schedule có thể chỉ định `target_os_username` (ví dụ `student`, `labuser`) hoặc để trống để kế thừa profile mặc định của máy trạm. Thiết kế này giải quyết triệt để vấn đề một Schedule gán cho cả Zone nhiều máy mà không bị ràng buộc bởi `target_profile_id` cục bộ theo máy. Khi dựng snapshot, Server resolve `target_os_username` vào allowlist của từng máy.
+2. **Quy định Schedule và Giải quyết Profile Đích (Target Profile Resolution - A1, P2-1):**
+   - Mỗi Schedule chỉ định `target_os_username` (ví dụ `student`, `labuser`) hoặc để trống để kế thừa profile mặc định của máy trạm. Thiết kế này giải quyết triệt để vấn đề một Schedule gán cho cả Zone nhiều máy mà không bị ràng buộc bởi ID cục bộ theo máy. Khi dựng snapshot, Server chỉ phân phối chuỗi `target_os_username` thô (hoặc rỗng).
+   - Việc đối chiếu và kiểm tra profile hợp lệ được thực hiện tại **Agent (Agent-side resolve)** với allowlist cục bộ của máy trạm. Dashboard hiển thị cảnh báo nếu phát hiện máy trong Zone thiếu profile mà Schedule yêu cầu.
    - Khi hợp quyền nhiều Schedule khớp cho một lần quẹt (BR-016), nếu các Schedule này trỏ tới nhiều `target_os_username` khác nhau, kết quả là **mơ hồ và bị từ chối tuyệt đối** (`denied(ambiguous_profile)`). Cấm chọn ngầm theo thứ tự ưu tiên.
-3. **Chính sách kết thúc phiên và dọn dẹp tiến trình (A6):**
+3. **Chính sách kết thúc phiên và dọn dẹp tiến trình (A6, P1-2):**
    - Khi hết giờ phiên hoặc khi có người khác thay thế phiên hợp lệ: Agent kích hoạt Two-Phase Teardown tiêu diệt 100% tiến trình chạy ngầm thuộc user slice (`loginctl terminate-user <UID>`, chờ 2s, cưỡng chế `loginctl kill-user <UID> -s SIGKILL` hoặc `pkill -9 -u <UID>`). Cấu hình SSHD có `DenyGroups labstudent` và tắt linger (`loginctl disable-linger`).
+   - *Đồng bộ Teardown khi cùng UID (P1-2):* Với mô hình profile dùng chung, sinh viên đăng nhập liên tiếp là cùng một UID Linux. Sau khi gửi lệnh cưỡng chế `kill-user`, Agent bắt buộc phải đợi cho đến khi user slice của UID đó (`user-<UID>.slice`) và thư mục runtime `/run/user/<UID>` giải phóng hoàn toàn khỏi nhân Linux trước khi bàn giao quyền `staged_auth` cho phiên tiếp theo, ngăn ngừa triệt để lỗi race condition D-Bus.
    - **Tuyệt đối KHÔNG tự động xóa thư mục `/home` hay dữ liệu file cục bộ** của profile dùng chung sau phiên. Sinh viên lưu bài tập trên máy; việc dọn dẹp file do giảng viên hoặc kỹ thuật viên thực hiện định kỳ.
-4. **Vô hiệu hóa Lock Screen cho Profile dùng chung (A3):**
+4. **Vô hiệu hóa Lock Screen và User Switching cho Profile dùng chung (A3, P1-3):**
    - Do tài khoản dùng chung đã bị khóa mật khẩu (`passwd -l`) và GNOME lock screen trên LightDM không hỗ trợ quẹt thẻ mở khóa, sinh viên có thể tự khóa mình cho đến hết ca học nếu màn hình bị khóa.
-   - Master Image bắt buộc cấu hình dconf vô hiệu hóa màn hình khóa: `org.gnome.desktop.screensaver lock-enabled=false` và `org.gnome.desktop.lockdown disable-lock-screen=true`.
+   - Master Image bắt buộc cấu hình dconf vô hiệu hóa màn hình khóa, screensaver lock và tính năng chuyển người dùng:
+     * `org.gnome.desktop.screensaver lock-enabled=false`
+     * `org.gnome.desktop.lockdown disable-lock-screen=true`
+     * `org.gnome.desktop.lockdown disable-user-switching=true`
+     Triệt tiêu hoàn toàn trạng thái "về Greeter mà phiên cũ vẫn sống", bảo đảm sinh viên chỉ có thể rời máy bằng Đăng xuất (Logout) hoặc chờ hết ca.
 5. **Nhận thức rủi ro & Khuyến nghị vận hành (A4):**
    - Thừa nhận rủi ro `workstation_busy` (A4): Sinh viên rời máy mà quên đăng xuất thì máy tiếp tục bận đến hết hạn ca học; kỹ thuật viên xử lý bằng đăng xuất thủ công (fallback).
    - Thừa nhận giới hạn: Các ứng dụng chạy trong cùng một user OS sẽ chia sẻ cookie, session trình duyệt và lịch sử terminal.

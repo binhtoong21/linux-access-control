@@ -28,48 +28,48 @@ sequenceDiagram
         A->>G: Trạng thái lỗi (invalid_uid)
         G->>U: Hiển thị lỗi, quay về chờ quẹt
     else UID hợp lệ
-        A->>K: Đọc Snapshot, kiểm tra hạn tin cậy (BR-006) & đồng hồ (BR-012)
-        Note over A: Đánh giá CR-001 & chính sách BR-008
+        A->>K: Đọc Snapshot, kiểm tra hạn tin cậy (BR-006) & mốc sàn đồng hồ (BR-012, D-012)
+        Note over A: Đánh giá CR-001 (thẻ, user, schedule, profile allowlist)
         
-        alt Máy đang có phiên active
-            alt Thẻ của chính user đang active (same_user)
-                Note over A: Bỏ qua tạo phiên, không kill phiên
-                A->>OS: Bắn D-Bus notification lên Desktop: báo thời gian còn lại
-            else Thẻ của user khác quẹt khi Desktop đang active
-                Note over A: Từ chối để bảo vệ phiên làm việc (workstation_busy)
-                A->>R: Tín hiệu còi buzzer/nháy LED đỏ
-                A->>K: Ghi AuditLog denied(workstation_busy)
-            else Thẻ của user khác quẹt khi đã ở Greeter hoặc phiên cũ đã hết hạn
-                Note over A: Cho phép thay thế phiên (superseded)
-                A->>OS: Dọn sạch tiến trình phiên cũ (loginctl terminate-session & kill cgroup slice)
-                A->>K: Ghi LocalSession cũ: status=abandoned, end_reason=superseded
-                A-->>S: SessionEnded(superseded) vào outbox
-                Note over A: Tiếp tục luồng cấp quyền cho user mới bên dưới
-            end
-        end
-
-        alt Kết quả denied (ngoài lịch, thẻ khóa, dữ liệu hết hạn, ambiguous_profile...)
+        alt Kết quả từ chối theo thẻ/lịch (ngoài lịch, thẻ khóa, dữ liệu hết hạn, ambiguous_profile...)
             A->>K: Ghi AuditLog denied vào SQLite WAL
             A->>G: Báo từ chối kèm lý do (FR-003)
             G->>U: Hiển thị lý do từ chối, quay về chờ quẹt
-        else Kết quả granted
-            A->>K: Giao dịch SQLite WAL nguyên tử: AuditLog(granted, target_os_user) + LocalSession(pending, target_os_user)
-            A->>G: Bắn sự kiện đẩy: card_granted(username=target_os_user, entry_id)
-            G->>OS: lightdm_greeter_authenticate(target_os_user)
-            OS->>P: Kích hoạt chuỗi PAM cho target_os_user
-            P->>A: Hỏi xác thực qua socket (/run/nfc-agent.sock) kèm PAM_USER
-            A->>A: Đối chiếu PAM_USER == target_os_user và token còn hạn hiệu lực
-            A-->>P: Trả lời: granted (tiêu thụ token)
-            P-->>OS: PAM_SUCCESS
-            OS->>OS: Mở phiên đồ họa Desktop
-            
-            alt Phiên OS mở thành công & expires_at còn hạn
-                A->>K: Chuyển LocalSession pending thành active (lưu started_at)
-                A-->>S: SessionStarted vào outbox
-            else expires_at đã qua hoặc timeout
-                A->>OS: Cưỡng chế dọn tiến trình phiên OS ngay lập tức
-                A->>K: Chuyển LocalSession pending thành discarded
-                G->>U: Báo chưa đăng nhập được, quay về chờ quẹt
+        else Thẻ & Lịch hợp lệ (tiến hành xét trạng thái phiên theo BR-008)
+            alt Thẻ của chính user đang active trên Desktop (same_user)
+                Note over A: Trả về noop(already_active), không kill phiên
+                A->>OS: Bắn D-Bus notification lên Desktop: báo thời gian còn lại
+                A->>K: Ghi AuditLog noop(already_active) vào SQLite WAL
+            else Thẻ của user khác quẹt khi Desktop đang active và phiên còn hạn
+                Note over A: Từ chối để bảo vệ phiên làm việc (workstation_busy)
+                A->>R: Tín hiệu còi buzzer/nháy LED đỏ
+                A->>K: Ghi AuditLog denied(workstation_busy) vào SQLite WAL
+                A->>G: Báo bận (workstation_busy)
+            else Máy đang ở Greeter (đã logout) hoặc phiên cũ đã hết hạn ca học
+                Note over A: Cấp quyền (granted) & kích hoạt thay thế phiên (superseded)
+                A->>K: Giao dịch SQLite WAL nguyên tử: AuditLog(granted, target_os_user) + LocalSession(pending, target_os_user)
+                alt Phiên cũ còn tiến trình
+                    A->>OS: Dọn sạch user slice phiên cũ (loginctl terminate-user & kill-user -s SIGKILL)
+                    A->>K: Ghi LocalSession cũ: status=abandoned, end_reason=superseded
+                    A-->>S: SessionEnded(superseded) vào outbox
+                end
+                A->>G: Bắn sự kiện đẩy: card_granted(username=target_os_user, entry_id)
+                G->>OS: lightdm_greeter_authenticate(target_os_user)
+                OS->>P: Kích hoạt chuỗi PAM cho target_os_user
+                P->>A: Hỏi xác thực qua socket (/run/nfc-agent.sock) kèm PAM_USER
+                A->>A: Đối chiếu PAM_USER == target_os_user và token còn hạn hiệu lực
+                A-->>P: Trả lời: granted (tiêu thụ token)
+                P-->>OS: PAM_SUCCESS
+                OS->>OS: Mở phiên đồ họa Desktop
+                
+                alt Phiên OS mở thành công & expires_at còn hạn
+                    A->>K: Chuyển LocalSession pending thành active (lưu started_at)
+                    A-->>S: SessionStarted vào outbox
+                else expires_at đã qua hoặc timeout
+                    A->>OS: loginctl terminate-user dọn tiến trình ngay lập tức
+                    A->>K: Chuyển LocalSession pending thành discarded
+                    G->>U: Báo chưa đăng nhập được, quay về chờ quẹt
+                end
             end
         end
     end
@@ -123,13 +123,13 @@ Cách nhận biết "phiên OS tương ứng" thuộc ADR ánh xạ tài khoản
 | EF-6 | Chưa có snapshot, snapshot không đọc được, quá thời hạn tin cậy, đồng hồ lệch | `denied(data_stale)` theo CR-001 bước 1, vẫn ghi bản ghi. |
 | EF-7 | Thẻ xuất hiện khi Agent đang xử lý lần quẹt khác | Bỏ qua, không sinh lần quẹt (Agent ở trạng thái `Processing` hoặc `Authorizing`, không phải `Waiting`). |
 | EF-8 | Quẹt khi đang hiển thị kết quả từ chối | Màn hình kết quả tương đương trạng thái `Waiting`: lần quẹt mới được xử lý ngay, thay kết quả cũ. |
-| EF-9 | Quẹt thẻ khi máy đang có phiên hoạt động | Theo BR-008: Cùng user -> bắn D-Bus báo thời gian còn lại; khác user khi Desktop đang active -> từ chối `workstation_busy` (báo LED/còi đầu đọc); khác user khi đã chuyển Greeter hoặc phiên cũ đã hết hạn -> dọn tiến trình phiên cũ triệt để và cấp phiên mới (`superseded`). |
+| EF-9 | Quẹt thẻ khi máy đang có phiên hoạt động | Chỉ đánh giá sau khi thẻ và lịch đã hợp lệ theo CR-001: (a) Cùng user -> bắn D-Bus báo thời gian còn lại, ghi AuditLog `noop(already_active)`; (b) Khác user khi Desktop đang active -> từ chối `workstation_busy` (báo LED/còi đầu đọc, ghi AuditLog `denied`); (c) Khác user khi đã chuyển Greeter hoặc phiên cũ đã hết hạn -> ghi nhận `granted` trước khi dọn tiến trình phiên cũ triệt để (`loginctl terminate-user`, chờ 2s, cưỡng chế `kill-user -s SIGKILL`) và mở phiên mới (`superseded`). |
 | EF-10 | Custom Greeter bị lỗi khởi động hoặc crash lặp | Hỗ trợ khôi phục về `lightdm-gtk-greeter` chuẩn qua launcher wrapper hoặc kênh can thiệp bảo trì TTY/SSH để bảo đảm đường dự phòng cục bộ không bị khóa chết (BR-004, NFR-A02). |
 
 ## Quyết định đã chốt
 - **Không thêm outcome `login_failed`.** Bản ghi ghi kết quả quyết định, không phải kết quả PAM. "Granted mà chưa nhận phiên" suy ra qua `entry_id`. (giải quyết PD-001)
 - **Chính sách quẹt đè phiên (BR-008):** Không cho phép đá phiên tức thì khi Desktop của người khác đang active nhằm tránh mất bài thi/dữ liệu chưa lưu; chỉ cho phép thay thế phiên khi đã chuyển về Greeter hoặc phiên cũ đã hết hạn ca học. Cùng user quẹt lại thì giữ nguyên và báo thời gian còn lại qua D-Bus.
-- **Dọn sạch tiến trình phiên, KHÔNG xóa dữ liệu cục bộ (BR-009, D-006):** Khi thu hồi hoặc thay thế phiên, Agent tiêu diệt toàn bộ tiến trình thuộc phiên làm việc trước đó (`loginctl terminate-session` / `terminate-user` và `kill -s SIGKILL` cgroup slice) để dọn sạch 100% tiến trình chạy ngầm. Tuyệt đối không xóa thư mục home hay file dữ liệu cục bộ của profile dùng chung.
+- **Dọn sạch tiến trình phiên, KHÔNG xóa dữ liệu cục bộ (BR-009, D-006, A6):** Khi thu hồi hoặc thay thế phiên, Agent tiêu diệt toàn bộ tiến trình thuộc phiên làm việc trước đó (`loginctl terminate-user` theo user slice, chờ 2s, cưỡng chế `kill-user -s SIGKILL`) để dọn sạch 100% tiến trình chạy ngầm. Tuyệt đối không xóa thư mục home hay file dữ liệu cục bộ của profile dùng chung. Master Image cấu hình SSHD `DenyGroups labstudent` và tắt linger (`loginctl disable-linger`).
 - **Kiến trúc đăng nhập 0-chạm vào Workstation Profile dùng chung (D-009):** Greeter nhận sự kiện đẩy từ Agent qua IPC cục bộ để gọi `lightdm_greeter_authenticate(os_username)`, PAM C module (`pam_nfc.so`) kiểm tra và tiêu thụ token của đúng `PAM_USER` thuộc profile được chỉ định từ Agent socket.
 - **Hợp nhất kho lưu trữ cục bộ:** Toàn bộ Snapshot, Lease, LocalSession, Profile Allowlist và AuditOutbox được quản lý tập trung trong một cơ sở dữ liệu SQLite WAL duy nhất (`edge.db`) bảo đảm tính nguyên tử ACID.
 

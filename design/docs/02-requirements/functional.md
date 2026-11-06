@@ -12,9 +12,9 @@
 | FR-002 | PC tự quyết định cho vào dựa trên dữ liệu cục bộ, không hỏi server khi quẹt | Must | MVP | Thứ tự xử lý ở CR-001 |
 | FR-003 | Phân biệt lý do từ chối | Must | MVP | Thẻ chưa đăng ký, thẻ bị khóa, tài khoản bị vô hiệu hóa, không có lịch trên máy này, ngoài khung giờ, máy đang bận (`workstation_busy`), xung đột profile (`ambiguous_profile`), profile bị vô hiệu hóa hoặc không tồn tại (`profile_disabled`, `profile_not_found`), dữ liệu cục bộ hết hạn tin cậy hoặc chưa có (xem BR-011, CR-001) |
 | FR-004 | Đường đăng nhập dự phòng cục bộ | Must | MVP | Tài khoản quản trị cục bộ mật khẩu riêng, nằm ngoài nền tảng, không tạo phiên (BR-004). Hỗ trợ khôi phục về greeter chuẩn khi gặp sự cố kéo dài qua script launcher hoặc TTY/SSH |
-| FR-005 | Cảnh báo trước khi hết khung giờ và tự đăng xuất khi hết hạn phiên | Must | MVP | Cảnh báo qua D-Bus, tự đăng xuất và dọn sạch toàn bộ tiến trình của phiên OS theo cgroup slice (`terminate-session`, BR-009, D-006); tuyệt đối không xóa thư mục home hay file dữ liệu cục bộ |
+| FR-005 | Cảnh báo trước khi hết khung giờ và tự đăng xuất khi hết hạn phiên | Must | MVP | Cảnh báo qua D-Bus, tự đăng xuất và dọn sạch toàn bộ tiến trình của phiên OS theo user slice (`loginctl terminate-user`, chờ 2s, cưỡng chế `kill-user -s SIGKILL`, BR-009, D-006, A6); tuyệt đối không xóa thư mục home hay file dữ liệu cục bộ |
 | FR-006 | Xác thực khuôn mặt (phương thức bổ sung) | Could | Nice-to-have | Thư viện có sẵn, xử lý cục bộ |
-| FR-007 | Quản lý Profile tài khoản OS dùng chung theo Allowlist | Must | MVP | Hỗ trợ tài khoản Linux dùng chung (`WorkstationProfile`), quản lý allowlist theo máy trạm. Xác định profile đích duy nhất khi cấp quyền, không tạo tài khoản riêng theo từng sinh viên (BR-020, D-006, D-009) |
+| FR-007 | Quản lý Profile tài khoản OS dùng chung theo Allowlist | Must | MVP | Hỗ trợ tài khoản Linux dùng chung (`WorkstationProfile`), tự phát hiện qua Auto-Discovery (D-009). Cung cấp giao diện Admin xem danh mục profile do Agent báo cáo, cấu hình bật/tắt (`enabled`/`disabled`) và đặt profile mặc định (`is_default`) cho từng máy trạm; cảnh báo trên Dashboard nếu có máy trong Zone thiếu profile mà Schedule yêu cầu (P2-1, P2-2) |
 
 ## Module 01: Màn hình login
 | ID | Yêu cầu | Priority | Scope | Notes |
@@ -27,7 +27,7 @@
 ## Module 02: Lịch
 | ID | Yêu cầu | Priority | Scope | Notes |
 |----|---------|----------|-------|-------|
-| FR-020 | Tạo, sửa, xóa Schedule: gồm ai (đúng một user hoặc một nhóm), ở đâu (đúng một máy hoặc một zone), khi nào (ngày trong tuần, giờ bắt đầu và kết thúc trong cùng một ngày, khoảng ngày hiệu lực tùy chọn) | Must | MVP | Giờ `[bắt đầu, kết thúc)` với bắt đầu < kết thúc trong cùng ngày, không hỗ trợ ca qua nửa đêm (D-011) |
+| FR-020 | Tạo, sửa, xóa Schedule: gồm ai (đúng một user hoặc một nhóm), ở đâu (đúng một máy hoặc một zone), khi nào (ngày trong tuần, giờ bắt đầu và kết thúc trong cùng một ngày, khoảng ngày hiệu lực tùy chọn) và Profile đích tùy chọn (`target_os_username`) | Must | MVP | Giờ `[bắt đầu, kết thúc)` với bắt đầu < kết thúc trong cùng ngày, không hỗ trợ ca qua nửa đêm (D-011). Nếu không chỉ định `target_os_username` thì nhận profile mặc định của máy (A1, D-009) |
 | FR-021 | Bật/tắt Schedule mà không xóa | Must | MVP | Dòng tắt bị bỏ qua khi đánh giá |
 | FR-022 | Xem lịch theo máy, zone, nhóm, user | Must | MVP | Giúp admin kiểm tra ai được vào đâu lúc nào |
 | FR-023 | Kiểm tra hợp lệ khi lưu | Must | MVP | VR-003 đến VR-005 |

@@ -51,7 +51,7 @@ flowchart LR
 5. Agent mở LocalSession (gắn với `user_id` và `os_username`), phát `SessionStarted`, ghi một bản ghi vào AuditOutbox.
 
 **Nhánh:**
-- AF-1 Máy còn phiên cũ: nếu máy đang ở Greeter hoặc phiên cũ đã hết hạn ca học, phiên cũ đóng `abandoned(superseded)` trước khi mở phiên mới; nếu Desktop đang active và còn hạn, từ chối với lý do `workstation_busy` (BR-008).
+- AF-1 Máy còn phiên cũ: nếu cùng user thì không ngắt phiên, ghi nhận `noop(already_active)` và gửi D-Bus notify thời gian còn lại; nếu khác user khi máy đang ở Greeter hoặc phiên cũ đã hết hạn ca học, ghi nhận `granted`, ghi Write-Ahead vào DB trước rồi mới teardown phiên cũ (`abandoned(superseded)`); nếu khác user khi Desktop đang active và còn hạn, từ chối với lý do `workstation_busy` (BR-008, P1-1).
 - AF-2 Mất kết nối server: vẫn chạy bình thường, sự kiện nằm trong outbox.
 - EF-1 Đăng nhập OS không hoàn tất sau `granted`: không mở phiên, màn hình báo lỗi. Bản ghi vẫn ghi `granted` (kết quả quyết định), liên kết phiên qua `entry_id`.
 
@@ -65,7 +65,7 @@ flowchart LR
 **Tiền điều kiện:** như UC-001.
 
 **Luồng chính:**
-1. User quẹt thẻ; Agent đánh giá cục bộ → `denied` với một trong các lý do: `unknown_card`, `card_disabled`, `user_inactive`, `no_schedule`, `out_of_schedule`, `data_stale`, `workstation_busy`, `ambiguous_profile`, `profile_disabled`, `profile_not_found`.
+1. User quẹt thẻ; Agent đánh giá cục bộ → `denied` với một trong các lý do: `unknown_card`, `card_disabled`, `user_inactive`, `no_schedule`, `out_of_schedule`, `data_stale`, `workstation_busy`, `ambiguous_profile`, `profile_disabled`, `profile_not_found`, `clock_invalid` (hoặc `noop` kèm lý do `already_active` nếu cùng user đang active).
 2. Màn hình hiển thị lý do.
 3. Agent ghi một bản ghi nhật ký; không mở phiên.
 
@@ -80,14 +80,14 @@ flowchart LR
 **Truy vết:** FR-003, 010, 011, 070; BR-002, 003, 006; CR-001.
 
 ## UC-003: Admin quản lý lịch
-**Mô tả:** Admin tạo, sửa, bật/tắt, xóa Schedule (ai, ở đâu, khi nào) và thay đổi được phân phối xuống các máy bị ảnh hưởng.
+**Mô tả:** Admin tạo, sửa, bật/tắt, xóa Schedule (ai, ở đâu, khi nào, và cấu hình `target_os_username` tùy chọn) và thay đổi được phân phối xuống các máy bị ảnh hưởng.
 
 **Tiền điều kiện:** Admin đã đăng nhập dashboard.
 
 **Luồng chính:**
-1. Admin thao tác trên Schedule.
+1. Admin thao tác trên Schedule (chọn User/Group, Zone/Workstation, khung giờ và `target_os_username` nếu muốn chỉ định profile cụ thể).
 2. Server kiểm tra hợp lệ (VR-003 đến 005) và lưu.
-3. Distribution xác định các máy bị ảnh hưởng, dựng snapshot phiên bản mới cho từng máy, ghi `desired_version`, phát `SnapshotPublished`.
+3. Distribution xác định các máy bị ảnh hưởng, dựng snapshot phiên bản mới chứa `target_os_username` cho từng máy, ghi `desired_version`, phát `SnapshotPublished`. Agent tại từng máy trạm sẽ tự động resolve profile theo allowlist cục bộ (P2-1).
 
 **Nhánh:**
 - EF-1 Dữ liệu không hợp lệ: báo lỗi, không lưu.
@@ -163,7 +163,7 @@ flowchart LR
 **Nhánh:**
 - AF-1 Đăng ký bằng Enrollment Token: Kỹ thuật viên cấu hình token theo lô (`batch_token`) trong file cấu hình local; server xác thực token và tự động duyệt cấp credential mà không cần Admin bấm tay.
 - EF-1 Token hết hạn, hết lượt hoặc đã thu hồi: từ chối.
-- AF-2 MAC đã có trong hệ thống (cài lại máy / clone lại): gắn vào bản ghi cũ, giữ lịch sử, vô hiệu hóa credential cũ và cấp credential mới (kèm tăng `key_version` của máy để quay vòng `K_m` theo ADR-007).
+- AF-2 MAC đã có trong hệ thống (cài lại máy / clone lại): Server đưa yêu cầu vào trạng thái `pending_approval` và cảnh báo trùng MAC trên Dashboard để Admin duyệt thủ công (P1-4, D-010); chỉ sau khi Admin phê duyệt, hệ thống mới gắn vào bản ghi cũ, giữ lịch sử, vô hiệu hóa credential cũ, tăng `key_version` của máy để quay vòng `K_m` (ADR-007) và cấp credential/Client Certificate mới.
 - AF-3 Chưa nhận snapshot đầu: quẹt thẻ bị `data_stale` đến khi nhận.
 
 **Truy vết:** FR-040 đến 043, 053; BR-018; XINV-009; NFR-SEC02, D01; D-010.

@@ -24,7 +24,7 @@
 ## Lịch (Scheduling)
 | Thuật ngữ | Định nghĩa | Ví dụ |
 |---|---|---|
-| **Schedule (Lịch)** | Một dòng gồm ai (Subject), ở đâu (Target) và khi nào (RecurrenceRule) | "CNTT K20, Lab A, T2-T6 7h-17h" |
+| **Schedule (Lịch)** | Một dòng gồm ai (Subject), ở đâu (Target), khi nào (RecurrenceRule) và Profile đích tùy chọn (`target_os_username`) | "CNTT K20, Lab A, T2-T6 7h-17h, profile student" |
 | **Subject** | Đúng một User hoặc một Group | Nhóm "CNTT K20" |
 | **Target** | Đúng một Workstation hoặc một Zone | Zone "Lab A" |
 | **RecurrenceRule** | Ngày trong tuần, giờ bắt đầu và kết thúc (kết thúc có thể 24:00), khoảng ngày hiệu lực | T2 đến T6, 07:00 đến 17:00 |

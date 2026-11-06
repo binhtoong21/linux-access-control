@@ -67,4 +67,5 @@ Thông báo cảnh báo hết hạn ca học xuất hiện trực tiếp trên t
 - **ADR "Thông báo Desktop và Tương tác người dùng (BR-009)":** Chuẩn hóa cơ chế giao tiếp IPC qua User D-Bus Session Bus.
 
 ## Giả định trong 01-05 bị lung lay
-- Giả định rằng *"Chỉ cần gọi `loginctl terminate-session` là đủ để dọn sạch mọi tiến trình"* đã **bị bác bỏ qua thực nghiệm**. Thực tế bắt buộc phải có bước cưỡng chế `loginctl kill-session <id> -s SIGKILL` thứ hai nếu ứng dụng bẫy `SIGTERM` không chịu thoát.
+- Giả định rằng *"Chỉ cần gọi `loginctl terminate-session` (hoặc `terminate-user` đơn lẻ) là đủ để dọn sạch mọi tiến trình"* đã **bị bác bỏ qua thực nghiệm**. Thực tế bắt buộc phải có quy trình dọn dẹp hai bước: `terminate-user` (chờ 2.0s) và cưỡng chế bằng `loginctl kill-user <UID> -s SIGKILL` (hoặc `pkill -9 -u <UID>`) theo user slice (A6) nếu ứng dụng bẫy `SIGTERM` không chịu thoát.
+- Giả định rằng *"Mỗi sinh viên cần một tài khoản riêng `stu_*` để bảo mật"* đã được thay thế bằng ADR-004 (Shared Workstation Profile) do yêu cầu thực tế về vận hành phòng lab.

@@ -50,14 +50,15 @@ Có thể hiển thị đúng các trạng thái của FR-010 và đăng nhập 
    - Bác bỏ phương án dựa vào màn hình khóa của Desktop OS (GNOME Shell / screensaver), vì cơ chế này xung đột mạnh với Display Manager bên ngoài.
    - **Chốt phương án kiến trúc & Vô hiệu hóa Lock Screen (A3):** 
      - Vì tài khoản đã bị khóa mật khẩu (`passwd -l`), nếu màn hình khóa GNOME kích hoạt, sinh viên sẽ không thể mở khóa (tự nhốt mình đến hết ca học).
-     - **Bắt buộc cấu hình Master Image (Checklist):** Vô hiệu hóa triệt để màn hình khóa và screensaver lock trong dconf:
+     - **Bắt buộc cấu hình Master Image (Checklist):** Vô hiệu hóa triệt để màn hình khóa, screensaver lock và chuyển đổi người dùng (User Switching) trong dconf (P1-3):
        * `dconf write /org/gnome/desktop/screensaver/lock-enabled false`
        * `dconf write /org/gnome/desktop/lockdown/disable-lock-screen true`
-     - Quyền kiểm soát phiên và thay thế phiên (`superseded`) được giao cho **Agent daemon**. Khi phát hiện quẹt thẻ của người dùng khác lúc máy đang có phiên, Agent trực tiếp điều phối kết thúc phiên cũ theo quy trình BR-008/BR-009.
+       * `dconf write /org/gnome/desktop/lockdown/disable-user-switching true`
+     - Quyền kiểm soát phiên và thay thế phiên (`superseded`) được giao cho **Agent daemon**. Khi phát hiện quẹt thẻ của người dùng khác lúc máy đang có phiên, Agent trực tiếp điều phối kết thúc phiên cũ theo quy trình BR-008/BR-009/A6 (`loginctl terminate-user` và `kill-user -s SIGKILL`).
 
 ## ADR bị ảnh hưởng
 - **ADR "PAM và Greeter":** Chốt sử dụng LightDM; chốt cấu hình `auth sufficient pam_nfc.so` trước `common-auth`; ghi nhận cơ chế pre-authentication của LightDM Greeter.
-- **ADR "Ánh xạ tài khoản OS và kết thúc phiên (BR-008)":** Chốt cơ chế `superseded` thông qua `systemd-logind` API (`loginctl terminate-session`) do Agent thực thi, loại bỏ sự phụ thuộc vào màn hình khóa desktop.
+- **ADR-004 "Mô hình Profile OS dùng chung":** Chốt cơ chế `superseded` thông qua `systemd-logind` API (`loginctl terminate-user` và `kill-user -s SIGKILL` theo user slice) do Agent thực thi, loại bỏ sự phụ thuộc vào màn hình khóa desktop và vô hiệu hóa user switching.
 
 ## Giả định trong 01-05 bị lung lay
 - **Giả định ban đầu:** *"Màn hình khóa là thành phần khác greeter, cần PAM service riêng để nhận quẹt thẻ"* → **Bị lung lay và thay thế**. Trong thực tế, không cần duy trì 2 service PAM phức tạp; Agent daemon quản lý vòng đời phiên qua `loginctl` mang lại độ tin cậy và sự nhất quán cao hơn nhiều.
