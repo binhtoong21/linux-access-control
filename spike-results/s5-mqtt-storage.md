@@ -25,7 +25,7 @@ Daemon Agent có chịu được mất kết nối mạng và mất điện đ�
 | **Ca 7: Đồng hồ Đơn điệu `CLOCK_BOOTTIME` (ADR-001)** | Đo thời gian bằng `time.CLOCK_BOOTTIME` chống trôi/gian lận | Kiểm thử 5 ca: Bình thường, CMOS 1970, lùi giờ, nhảy vọt giờ, hết hạn lease boot. Toàn bộ 5/5 ca đều thẩm định chuẩn xác | ✅ Đạt (Kiểm chứng Giai đoạn 1.4) |
 | **Ca 8: Vòng lặp Heartbeat & Gia hạn Lease (S5)** | Định kỳ bắn Heartbeat và nhận Lease gia hạn kèm `server_time` | Agent phát Heartbeat mỗi 3s, Server gia hạn Lease +7200s; đo độ trễ khứ hồi (RTT) nhận phản hồi lease trên môi trường test đạt từ 0.6ms đến 104.3ms | ✅ Đạt (Kiểm chứng Nhóm 4) |
 | **Ca 9: Tự động Phục hồi Kết nối (Auto Reconnect)** | Broker sập đột ngột (`restart mosquitto`), Agent tự khôi phục | Nhận `on_disconnect (rc=1)`, kích hoạt exponential backoff; khi broker online, tự động kết nối lại (`rc=0`) và phát tiếp Heartbeat mà không chết process | ✅ Đạt (Kiểm chứng Nhóm 4) |
-| **Ca 10: Kiểm thử Đơn vị Bộ so sánh Clock Drift (ADR-001)** | Kiểm thử logic từ chối Lease nếu `server_time` lệch > 60s so với đồng hồ cục bộ | Lệch 2.15s: Chấp nhận gia hạn Lease. Lệch 95.40s: Bị từ chối ngay lập tức với mã lỗi `clock_drift_exceeded` và kích hoạt cảnh báo kiểm toán | ✅ Đạt (Kiểm chứng Nhóm 6) |
+| **Ca 10: Kiểm thử Đơn vị Bộ so sánh Clock Drift (ADR-001)** | Kiểm thử logic so sánh sai lệch nếu `server_time` lệch > 60s so với đồng hồ cục bộ | Lệch 2.15s: Chấp nhận gia hạn Lease. Lệch 95.40s: Ghi nhận cảnh báo `clock_skew_detected` (theo thiết kế chuẩn hóa FR-056/ADR-001 vẫn chấp nhận Lease, chỉ cảnh báo kiểm toán chứ không từ chối để tránh gián đoạn Edge) | ✅ Đạt (Kiểm chứng Nhóm 6) |
 
 ## Số liệu Đo đạc Thực tế
 - **Độ bền Ghi tệp nguyên tử:** Tỷ lệ sống sót `200/200` (100%).
@@ -44,7 +44,7 @@ Daemon Agent có chịu được mất kết nối mạng và mất điện đ�
 - **Thực nghiệm Sai lệch Đồng hồ Lease (Ca 10 - Mock Unit Test):**
   - Kịch bản giả lập kiểm thử logic so sánh thuật toán (không phải đo trôi phần cứng):
   - Lệch giả lập 2.15s (<= 60.0s): `✅ [CHẤP NHẬN LEASE]: Đồng hồ hợp lệ. Gia hạn trusted_until đến 1793056461.81`
-  - Lệch giả lập 95.40s (> 60.0s): `❌ [TỪ CHỐI LEASE]: clock_drift_exceeded (Lệch 95.40s > 60.0s)!`
+  - Lệch giả lập 95.40s (> 60.0s): Phát hiện sai lệch và ghi nhận cảnh báo kiểm toán `clock_skew_detected`. *(Lưu ý cập nhật thiết kế theo FR-056, ADR-001, D-012: Mã lỗi ban đầu `clock_drift_exceeded` từ chối lease đã được điều chỉnh thành chấp nhận lease và cảnh báo kiểm toán để duy trì tính sẵn sàng cao của trạm Edge).*
 - **Dung lượng Payload Snapshot qua MQTT & Đánh giá Quy mô:**
   - 10 thẻ: `842 bytes` (0.82 KB)
   - 50 thẻ: `3,961 bytes` (3.87 KB)
@@ -71,7 +71,7 @@ Daemon Agent có chịu được mất kết nối mạng và mất điện đ�
    - **Tự động Reconnect:** Sử dụng thuật toán Exponential Backoff kết hợp `reconnect_delay_set` để tự động nối lại ngay khi broker phục hồi mà không làm sập Agent.
 3. **An toàn Thời gian theo ADR-001 (Clock Safety):**
    - Không phụ thuộc đơn thuần vào `time.time()` của hệ điều hành. Đo thời gian trôi qua bằng bộ đếm phần cứng đơn điệu `time.CLOCK_BOOTTIME`. Mọi kịch bản CMOS chết, lùi giờ hoặc chỉnh tiến quá hạn lease đều bị chặn đứng tức thì mà không cần mạng.
-   - Mốc sàn xác minh được tính toán chuẩn xác từ `server_time + CLOCK_BOOTTIME` (chuẩn ADR-001), ngăn chặn việc "đầu độc" mốc sàn khi đồng hồ hệ thống nhảy tới rồi lùi lại.
+   - Mốc sàn xác minh được tính toán chuẩn xác từ `floor = max(snapshot.created_at, last_server_time) - CLOCK_FLOOR_TOLERANCE` (chuẩn ADR-001, D-012, với `CLOCK_FLOOR_TOLERANCE = 60s`), ngăn chặn việc "đầu độc" mốc sàn khi đồng hồ hệ thống nhảy tới rồi lùi lại. Lệch đồng hồ cục bộ và server vượt ngưỡng `CLOCK_SKEW_WARN_THRESHOLD = 60s` chỉ phát cảnh báo kiểm toán `clock_skew_detected` chứ không từ chối lease.
 
 ## Giới hạn của Bằng chứng (Limitations of Evidence)
 - **Cắt điện cưỡng chế trên máy ảo (SysRq `b`):** Thử nghiệm chỉ chạy trên máy ảo KVM/QEMU với số lần N = 1; tầng Host OS vẫn có write-cache riêng nên chưa chứng minh được độ bền ghi NAND flash trên ổ cứng vật lý.

@@ -50,7 +50,7 @@ Thông báo cảnh báo hết hạn ca học xuất hiện trực tiếp trên t
    - *Quy chuẩn Kiến trúc Chuẩn hóa:*
      - *Bước 1:* Gọi `loginctl terminate-user <UID>` gửi `SIGTERM` đến toàn bộ cgroup của user slice.
      - *Bước 2:* Đặt hẹn giờ 2 giây. Nếu user slice chưa giải phóng, Agent thực thi:
-       `sudo loginctl kill-user <UID> -s SIGKILL` (hoặc `sudo pkill -9 -u <UID>`).
+       `sudo loginctl kill-user <UID> -s SIGKILL` (loại bỏ `pkill -9` để tránh ảnh hưởng ngoài mong muốn).
        Lệnh này bảo đảm dọn sạch 100% mọi tiến trình của sinh viên (kể cả app GUI, tmux, tiến trình nền ngoan cố) mà hoàn toàn không ảnh hưởng tới kết nối SSH của tài khoản quản trị viên độc lập.
 3. **Cơ chế Cảnh báo Hết hạn (BR-009):**
    - Agent (chạy root) gửi cảnh báo trước thời hạn bằng cách kết nối vào D-Bus user session bus:
@@ -67,5 +67,5 @@ Thông báo cảnh báo hết hạn ca học xuất hiện trực tiếp trên t
 - **ADR "Thông báo Desktop và Tương tác người dùng (BR-009)":** Chuẩn hóa cơ chế giao tiếp IPC qua User D-Bus Session Bus.
 
 ## Giả định trong 01-05 bị lung lay
-- Giả định rằng *"Chỉ cần gọi `loginctl terminate-session` (hoặc `terminate-user` đơn lẻ) là đủ để dọn sạch mọi tiến trình"* đã **bị bác bỏ qua thực nghiệm**. Thực tế bắt buộc phải có quy trình dọn dẹp hai bước: `terminate-user` (chờ 2.0s) và cưỡng chế bằng `loginctl kill-user <UID> -s SIGKILL` (hoặc `pkill -9 -u <UID>`) theo user slice (A6) nếu ứng dụng bẫy `SIGTERM` không chịu thoát.
+- Giả định rằng *"Chỉ cần gọi `loginctl terminate-session` (hoặc `terminate-user` đơn lẻ) là đủ để dọn sạch mọi tiến trình"* đã **bị bác bỏ qua thực nghiệm**. Thực tế bắt buộc phải có quy trình dọn dẹp hai bước: `terminate-user` (chờ 2.0s) và cưỡng chế bằng `loginctl kill-user <UID> -s SIGKILL` (loại bỏ hoàn toàn `pkill -9`) theo user slice (A6) nếu ứng dụng bẫy `SIGTERM` không chịu thoát.
 - Giả định rằng *"Mỗi sinh viên cần một tài khoản riêng `stu_*` để bảo mật"* đã được thay thế bằng ADR-004 (Shared Workstation Profile) do yêu cầu thực tế về vận hành phòng lab.

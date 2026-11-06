@@ -36,7 +36,7 @@ sequenceDiagram
 ```
 
 ## Nguyên tắc
-1. **Kho cục bộ đủ để tự khởi động.** Mọi dữ liệu cần thiết để đánh giá đăng nhập (snapshot, thời hạn tin cậy `trusted_until`, mốc sàn đồng hồ `floor = max(snapshot.created_at, last_server_time - 60s)`) đều đã được lưu bền vững; không phụ thuộc vào server để sẵn sàng hoạt động (NFR-A01, A04, D-012).
+1. **Kho cục bộ đủ để tự khởi động.** Mọi dữ liệu cần thiết để đánh giá đăng nhập (snapshot, thời hạn tin cậy `trusted_until`, mốc sàn đồng hồ `floor = max(snapshot.created_at, last_server_time) - CLOCK_FLOOR_TOLERANCE` với `CLOCK_FLOOR_TOLERANCE = 60s`) đều đã được lưu bền vững; không phụ thuộc vào server để sẵn sàng hoạt động (NFR-A01, A04, D-012).
 2. **Đối chiếu xong mới nhận quẹt thẻ.** Agent chưa phát tín hiệu "sẵn sàng" cho greeter cho đến khi đã hoàn tất đối chiếu LocalSession và tính xong trạng thái tin cậy.
 3. **Sự kiện dựng lại vào outbox trước khi gửi Hello.** Gói tin `Hello` báo số mục outbox đã tính cả các sự kiện `SessionEnded` vừa được dựng lại, do đó server biết chính xác số lượng outbox cần vét cạn trước khi kích hoạt logic suy luận (khớp với nguyên tắc 4 của `reconnect`).
 4. **Phân biệt reboot và Agent restart bằng `boot_id` của kernel.** Nếu `boot_id` khác: máy đã reboot, toàn bộ phiên OS cũ đã mất, mọi phiên `active` chuyển sang `abandoned`. Nếu `boot_id` giống: chỉ là tiến trình Agent khởi động lại, áp dụng bảng recovery của `swipe-login`.

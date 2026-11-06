@@ -14,15 +14,16 @@ flowchart TD
     Edge((Edge - Agent trên PC))
 
     Identity -->|Publish: dữ liệu danh tính thay đổi| Distribution
-    Device -->|Publish: máy, zone thay đổi| Distribution
+    Device -->|Publish: WorkstationEnrollmentApproved, WorkstationProfileConfigured, zone thay đổi| Distribution
     Scheduling -->|Publish: lịch thay đổi| Distribution
     Distribution -->|Query: dữ liệu liên quan tới một máy| Identity
     Distribution -->|Query: dữ liệu liên quan tới một máy| Device
     Distribution -->|Query: dữ liệu liên quan tới một máy| Scheduling
     Distribution -->|Snapshot kèm phiên bản| Edge
+    Edge -->|WorkstationEnrollmentRequested, WorkstationProfilesDiscovered| Device
     Edge -->|SnapshotApplied: xác nhận phiên bản| Distribution
     Edge -->|Heartbeat, SessionStarted, SessionEnded, AuditEntryRecorded| Ops
-    Device -->|Publish: WorkstationRegistered| Ops
+    Device -->|Publish: WorkstationEnrollmentApproved| Ops
     Identity -->|Query: tham chiếu xóa| Scheduling
     Device -->|Query: tham chiếu xóa| Scheduling
 ```
@@ -31,12 +32,13 @@ flowchart TD
 
 | Từ → Đến | Kiểu | Nội dung |
 |----------|------|----------|
-| Identity, Device, Scheduling → Distribution | Publish event | Mọi thay đổi có thể ảnh hưởng nội dung snapshot của một hay nhiều máy |
-| Distribution → Identity, Device, Scheduling | Query (chỉ đọc) | Dựng snapshot của một máy: lịch áp dụng cho máy hoặc zone của máy, nhóm và user liên quan, thẻ của các user đó |
+| Identity, Device, Scheduling → Distribution | Publish event | Mọi thay đổi có thể ảnh hưởng nội dung snapshot của một hay nhiều máy (gồm cả cấu hình profile và duyệt máy mới) |
+| Distribution → Identity, Device, Scheduling | Query (chỉ đọc) | Dựng snapshot của một máy: lịch áp dụng cho máy hoặc zone của máy, nhóm và user liên quan, thẻ của các user đó, allowlist profile |
 | Distribution → Edge | Snapshot / Lease | Bản snapshot có phiên bản hoặc xác nhận gia hạn thời hạn tin cậy, kèm tham số vận hành |
+| Edge → Device | Request / Report | Yêu cầu đăng ký máy (`WorkstationEnrollmentRequested`), báo cáo profile phát hiện (`WorkstationProfilesDiscovered`) |
 | Edge → Distribution | Event | `SnapshotApplied`: phiên bản PC đang dùng |
 | Edge → Operations | Event | Heartbeat, mở/đóng phiên, bản ghi nhật ký quẹt thẻ |
-| Device → Operations | Publish event | `WorkstationRegistered` để khởi tạo trạng thái máy |
+| Device → Operations | Publish event | `WorkstationEnrollmentApproved` để khởi tạo trạng thái máy |
 | Identity, Device → Scheduling | Query (chỉ đọc) | Kiểm tra còn Schedule tham chiếu trước khi xóa |
 
 ## Context Details
@@ -48,8 +50,8 @@ Quản lý danh tính người dùng, nhóm, liên kết thẻ và tài khoản 
 
 ### Device
 Cấu hình tĩnh của máy trạm, phân nhóm theo zone, đăng ký agent, danh mục allowlist profile tài khoản Linux dùng chung.
-- Entities: Workstation, WorkstationProfile, Zone, EnrollmentToken.
-- Events phát: `WorkstationRegistered`, `AgentEnrolled`, `WorkstationZoneChanged`, `ZoneDeleted`, `WorkstationProfileConfigured`.
+- Entities: EnrollmentRequest, Workstation, WorkstationProfile, Zone, EnrollmentToken.
+- Events phát: `WorkstationEnrollmentRequested`, `WorkstationEnrollmentApproved`, `WorkstationZoneChanged`, `ZoneDeleted`, `WorkstationProfileConfigured`.
 
 ### Scheduling
 Định nghĩa lịch: ai được dùng máy nào, khi nào, vào profile nào.

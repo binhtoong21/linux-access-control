@@ -95,19 +95,19 @@ Liên quan: BR-004, 005, 006, 010, 011, 012; FR-002, 055, 056; NFR-A01 đến A0
 Chọn **Option 4** với hai quyết định con **gia hạn qua phản hồi heartbeat** và **đồng hồ kết hợp**. Lý do: đây là phương án duy nhất vừa thỏa NFR-A01 và ràng buộc đề bài, vừa cho thu hồi một cận trên xác định. Cụ thể:
 
 1. **Quyết định ở Agent, một đường duy nhất.** Agent đánh giá theo CR-001 từ snapshot cục bộ, không hỏi server khi quẹt (BR-005).
-2. **Trạng thái tin cậy là hàm tính lại mỗi lần cần**, không phải biến lưu: `đáng tin = có snapshot ∧ còn hạn ∧ đồng hồ hợp lý`. Không đáng tin thì `denied(data_stale)` kèm chi tiết `no_data`, `lease_expired` hoặc `clock_suspect`; người dùng thấy một lý do chung và hướng dẫn dùng đường dự phòng.
+2. **Trạng thái tin cậy là hàm tính lại mỗi lần cần**, không phải biến lưu: `đáng tin = có snapshot ∧ còn hạn ∧ đồng hồ hợp lý`. Không đáng tin thì `denied(data_stale)` kèm chi tiết `no_data`, `lease_expired` hoặc `clock_invalid`; người dùng thấy một lý do chung và hướng dẫn dùng đường dự phòng.
 3. **Lease `D` do server cấp, tính từ lúc Agent nhận.** Làm mới bằng snapshot hợp lệ, hoặc bằng xác nhận gia hạn trong phản hồi heartbeat khi phiên bản máy bằng `desired_version`. Máy tụt phiên bản thì nhận snapshot thay vì gia hạn. Phản hồi gia hạn mang `server_time` và `D`.
 4. **Tách biệt bộ đếm phiên và hạn dữ liệu (D-012):**
    - **Thời lượng phiên (Session Timer):** Bắt buộc dùng đồng hồ đơn điệu `CLOCK_BOOTTIME` để đếm thời gian kể từ lúc boot. Timer này không bị kéo dài hay rút ngắn khi người dùng hoặc NTP thay đổi giờ hệ thống (`settimeofday`).
    - **Hạn dữ liệu (Snapshot Lease):** Hạn UTC tuyệt đối `trusted_until` bền vững qua các lần khởi động lại.
 5. **Đồng hồ hợp lý và mốc sàn cải tiến (D-012, Điểm 8):** Loại bỏ cơ chế mốc sàn xác minh ghi đĩa liên tục gây hao mòn SSD. Thay bằng quy tắc thực tế:
-   - (a) Giờ hệ thống không được nhỏ hơn mốc sàn: `local_time >= floor`, trong đó `floor = max(snapshot.created_at, last_server_time - 60s)`. Giá trị `last_server_time` được lưu bền vững cùng bản ghi với `trusted_until` mỗi lần gia hạn lease (không phát sinh I/O đĩa riêng). Mốc sàn luôn tiến theo thời gian thực và có dung sai 60 giây. Nếu `local_time < floor`, xác định pin CMOS bị kiệt làm đồng hồ quay về quá khứ (1970 hoặc năm sản xuất mainboard) → từ chối `data_stale (clock_invalid)`.
-   - (b) Khi kết nối với server, Agent đối chiếu với `server_time` trong Heartbeat. Nếu |giờ hệ thống − `server_time`| > 60s, Agent gửi cờ cảnh báo `clock_skew_detected` lên dashboard để kỹ thuật viên can thiệp. Agent vẫn chấp nhận gia hạn lease. Cờ NTP của OS chỉ để báo cáo, không làm điều kiện cổng. Agent không tự chỉnh giờ OS.
+   - (a) Giờ hệ thống không được nhỏ hơn mốc sàn: `local_time >= floor`, trong đó `floor = max(snapshot.created_at, last_server_time) - CLOCK_FLOOR_TOLERANCE` (với `CLOCK_FLOOR_TOLERANCE = 60s`). Giá trị `last_server_time` được lưu bền vững cùng bản ghi với `trusted_until` mỗi lần gia hạn lease (không phát sinh I/O đĩa riêng). Mốc sàn luôn tiến theo thời gian thực và có dung sai 60 giây cho cả hai vế. Nếu `local_time < floor`, xác định pin CMOS bị kiệt làm đồng hồ quay về quá khứ (1970 hoặc năm sản xuất mainboard) → từ chối `data_stale (clock_invalid)`.
+   - (b) Khi kết nối với server, Agent đối chiếu với `server_time` trong Heartbeat. Nếu |giờ hệ thống − `server_time`| > `CLOCK_SKEW_WARN_THRESHOLD` (60s), Agent gửi cờ cảnh báo `clock_skew_detected` lên dashboard để kỹ thuật viên can thiệp. Agent vẫn chấp nhận gia hạn lease. Cờ NTP của OS chỉ để báo cáo, không làm điều kiện cổng. Agent không tự chỉnh giờ OS.
 6. **Khởi động lại khi offline:** Đồng hồ được tin nếu `local_time >= floor` và `local_time <= trusted_until`. Cho phép quẹt thẻ bình thường theo lịch đã cache.
 7. **Lease chỉ chặn lần quẹt mới.** Phiên đang chạy không bị ảnh hưởng (BR-006) và kết thúc theo hạn riêng (BR-009). Thu hồi không buộc đăng xuất (BR-010).
 8. **Đường dự phòng độc lập với lease** (BR-004).
 
-Tham số chốt sau, theo thứ tự ưu tiên: `D` (gợi ý bắt đầu từ 24 giờ, cân giữa thời gian server được phép sập và cửa sổ thu hồi trên máy offline), ngưỡng lệch đồng hồ, chu kỳ heartbeat và số lần bỏ lỡ.
+Tham số chốt sau, theo thứ tự ưu tiên: `D` (gợi ý bắt đầu từ 24 giờ, cân giữa thời gian server được phép sập và cửa sổ thu hồi trên máy offline), dung sai mốc sàn đồng hồ `CLOCK_FLOOR_TOLERANCE` (60s), ngưỡng cảnh báo lệch đồng hồ `CLOCK_SKEW_WARN_THRESHOLD` (60s), chu kỳ heartbeat và số lần bỏ lỡ.
 
 ## Consequences
 

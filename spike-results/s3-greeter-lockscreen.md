@@ -54,7 +54,7 @@ Có thể hiển thị đúng các trạng thái của FR-010 và đăng nhập 
        * `dconf write /org/gnome/desktop/screensaver/lock-enabled false`
        * `dconf write /org/gnome/desktop/lockdown/disable-lock-screen true`
        * `dconf write /org/gnome/desktop/lockdown/disable-user-switching true`
-     - Quyền kiểm soát phiên và thay thế phiên (`superseded`) được giao cho **Agent daemon**. Khi phát hiện quẹt thẻ của người dùng khác lúc máy đang có phiên, Agent trực tiếp điều phối kết thúc phiên cũ theo quy trình BR-008/BR-009/A6 (`loginctl terminate-user` và `kill-user -s SIGKILL`).
+     - Quyền kiểm soát phiên được giao cho **Agent daemon** (BR-008): Nếu quẹt thẻ của người dùng khác khi Desktop đang active và còn hạn, Agent từ chối với lý do `workstation_busy` để bảo vệ bài làm của người trước (A4); Agent chỉ kích hoạt Two-Phase Teardown thay thế phiên (`abandoned(superseded)`) theo A6 (`loginctl terminate-user` và `kill-user -s SIGKILL`) khi máy đang ở Greeter (người trước đã đăng xuất) hoặc phiên cũ đã hết hạn ca học.
 
 ## ADR bị ảnh hưởng
 - **ADR "PAM và Greeter":** Chốt sử dụng LightDM; chốt cấu hình `auth sufficient pam_nfc.so` trước `common-auth`; ghi nhận cơ chế pre-authentication của LightDM Greeter.

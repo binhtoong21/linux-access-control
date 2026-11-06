@@ -17,9 +17,9 @@
 | INV-007 | Session: `active ⇔ ended_at rỗng`. Mọi status khác phải có `ended_at ≥ started_at` và `end_reason`. Trạng thái kết thúc không đảo ngược | Session | Thiết kế |
 | INV-008 | AuditLog chỉ ghi thêm, không sửa, không xóa. Mỗi `entry_id` có đúng một bản ghi | AuditLog | BR-007, NFR-SEC05 |
 | INV-009 | `Workstation.mac_address` duy nhất (sau chuẩn hóa) | Workstation | VR-008 |
-| INV-010 | Đăng ký máy: Quy trình Tự động (Zero-Touch) tạo Workstation ở trạng thái `pending_approval` chờ Admin duyệt cấp credential (D-010); hoặc dùng EnrollmentToken với số lần dùng ≤ `max_uses`, chỉ dùng được khi `active`, chưa hết hạn và còn lượt | Workstation, EnrollmentToken | BR-018, D-010 |
+| INV-010 | Đăng ký máy: Yêu cầu đăng ký được ghi nhận qua `EnrollmentRequest`. Nếu MAC trùng máy trạm đã có, yêu cầu bắt buộc ở trạng thái `pending_approval` để Admin duyệt thủ công trên Dashboard; credential cũ chỉ bị thu hồi và `key_version` chỉ tăng khi Admin duyệt. Đăng ký qua `EnrollmentToken` với số lần dùng ≤ `max_uses` chỉ tự động duyệt khi MAC chưa từng tồn tại; token được tiêu thụ khi yêu cầu được duyệt | EnrollmentRequest, Workstation, EnrollmentToken | BR-018, D-010 |
 | INV-011 | Phiên bản Snapshot tăng dần theo từng máy. LocalSnapshot chỉ được thay bằng bản có phiên bản lớn hơn, thay nguyên tử; bản không hợp lệ thì giữ bản cũ | Snapshot, LocalSnapshot | BR-011 |
-| INV-012 | Nội dung Snapshot của một máy chỉ gồm dữ liệu liên quan tới máy đó: các Schedule có Target là máy hoặc zone của máy, cùng user, nhóm, thẻ của các Subject đó | Snapshot | BR-011, NFR-SEC03 |
+| INV-012 | Nội dung Snapshot của một máy chỉ gồm dữ liệu liên quan tới máy đó: các Schedule có Target là máy hoặc zone của máy, cùng user, nhóm, thẻ của các Subject đó, và metadata allowlist profile OS (`target_os_username`, `enabled`, `is_default`, `key_version`) của máy trạm | Snapshot | BR-011, NFR-SEC03 |
 | INV-013 | Mỗi lần quẹt thẻ ở Edge tạo đúng một bản ghi trong AuditOutbox với `entry_id` duy nhất; bản ghi chỉ bị loại khỏi hàng đợi sau khi server xác nhận | AuditOutbox | BR-007 |
 | INV-014 | Tối đa một LocalSession `active` và một LocalSession `pending` trên một máy; quẹt đè khi desktop đang active và phiên còn hạn bị từ chối `workstation_busy`; chỉ thay thế phiên (`superseded`) khi đã về greeter hoặc phiên cũ hết hạn; khởi động lại thì đối chiếu với phiên OS thực tế | LocalSession | BR-008 |
 | INV-015 | LocalSession tự kết thúc khi chạm hạn sớm hơn của hai hạn: UTC tuyệt đối (`expires_at`) và hạn theo đồng hồ đo `CLOCK_BOOTTIME`, không phụ thuộc kết nối với server. Dọn sạch toàn bộ tiến trình của phiên OS (`loginctl terminate-user`, cưỡng chế `SIGKILL` theo user slice), tuyệt đối không xóa thư mục home hay file dữ liệu cục bộ | LocalSession | BR-009, FR-005 |
@@ -36,9 +36,9 @@
 | XINV-004 | Xóa Zone không xóa Workstation; chỉ gỡ liên kết zone | Zone, Workstation | `ZoneDeleted` → Device gỡ zone, Distribution dựng lại snapshot | BR-015 |
 | XINV-005 | Mọi thay đổi ở Identity, Device, Scheduling làm đổi nội dung snapshot của một máy thì cuối cùng máy đó phải có Snapshot phiên bản mới (không để lệch âm thầm) | Identity, Device, Scheduling, Distribution | SnapshotBuilder lắng nghe mọi event thay đổi; SyncState theo dõi máy chưa cập nhật | BR-010, FR-050 đến 054 |
 | XINV-006 | Nhận nhật ký từ Edge là idempotent theo `entry_id`; nhật ký có thể đến muộn và không theo thứ tự | AuditOutbox, AuditLog | AuditIngestService loại trùng | BR-007 |
-| XINV-007 | Mọi khung giờ được đánh giá theo múi giờ của triển khai (`Asia/Ho_Chi_Minh` UTC+7); Edge kiểm tra đồng hồ tối thiểu (`now >= snapshot.created_at`), nếu lùi về quá khứ (pin CMOS kiệt) thì từ chối `data_stale(clock_invalid)`; online thì đối chiếu `server_time` qua Heartbeat | Schedule, LocalSnapshot | LoginEvaluationService | BR-012, D-011, D-012 |
+| XINV-007 | Mọi khung giờ được đánh giá theo múi giờ của triển khai (`Asia/Ho_Chi_Minh` UTC+7); Edge kiểm tra đồng hồ tối thiểu (`now >= floor` với `floor = max(snapshot.created_at, last_server_time) - CLOCK_FLOOR_TOLERANCE`, dung sai 60s), nếu lùi về quá khứ (pin CMOS kiệt) thì từ chối `data_stale(clock_invalid)`; online thì đối chiếu `server_time` qua Heartbeat (lệch > 60s gửi cảnh báo `clock_skew_detected` nhưng không chặn lease) | Schedule, LocalSnapshot | LoginEvaluationService | BR-012, D-011, D-012 |
 | XINV-008 | Máy khởi động lại (`boot_id` đổi): suy luận chuyển các Session `active` của máy trên server sang `abandoned` (`inferred`) chỉ áp dụng sau khi outbox của máy đã hết (hoặc quá thời gian chờ). Báo cáo thật từ Agent thắng suy luận. Thời điểm kết thúc suy luận: `ended_at = max(started_at, lần cuối nghe từ máy ở boot cũ)`, đảm bảo `ended_at ≥ started_at` (INV-007) | Session, WorkstationStatus | WorkstationLivenessService chờ outbox rỗng trước khi suy luận | BR-008 |
-| XINV-009 | Đăng ký agent: hỗ trợ Zero-Touch Auto-Enrollment (tạo Workstation pending_approval, Admin phê duyệt) hoặc tiêu thụ một lượt của EnrollmentToken trong cùng một thao tác nguyên tử để cấp credential riêng biệt cho máy | EnrollmentToken, Workstation | AgentEnrollmentService, DeviceService | BR-018, D-010 |
+| XINV-009 | Đăng ký agent: ghi nhận qua `EnrollmentRequest` (Zero-Touch hoặc gửi kèm EnrollmentToken). Nếu MAC trùng máy đã có thì giữ nguyên máy đang chạy, đưa yêu cầu vào `pending_approval` chờ Admin duyệt; chỉ khi Admin duyệt mới thu hồi credential cũ, gán Zone và cấp Client Cert mới. Token đăng ký được tiêu thụ khi yêu cầu được duyệt | EnrollmentRequest, Workstation, EnrollmentToken | AgentEnrollmentService, DeviceService | BR-018, D-010 |
 | XINV-010 | Chưa có snapshot hoặc quá thời hạn tin cậy thì mọi lần quẹt thẻ ở Edge bị từ chối `data_stale`; fallback vẫn dùng được | LocalSnapshot | LoginEvaluationService bước 1 | BR-004, BR-006 |
 
 ## Traceability: Rules → Domain
@@ -68,7 +68,8 @@
 | VR-006 | INV-003 |
 | VR-008 | INV-009 |
 | VR-010 | INV-016 |
-| VR-011 | INV-018 |
+| VR-011 | INV-002 |
+| VR-012 | INV-018 |
 
 ## Notes
 - Enforcement có thể bổ sung bằng ràng buộc ở tầng Data (07), nhưng domain không phụ thuộc database.

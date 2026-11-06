@@ -21,7 +21,7 @@
 |----|---------|----------|-------|-------|
 | FR-010 | Màn hình chờ quẹt thẻ, hiển thị các trạng thái: chờ quẹt, đang xử lý, thành công, bị từ chối kèm lý do | Must | MVP | Custom Greeter chạy cục bộ, nhận sự kiện đẩy từ Agent qua IPC để mở phiên 0-chạm; hỗ trợ khôi phục về greeter chuẩn nếu gặp lỗi kéo dài |
 | FR-011 | Thông báo khi máy chưa có dữ liệu hợp lệ hoặc đã hết thời hạn tin cậy, hướng dẫn dùng đường dự phòng | Must | MVP | |
-| FR-012 | Hiển thị thời gian còn lại của phiên | Could | Extended | Bắn thông báo D-Bus khi người dùng đang active quẹt lại thẻ của chính mình (BR-008) |
+| FR-012 | Hiển thị thời gian còn lại của phiên | Must | MVP | Gửi thông báo D-Bus khi người dùng đang active quẹt lại thẻ của chính mình (`same_user`, BR-008(a), CR-001 bước 8a) |
 | FR-013 | Phản hồi trạng thái khi máy đang có phiên hoạt động | Must | MVP | Báo hiệu tại đầu đọc (LED/còi) khi từ chối người khác lúc máy bận; chỉ thay thế phiên khi đã về greeter hoặc hết hạn (BR-008) |
 
 ## Module 02: Lịch
@@ -57,7 +57,7 @@
 | FR-053 | Máy mới online hoặc kết nối lại nhận ngay bản mới nhất | Must | MVP | |
 | FR-054 | PC báo phiên bản đang dùng; server biết máy nào chưa cập nhật | Must | MVP | Admin thấy máy chưa nhận thay đổi |
 | FR-055 | Dữ liệu cục bộ có thời hạn tin cậy (làm mới khi nhận snapshot hợp lệ hoặc xác nhận gia hạn từ server cho cùng phiên bản); quá hạn mà không đồng bộ được thì ngừng cho vào bằng thẻ | Must | MVP | BR-006; giá trị chọn sau |
-| FR-056 | PC kiểm tra tính hợp lý của đồng hồ (local_time >= snapshot.created_at để tránh RTC pin CMOS chết) và đồng bộ lệch giờ với server qua Heartbeat; lệch bất thường thì từ chối quẹt thẻ với `data_stale (clock_invalid)` | Should | MVP | D-012, BR-012 |
+| FR-056 | PC kiểm tra tính hợp lý của đồng hồ (`local_time >= floor` với `floor = max(snapshot.created_at, last_server_time) - CLOCK_FLOOR_TOLERANCE` để tránh RTC pin CMOS chết; vi phạm từ chối quẹt thẻ với `data_stale (clock_invalid)`); khi online đối chiếu giờ với server qua Heartbeat, nếu lệch quá `CLOCK_SKEW_WARN_THRESHOLD` (60s) thì gửi cảnh báo `clock_skew_detected` lên Dashboard nhưng không từ chối gia hạn lease hay quẹt thẻ | Must | MVP | D-012, BR-012, Điểm 8 |
 | FR-057 | PC tự kết nối lại MQTT khi mất kết nối | Must | MVP | |
 
 ## Module 06: Health

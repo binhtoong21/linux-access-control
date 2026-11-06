@@ -11,10 +11,10 @@ stateDiagram-v2
     NoData --> Fresh: Nhận snapshot hợp lệ đầu tiên
     Fresh --> Expired: Hết hạn tin cậy
     Expired --> Fresh: Nhận snapshot hoặc gia hạn hợp lệ
-    Fresh --> ClockSuspect: Đồng hồ bất thường
-    Expired --> ClockSuspect: Đồng hồ bất thường
-    ClockSuspect --> Fresh: Đồng hồ được xác minh, còn hạn
-    ClockSuspect --> Expired: Đồng hồ hợp lý lại nhưng đã hết hạn
+    Fresh --> ClockInvalid: Đồng hồ vi phạm mốc sàn (local_time < floor)
+    Expired --> ClockInvalid: Đồng hồ vi phạm mốc sàn (local_time < floor)
+    ClockInvalid --> Fresh: Đồng hồ hợp lệ lại, còn hạn
+    ClockInvalid --> Expired: Đồng hồ hợp lệ lại nhưng đã hết hạn
 ```
 
 Trạng thái này là **hàm thuần túy (pure function) tính lại mỗi lần cần**, không phải biến lưu:
@@ -26,7 +26,7 @@ Nhận snapshot, nhận gia hạn, khởi động lại hay đổi giờ chỉ c
 | Trạng thái | Quẹt thẻ |
 |---|---|
 | `Fresh` | Đủ điều kiện tin cậy, tiến hành đánh giá CR-001 từ bước 2 |
-| `NoData`, `Expired`, `ClockSuspect` | Trả về `denied(data_stale)`. Greeter hiển thị lý do chung kèm hướng dẫn dùng đường dự phòng (FR-011). Bản ghi nhật ký ghi chi tiết nguyên nhân: `no_data`, `lease_expired`, hoặc `clock_suspect` |
+| `NoData`, `Expired`, `ClockInvalid` | Trả về `denied(data_stale)`. Greeter hiển thị lý do chung kèm hướng dẫn dùng đường dự phòng (FR-011). Bản ghi nhật ký ghi chi tiết nguyên nhân: `no_data`, `lease_expired`, hoặc `clock_invalid` |
 
 ## Sequence
 
@@ -64,11 +64,11 @@ sequenceDiagram
 2. **Hạn tính từ lúc Agent nhận**, thời lượng D do server cấp (cấu hình tập trung, NFR-M02). Mọi snapshot và phản hồi gia hạn đều kèm `server_time`.
 3. **Đồng hồ hợp lý và mốc sàn cải tiến (D-012, Điểm 8):**
    - **(a) Giờ hệ thống không lùi về quá khứ:** `local_time >= floor`, trong đó mốc sàn được tính:
-     `floor = max(snapshot.created_at, last_server_time - 60s)`.
+     `floor = max(snapshot.created_at, last_server_time) - CLOCK_FLOOR_TOLERANCE` (với `CLOCK_FLOOR_TOLERANCE = 60s`).
      * `last_server_time` được lưu bền vững cùng bản ghi với `trusted_until` mỗi khi nhận snapshot hoặc gia hạn lease, do đó **không tốn thêm bất kỳ thao tác ghi đĩa riêng nào**.
-     * Mốc sàn luôn tiến lên theo thời gian thực mỗi chu kỳ lease thay vì bị cũ như `snapshot.created_at`. Dung sai 60s triệt tiêu hoàn toàn nguy cơ báo lỗi oan khi máy trạm hơi trôi giờ nhẹ rồi khởi động lại.
+     * Mốc sàn luôn tiến lên theo thời gian thực mỗi chu kỳ lease thay vì bị cũ như `snapshot.created_at`. Dung sai `CLOCK_FLOOR_TOLERANCE` (60s) áp dụng cho cả hai vế, triệt tiêu hoàn toàn nguy cơ báo lỗi oan khi máy trạm hơi trôi giờ chậm (dưới ngưỡng cảnh báo) rồi nhận snapshot mới.
      * Nếu `local_time < floor`, xác định pin CMOS kiệt khiến giờ quay về 1970/2020 → từ chối `data_stale (clock_invalid)`.
-   - **(b) Kiểm tra lệch giờ khi Online:** Agent đối chiếu với `server_time` trong Heartbeat. Nếu `|local_time - server_time| > 60s`, Agent gửi cờ cảnh báo `clock_skew_detected` lên dashboard để kỹ thuật viên can thiệp. **Agent vẫn chấp nhận gia hạn lease** (không từ chối gia hạn để tránh làm tê liệt máy khi RTC chỉ trôi nhẹ) và không tự chỉnh giờ OS. Cờ NTP chỉ để báo cáo.
+   - **(b) Kiểm tra lệch giờ khi Online:** Agent đối chiếu với `server_time` trong Heartbeat. Nếu `|local_time - server_time| > CLOCK_SKEW_WARN_THRESHOLD` (60s), Agent gửi cờ cảnh báo `clock_skew_detected` lên dashboard để kỹ thuật viên can thiệp. **Agent vẫn chấp nhận gia hạn lease** (không từ chối gia hạn để tránh làm tê liệt máy khi RTC chỉ trôi nhẹ) và không tự chỉnh giờ OS. Cờ NTP chỉ để báo cáo.
 4. **Khởi động lại khi offline:** Đồng hồ được tin nếu `local_time >= floor` và `local_time <= trusted_until`. Cho phép quẹt thẻ bình thường theo lịch đã cache (D-012).
 5. **Agent không tự chỉnh giờ OS.** Khi giờ sai do pin RTC chết, Agent từ chối quẹt thẻ với `data_stale(clock_invalid)` cho đến khi OS (hoặc NTP) sửa được giờ, rồi heartbeat kế tiếp sẽ xác minh lại.
 6. **Một lần đánh giá chỉ lấy `now` đúng một lần** (cả giờ hệ thống lẫn đồng hồ đo) cho cả việc kiểm tra độ tin cậy và khớp khung giờ Schedule, tránh tình trạng quẹt thẻ ở biên thời gian mà hai bước thấy hai giá trị khác nhau.
@@ -87,7 +87,8 @@ sequenceDiagram
 
 ## Tham số chốt sau (06)
 - Thời lượng lease D (gợi ý mặc định 24h).
-- Ngưỡng lệch đồng hồ cảnh báo tối đa (60 giây).
+- Dung sai mốc sàn đồng hồ `CLOCK_FLOOR_TOLERANCE` (mặc định 60 giây).
+- Ngưỡng lệch đồng hồ cảnh báo `CLOCK_SKEW_WARN_THRESHOLD` (mặc định 60 giây).
 
 ## Câu hỏi cho 06
 | ADR | Câu hỏi |

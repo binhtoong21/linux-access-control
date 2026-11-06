@@ -65,7 +65,7 @@ flowchart LR
 **Tiền điều kiện:** như UC-001.
 
 **Luồng chính:**
-1. User quẹt thẻ; Agent đánh giá cục bộ → `denied` với một trong các lý do: `unknown_card`, `card_disabled`, `user_inactive`, `no_schedule`, `out_of_schedule`, `data_stale`, `workstation_busy`, `ambiguous_profile`, `profile_disabled`, `profile_not_found`, `clock_invalid` (hoặc `noop` kèm lý do `already_active` nếu cùng user đang active).
+1. User quẹt thẻ; Agent đánh giá cục bộ → `denied` với một trong các lý do: `unknown_card`, `card_disabled`, `user_inactive`, `no_schedule`, `out_of_schedule`, `data_stale` (kèm chi tiết `lease_expired`, `clock_invalid` hoặc `no_data`), `workstation_busy`, `ambiguous_profile`, `profile_disabled`, `profile_not_found` (hoặc `noop` kèm lý do `already_active` nếu cùng user đang active).
 2. Màn hình hiển thị lý do.
 3. Agent ghi một bản ghi nhật ký; không mở phiên.
 
@@ -156,14 +156,14 @@ flowchart LR
 **Luồng chính (Phương thức Zero-Touch Auto-Enrollment - D-010):**
 1. Kỹ thuật viên bung Master Image sạch (đã xóa `/etc/machine-id` và file credential của Agent) ra các máy phòng lab.
 2. Bật nguồn máy trạm lần đầu: systemd tự sinh `machine-id` mới; Agent tự sinh Ed25519 Keypair và gửi yêu cầu đăng ký (`hostname`, `mac_address`, `machine_id`, `public_key`) lên Server.
-3. Server lưu bản ghi Workstation ở trạng thái `pending_approval`.
+3. Server lưu bản ghi `EnrollmentRequest` ở trạng thái `pending`.
 4. Admin mở Web Dashboard, thấy danh sách máy trạm chờ duyệt (kèm hostname/MAC để nhận diện), chọn phòng máy (Zone) và bấm **Phê duyệt**.
-5. Server cấp `agent_token` / chứng chỉ chính thức và khóa so khớp `K_m` (ADR-007). Agent lưu bền vững vào `/var/lib/nfc-agent/` (`0600 root:root`), kết nối MQTT và nhận snapshot đầu tiên.
+5. Server cấp chứng chỉ Client Certificate mTLS chính thức (`CN = workstation_id`) và khóa so khớp `K_m` (ADR-007). Agent lưu bền vững vào `/etc/nfc-agent/agent.conf` (`0600 root:root`), kết nối MQTT và nhận snapshot đầu tiên.
 
 **Nhánh:**
-- AF-1 Đăng ký bằng Enrollment Token: Kỹ thuật viên cấu hình token theo lô (`batch_token`) trong file cấu hình local; server xác thực token và tự động duyệt cấp credential mà không cần Admin bấm tay.
+- AF-1 Đăng ký bằng Enrollment Token: Kỹ thuật viên cấu hình token theo lô (`batch_token`) trong file cấu hình local; server tạo `EnrollmentRequest`, kiểm tra token hợp lệ. Nếu MAC chưa từng tồn tại trên hệ thống, server tự động duyệt cấp credential mTLS và tiêu thụ 1 lượt token mà không cần Admin bấm tay. Nếu MAC đã tồn tại (trùng MAC), yêu cầu vẫn bắt buộc chuyển sang `pending_approval` để Admin duyệt thủ công (AF-2), tránh kẻ xấu đánh cắp token để chiếm máy trạm đang chạy.
 - EF-1 Token hết hạn, hết lượt hoặc đã thu hồi: từ chối.
-- AF-2 MAC đã có trong hệ thống (cài lại máy / clone lại): Server đưa yêu cầu vào trạng thái `pending_approval` và cảnh báo trùng MAC trên Dashboard để Admin duyệt thủ công (P1-4, D-010); chỉ sau khi Admin phê duyệt, hệ thống mới gắn vào bản ghi cũ, giữ lịch sử, vô hiệu hóa credential cũ, tăng `key_version` của máy để quay vòng `K_m` (ADR-007) và cấp credential/Client Certificate mới.
+- AF-2 MAC đã có trong hệ thống (cài lại máy / clone lại): Server tạo `EnrollmentRequest` ở trạng thái `pending_approval` và cảnh báo trùng MAC (`duplicate_mac_detected`) trên Dashboard để Admin duyệt thủ công (P1-4, D-010); máy trạm cũ đang chạy vẫn giữ nguyên quyền và snapshot/lease. Chỉ sau khi Admin phê duyệt, hệ thống mới cập nhật máy trạm, vô hiệu hóa credential cũ, tăng `key_version` của máy để quay vòng `K_m` (ADR-007) và cấp Client Certificate mới.
 - AF-3 Chưa nhận snapshot đầu: quẹt thẻ bị `data_stale` đến khi nhận.
 
 **Truy vết:** FR-040 đến 043, 053; BR-018; XINV-009; NFR-SEC02, D01; D-010.

@@ -9,7 +9,7 @@
 ## 📌 Giới Thiệu Dự Án
 
 Hệ thống quản lý và kiểm soát truy cập phòng máy thực hành thông qua thẻ sinh viên NFC (MIFARE 13.56MHz) theo mô hình **Edge Authentication & Least Privilege**:
-- **Xác thực tại Biên (Edge Decision):** Máy trạm tự động ra quyết định đăng nhập cục bộ dựa trên bản snapshot lịch học đã được ký và cấp phát từ máy chủ trung tâm. Hệ thống duy trì khả năng phục vụ liên tục ngay cả khi mất kết nối mạng hoặc máy chủ gặp sự cố (High Availability & Zero Latency).
+- **Xác thực tại Biên (Edge Decision):** Máy trạm tự động ra quyết định đăng nhập cục bộ dựa trên bản snapshot cá nhân hóa mang khóa so khớp per-machine (HMAC) và thời hạn tin cậy (lease) được cấp phát an toàn từ máy chủ trung tâm qua mTLS. Hệ thống duy trì khả năng phục vụ liên tục ngay cả khi mất kết nối mạng hoặc máy chủ gặp sự cố (High Availability & Zero Latency).
 - **Mô hình Profile OS Dùng Chung (Workstation Profile):** Tách bạch giữa danh tính xác thực (User/Card UID ghi nhận vào Audit Log) và môi trường hệ điều hành (`student`, `labuser`). Bảo toàn các thiết lập công cụ, phần mềm và bài tập thực hành do giảng viên/kỹ thuật viên chuẩn bị; dọn sạch toàn bộ tiến trình phiên làm việc sau mỗi ca học mà không xóa dữ liệu cục bộ.
 - **Zero-Touch Provisioning:** Hỗ trợ quy trình nhân bản đĩa hàng loạt (Master Image via Clonezilla/PXE). Máy trạm tự động sinh cặp khóa riêng biệt khi khởi động lần đầu, đăng ký trạng thái chờ duyệt (`PendingApproval`) và nhận cấu hình tập trung từ Web Dashboard của Quản trị viên.
 
@@ -30,11 +30,12 @@ Hệ thống quản lý và kiểm soát truy cập phòng máy thực hành th�
 │   │   ├── 08-api/         # REST API & MQTT Events Specification
 │   │   └── decisions.md    # Nhật ký các quyết định kiến trúc đã chốt (D-001 đến D-013)
 ├── spike-results/          # Báo cáo và kết quả thực nghiệm thực chứng (Empirical Spikes)
-│   ├── s1-card-reader.md   # Thử nghiệm đầu đọc NFC ACR122U & chuẩn PC/SC
+│   ├── s1-reader-pcsc.md   # Thử nghiệm đầu đọc NFC ACR122U & chuẩn PC/SC
 │   ├── s2-pam-agent.md     # Thử nghiệm tích hợp Linux PAM module và Unix Socket IPC
-│   ├── s3-greeter-lock.md  # Thử nghiệm Custom LightDM Greeter
+│   ├── s3-greeter-lockscreen.md # Thử nghiệm Custom LightDM Greeter và màn hình khóa
+│   ├── s3b-custom-greeter.md # Thử nghiệm Custom Greeter GTK3 0-chạm
 │   ├── s4-account-session.md # Quản lý phiên OS, cgroup kill và dọn tiến trình
-│   ├── s5-agent-storage.md # Thử nghiệm SQLite WAL và độ bền trước sự cố mất điện đột ngột
+│   ├── s5-mqtt-storage.md  # Thử nghiệm SQLite WAL và độ bền trước sự cố mất điện đột ngột
 │   └── s6-walking-skeleton.md# Tích hợp toàn diện End-to-End và giải quyết Race Condition
 ├── spike.md                # Kế hoạch và phương pháp luận thực hiện các spike
 ├── .gitignore              # Cấu hình bỏ qua các file tạm thời, cache và nhạy cảm

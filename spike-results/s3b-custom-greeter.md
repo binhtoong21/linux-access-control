@@ -42,7 +42,7 @@ Giao diện Lab Custom Greeter nạp thành công trên máy trạm Ubuntu 22.04
 - **Thời gian chuyển cảnh từ Greeter vào nạp Desktop GNOME:** <= 1.0 giây (quan sát thực tế chuyển cảnh sau khi hoàn tất xác thực).
 - **Số thao tác thủ công yêu cầu từ người dùng:** **0 thao tác** (so với 2 lần bấm chuột trên giao diện mặc định cũ).
 - **Thời gian tự hồi sinh khi Greeter crash tức thời:** ~0.2 giây (LightDM greeter supervision).
-- **Lưu ý thiết kế Giao diện Dự phòng:** Trên bản thử nghiệm PoC, khung mật khẩu dự phòng được gán mặc định cho tài khoản quản trị bảo trì (`binhtong`). Trong sản phẩm triển khai thực tế trên toàn trường, khung Fallback sẽ bổ sung ô chọn/nhập tài khoản (Username) để mọi giảng viên/sinh viên đều có thể đăng nhập bằng mật khẩu khi cần thiết.
+- **Lưu ý thiết kế Giao diện Dự phòng (D-007):** Khung Fallback gồm đầy đủ 2 ô: **Username** và **Password**, dành riêng cho Kỹ thuật viên / Quản trị viên IT đăng nhập tài khoản bảo trì cục bộ khi đầu đọc NFC hoặc Agent gặp sự cố. Tài khoản dùng chung của sinh viên đã bị khóa mật khẩu (`passwd -l`) nên sinh viên không sử dụng khung fallback này (theo D-007).
 
 ### Quy trình Khôi phục Vận hành (Operational Recovery Procedure - BR-004):
 Khi Custom Greeter gặp lỗi mã nguồn nghiêm trọng kéo dài (chẳng hạn lỗi cú pháp hoặc thiếu thư viện sau một bản nâng cấp):

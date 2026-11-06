@@ -21,7 +21,7 @@
 | ID | Yêu cầu |
 |----|---------|
 | NFR-SEC01 | TLS cho MQTT và REST API |
-| NFR-SEC02 | Mỗi máy xác thực với server bằng định danh riêng, chỉ cấp khi đăng ký bằng enrollment token hợp lệ |
+| NFR-SEC02 | Mỗi máy xác thực hai chiều với server bằng chứng chỉ mTLS riêng (`CN = workstation_id`), cấp qua quy trình Zero-Touch (Admin phê duyệt `EnrollmentRequest`) hoặc `EnrollmentToken` theo lô (BR-018, D-010) |
 | NFR-SEC03 | UID thẻ không lưu dạng rõ trong CSDL server (mã hóa khi lưu, server giải mã để hiển thị cho admin). Snapshot trên PC chứa khóa so khớp theo máy thay vì UID. Bản ghi nhật ký mang UID của lần quẹt, truyền qua TLS. File dữ liệu cục bộ chỉ root đọc được. Chấp nhận rủi ro: root trên một máy lấy được dữ liệu của máy đó, gồm danh sách khóa so khớp (UID ngắn có thể bị dò ngược) và UID của các lần quẹt tiếp theo tại máy |
 | NFR-SEC04 | Phân quyền cho API quản lý |
 | NFR-SEC05 | Nhật ký chỉ ghi thêm, không sửa, không xóa |

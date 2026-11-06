@@ -33,13 +33,13 @@ Trạng thái lưu chỉ có `active` và `revoked`. **Dùng được** là hàm
 
 `usable = (status = active) ∧ (chưa quá expires_at) ∧ (số lượt dùng < max_uses)`
 
-Dashboard hiển thị: `Dùng được`, `Hết hạn`, `Hết lượt`, `Đã thu hồi` (tính ra, FR-043). Một lần đăng ký thành công tiêu thụ đúng một lượt trong cùng thao tác cấp định danh (XINV-009). `revoked` là trạng thái cuối, không bật lại.
+Dashboard hiển thị: `Dùng được`, `Hết hạn`, `Hết lượt`, `Đã thu hồi` (tính ra, FR-043). Một lần đăng ký thành công tiêu thụ đúng một lượt trong cùng thao tác phê duyệt cấp định danh (XINV-009). Nếu yêu cầu đăng ký bị trùng MAC, token được giữ nguyên chưa tiêu thụ cho đến khi Admin phê duyệt. `revoked` là trạng thái cuối, không bật lại.
 
 ## 3. WorkstationStatus: kết nối (BR-019)
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Offline: WorkstationRegistered
+    [*] --> Offline: WorkstationEnrollmentApproved
     Offline --> Online: Hello hoặc heartbeat (WorkstationWentOnline)
     Online --> Offline: Bỏ lỡ quá số heartbeat quy định (WorkstationWentOffline)
     Online --> Online: Heartbeat làm mới last_heartbeat
@@ -79,6 +79,9 @@ stateDiagram-v2
 | Thực thể | Trạng thái | Ghi chú |
 |---|---|---|
 | User | `active` ⇄ `inactive` | Không xóa cứng (XINV-001, BR-014) |
+| EnrollmentRequest | `pending` → `approved` / `rejected` | Tạo khi Agent nộp yêu cầu; trùng MAC giữ pending chờ Admin duyệt |
+| Workstation | `enrolled` ⇄ `disabled` | Tạo/kích hoạt sau khi EnrollmentRequest được duyệt |
+| WorkstationProfile | `enabled` ⇄ `disabled` | Tự phát hiện mặc định `enabled`; profile đầu tiên nhận `is_default = true` |
 | Schedule | `enabled` ⇄ `disabled`, xóa được | Tắt thì bị bỏ qua khi đánh giá (BR-016) |
 | AdminAccount | `active` ⇄ `disabled` | `disabled` không đăng nhập được (INV-016) |
 | Session (server) | `active` → `completed` / `forced_logout` / `abandoned` | Nhận từ báo cáo của Edge; trạng thái cuối không đảo ngược (INV-007); xem LocalSession ở `session-expiry` |

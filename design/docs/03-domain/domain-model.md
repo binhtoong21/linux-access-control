@@ -49,9 +49,11 @@ classDiagram
 **AdminAccount**: id, username (duy nhất), display_name, status (`active`, `disabled`). Tách biệt với User quẹt thẻ.
 
 ### Device
-**Workstation**: id, hostname, mac_address (duy nhất), zone_id (tùy chọn), status (`pending_approval`, `enrolled`), default_os_username (profile mặc định của máy).
+**EnrollmentRequest**: id, machine_id, mac_address, hostname, public_key, enrollment_token_id (tùy chọn), status (EnrollmentRequestStatus: `pending`, `approved`, `rejected`), submitted_at, reviewed_at, reviewed_by (AdminAccount id).
 
-**WorkstationProfile**: id, workstation_id, os_username, display_name, profile_type (`shared`), is_default (boolean), status (`enabled`, `disabled`), description. Danh sách profile tài khoản Linux được phép dùng trên máy trạm (Allowlist).
+**Workstation**: id, machine_id (duy nhất), mac_address (duy nhất), hostname, public_key, key_version (số nguyên tăng dần từ 1), zone_id (tùy chọn), status (WorkstationStatus: `enrolled`, `disabled`).
+
+**WorkstationProfile**: id, workstation_id, os_username, display_name, profile_type (`shared`), is_default (boolean - nguồn sự thật duy nhất cho profile mặc định của máy), status (WorkstationProfileStatus: `enabled`, `disabled`), description. Danh sách profile tài khoản Linux được phép dùng trên máy trạm (Allowlist). Khi Agent phát hiện (Auto-Discovery), profile mặc định có status = `enabled`; profile đầu tiên được gán `is_default = true` nếu máy chưa có default.
 
 **Zone**: id, name (duy nhất, không rỗng), location (không rỗng), description (tùy chọn). Danh sách phẳng.
 
@@ -61,25 +63,25 @@ classDiagram
 **Schedule**: id, name, subject (Subject), target (Target), recurrence (RecurrenceRule), target_os_username (tùy chọn; nếu rỗng thì nhận default profile của máy), status (`enabled`, `disabled`). Một Schedule là một dòng "ai, ở đâu, khi nào, profile nào".
 
 ### Distribution
-**Snapshot** (bản dẫn xuất, theo từng máy): workstation_id, version (tăng dần theo máy), generated_at, content (SnapshotContent gồm: thẻ, lịch, metadata allowlist profile của máy), parameters (thời hạn tin cậy, thời gian cảnh báo trước hạn phiên).
+**Snapshot** (bản dẫn xuất, theo từng máy): workstation_id, version (tăng dần theo máy), created_at, content (SnapshotContent gồm: thẻ, lịch, allowlist profile kèm cờ default, key_version của máy), parameters (thời hạn tin cậy, thời gian cảnh báo trước hạn phiên).
 
 **SyncState**: workstation_id, desired_version, acked_version, acked_at. Trạng thái đồng bộ (`InSync`, `PendingSync`, và `Stuck` khi pending quá lâu lúc online) là hàm tính ra từ so sánh `acked_version` với `desired_version`, không lưu cờ riêng.
 
 ### Operations
 **WorkstationStatus**: workstation_id, connectivity (`online`, `offline`), last_heartbeat, boot_id; kèm trạng thái đối soát sau reboot theo từng máy (`Idle`, `Draining`). "Đang dùng" suy ra từ Session `active`, không lưu.
 
-**Session** (bản server nhận từ báo cáo của Edge): id, decision_id (bắt buộc, khớp entry_id của lần quẹt), user_id, card_id, workstation_id, os_username, started_at, expires_at, status (`active`, `completed`, `forced_logout`, `abandoned`), ended_at, end_reason, end_source (`reported`, `reconstructed`, `inferred`).
+**Session** (bản server nhận từ báo cáo của Edge): id, decision_id (bắt buộc, khớp entry_id của lần quẹt), user_id, card_id, workstation_id, os_username, decided_at, started_at, expires_at, status (`active`, `completed`, `forced_logout`, `abandoned`), ended_at, end_reason, end_source (`reported`, `reconstructed`, `inferred`).
 
 **AuditLog**: id, entry_id (do Edge sinh, dùng để loại trùng), occurred_at, received_at, outcome (`granted`, `denied`, `error`, `noop`), reason, detail (chi tiết bổ sung, ví dụ: `no_data`, `lease_expired`, `clock_invalid`, `ambiguous_profile`, `already_active`), card_uid, reader_raw (hex cắt ngắn, chỉ khi lỗi đọc), user (UserSnapshot), card (CardSnapshot), workstation (WorkstationSnapshot), target_os_username, data_version (phiên bản snapshot đã dùng). Bất biến.
 
 ### Edge
 > Toàn bộ thực thể và kho lưu trữ của Edge được quản lý bền vững tại kho cục bộ của máy trạm. Mọi thao tác cập nhật dữ liệu, ghi nhật ký và đối soát phiên đều thực thi trong các giao dịch nguyên tử.
 
-**LocalSnapshot**: snapshot đang dùng (version, content, parameters), received_at, trusted_until (UTC), last_server_time (UTC), lease_duration. Thay thế nguyên tử; chỉ nhận bản có version lớn hơn.
+**LocalSnapshot**: snapshot đang dùng (version, content gồm key_version, parameters), received_at, trusted_until (UTC), last_server_time (UTC), lease_duration. Thay thế nguyên tử; chỉ nhận bản có version lớn hơn. Nếu snapshot có `key_version` khác với `key_version` cục bộ của máy thì từ chối nạp, giữ bản cũ, không ack (lease dần hết hạn).
 
 **LocalWorkstationProfile**: danh sách profile được phép dùng cục bộ theo allowlist của máy trạm: os_username, is_default, status (`enabled`, `disabled`). Agent và PAM chỉ mở phiên cho profile nằm trong allowlist này và có status `enabled`.
 
-**LocalSession**: session_id, decision_id (bắt buộc, khớp entry_id), user_id, card_id, os_username, started_at, expires_at (UTC), boottime_limit (hạn đo theo `CLOCK_BOOTTIME`), boot_id, status (`pending`, `active`, `discarded`). Tối đa một phiên active và một pending.
+**LocalSession**: session_id, decision_id (bắt buộc, khớp entry_id), user_id, card_id, os_username, os_session_id (id logind của GUI session trên seat0), decided_at, started_at, expires_at (UTC), boottime_limit (hạn đo theo `CLOCK_BOOTTIME`), boot_id, status (`pending`, `active`, `discarded`). Tối đa một phiên active và một pending.
 
 **LocalLiveness**: `last_alive_at` ghi định kỳ xuống đĩa; dùng làm cận dưới `ended_at` khi dựng lại phiên sau crash đột ngột.
 
@@ -109,6 +111,9 @@ classDiagram
 | CardStatus | `unbound`, `active`, `disabled` |
 | AdminAccountStatus | `active`, `disabled` |
 | EnrollmentTokenStatus | `active`, `revoked` |
+| EnrollmentRequestStatus | `pending`, `approved`, `rejected` |
+| WorkstationStatus | `enrolled`, `disabled` |
+| WorkstationProfileStatus | `enabled`, `disabled` |
 | ScheduleStatus | `enabled`, `disabled` |
 | DayOfWeek | `MONDAY` … `SUNDAY` |
 | Outcome | `granted`, `denied`, `error`, `noop` |
@@ -126,6 +131,7 @@ classDiagram
 | Card | Identity | MVP | INV-001, INV-006 |
 | Group | Identity | MVP | INV-003 |
 | AdminAccount | Identity | MVP | INV-016 |
+| EnrollmentRequest | Device | MVP | INV-010 |
 | Workstation | Device | MVP | INV-009 |
 | WorkstationProfile | Device | MVP | INV-018 |
 | Zone | Device | MVP | INV-003 |
@@ -145,7 +151,7 @@ classDiagram
 
 ### LoginEvaluationService (Edge)
 Đầu vào: `card_uid`, `now` (lấy đúng một lần cả giờ hệ thống UTC và `CLOCK_BOOTTIME`), `LocalSnapshot`, trạng thái phiên hiện tại. Thực hiện CR-001:
-1. Đánh giá tính hợp lệ của dữ liệu và đồng hồ: Chưa có snapshot, hoặc quá thời hạn tin cậy `trusted_until` (UTC), hoặc giờ hiện tại < mốc sàn đồng hồ `floor = max(snapshot.created_at, last_server_time - 60s)` (BR-006, BR-012, D-012) → `denied(data_stale)` kèm chi tiết `clock_invalid` hoặc `lease_expired` / `no_data`.
+1. Đánh giá tính hợp lệ của dữ liệu và đồng hồ: Chưa có snapshot, hoặc quá thời hạn tin cậy `trusted_until` (UTC), hoặc giờ hiện tại < mốc sàn đồng hồ `floor = max(snapshot.created_at, last_server_time) - CLOCK_FLOOR_TOLERANCE` (với `CLOCK_FLOOR_TOLERANCE = 60s`, BR-006, BR-012, D-012) → `denied(data_stale)` kèm chi tiết `clock_invalid` hoặc `lease_expired` / `no_data`.
 2. Tính `CardMatchKey` từ UID vừa quẹt (ADR-007). Tra thẻ trong snapshot theo `CardMatchKey`: không có hoặc `unbound` → `unknown_card`; `disabled` → `card_disabled`.
 3. Chủ thẻ `inactive` → `user_inactive`.
 4. Lấy Schedule `enabled` khớp user hoặc nhóm của user và máy hoặc zone của máy. Rỗng → `no_schedule`.
@@ -155,15 +161,19 @@ classDiagram
    - Nếu gom được nhiều hơn 1 `os_username` khác nhau → từ chối `denied(ambiguous_profile)` (cấm mơ hồ profile, BR-016).
    - Tra cứu profile theo `os_username` được chọn trong allowlist cục bộ của máy: không có → `denied(profile_not_found)`; `status = disabled` → `denied(profile_disabled)`.
 7. Tính hạn phiên: là điểm kết thúc của chuỗi khung giờ liên tục trong cùng một ngày (D-011) từ các Schedule khớp và cùng profile, nhưng không vượt quá hạn phiên tối đa (tham số). Hạn phiên gắn với cả UTC tuyệt đối (`expires_at`) và hạn đo `CLOCK_BOOTTIME`.
-8. Đánh giá trạng thái phiên hiện tại trên máy (BR-008):
-   - Thẻ thuộc về chính user đang active (`same_user`): trả về kết quả `noop`, lý do `already_active`. Phát thông báo D-Bus thời lượng còn lại lên màn hình Desktop, không tạo phiên mới.
-   - Thẻ của user khác khi Desktop đang active và phiên còn hạn: từ chối `denied(workstation_busy)`.
-   - Màn hình đang ở Greeter (người trước đã đăng xuất) hoặc phiên cũ đã hết hạn: trả về `granted`, xác định duy nhất `target_profile` (`os_username`).
+8. Đánh giá trạng thái phiên hiện tại trên máy (BR-008, P1-1, P1-3):
+   - (a) Thẻ thuộc về chính user đang active (`same_user`): trả về kết quả `noop`, lý do `already_active`. Phát thông báo D-Bus thời lượng còn lại lên màn hình Desktop, không tạo phiên mới.
+   - (b) Thẻ của user khác khi máy ghi nhận Desktop đang active và phiên còn hạn: Agent chủ động kiểm tra trạng thái phiên OS qua `systemd-logind` trên `seat0`.
+     * Nếu logind xác nhận phiên đồ họa thực sự còn đang chạy: trả về `denied(workstation_busy)`.
+     * Nếu logind báo phiên đồ họa không còn tồn tại trên `seat0` (do GNOME/X11 crash hoặc người dùng đã thoát mà Agent chưa nhận diện): đóng phiên cũ là `abandoned(os_session_lost)`, phát `SessionEnded(os_session_lost)`, và xử lý như máy rảnh (`granted`).
+   - (c) Màn hình đang ở Greeter (máy rảnh) HOẶC phiên cũ đã hết hạn ca học (`now >= expires_at`): trả về `granted`, xác định duy nhất `target_profile` (`os_username`).
 
-Kết quả là LoginDecision, luôn kèm phát `LoginDecided`. Ghi bền vững một lần: bản ghi nhật ký (entry_id, kết quả, lý do, chi tiết, version dữ liệu, target_os_username) và, nếu granted, LocalSession pending (os_username, expires_at, boottime_limit) vào kho cục bộ trước khi trả LoginDecision.
+Kết quả là LoginDecision, luôn kèm phát `LoginDecided`. Ghi bền vững một lần: bản ghi nhật ký (entry_id, kết quả, lý do, chi tiết, version dữ liệu, target_os_username) và, nếu granted, LocalSession pending (session_id, decision_id, user_id, card_id, os_username, decided_at = now, expires_at, boottime_limit) vào kho cục bộ trước khi trả LoginDecision.
 
 ### SessionLifecycleService (Edge)
-- Sau khi PAM thành công và `expires_at` còn hạn: chuyển LocalSession `pending` thành `active`; đóng phiên cũ nếu còn (`abandoned` kèm lý do `superseded`), phát `SessionEnded(superseded)` và `SessionStarted` vào outbox. Nếu `expires_at` đã qua: kết thúc phiên OS ngay, chuyển `pending` thành `discarded`.
+- Khi cấp quyền mở phiên mới thay thế phiên cũ (máy ở Greeter hoặc ca cũ hết hạn): Agent kích hoạt Two-Phase Teardown tiêu diệt phiên cũ (`abandoned(superseded)`, phát `SessionEnded(superseded)`), đồng bộ đợi cgroup user slice và mount point `/run/user/<UID>` được giải phóng hoàn toàn (tối đa `SLICE_TEARDOWN_TIMEOUT = 3.0s`), sau đó bàn giao `staged_auth` cho Greeter/PAM.
+- Sau khi PAM thành công và logind tạo GUI session trên `seat0`: gán `os_session_id`, `started_at = now`, chuyển `LocalSession pending` thành `active`, phát `SessionStarted` vào outbox. Nếu `expires_at` đã qua trước khi kịp mở: kết thúc phiên OS ngay, chuyển `pending` thành `discarded`.
+- GUI Session Watcher định kỳ giám sát `loginctl list-sessions` trên `seat0`: nếu phiên đồ họa biến mất do người dùng đăng xuất sạch sẽ -> đóng `completed(user_logout)`; nếu phiên đồ họa biến mất bất thường (crash) -> đóng `abandoned(os_session_lost)`.
 - Cảnh báo trước hạn W (phút) và tự đăng xuất khi chạm hạn (`schedule_expired`), không phụ thuộc server. Dọn sạch toàn bộ tiến trình của phiên OS (`loginctl terminate-user` theo user slice, chờ 2s, cưỡng chế `kill-user -s SIGKILL`). **Tuyệt đối không xóa thư mục home hay file dữ liệu cục bộ** sau phiên (BR-009, D-006). Cấu hình Master Image yêu cầu SSHD `DenyGroups labstudent` và tắt linger (`loginctl disable-linger`).
 - LocalSession chỉ chuyển sang trạng thái kết thúc khi phiên OS tương ứng đã thật sự kết thúc hoặc không còn (INV-017).
 - Khi người dùng đăng xuất, phát `SessionEnded` (`user_logout`, `end_source = reported`).
@@ -172,16 +182,16 @@ Kết quả là LoginDecision, luôn kèm phát `LoginDecided`. Ghi bền vững
   * Khác `boot_id` (máy reboot): `LocalSession active` chuyển thành `abandoned(workstation_rebooted, end_source = reconstructed, ended_at = last_alive_at)`; `pending` chuyển `discarded`. Phát `SessionEnded` đưa vào outbox TRƯỚC khi gửi `Hello`.
   * Trùng `boot_id` (Agent restart): đối chiếu LocalSession (`active`, `pending`) với phiên OS thực tế:
     + `active` còn hạn & còn phiên OS: giữ; hết hạn: kết thúc OS, đóng `forced_logout(schedule_expired)`; không còn phiên OS: đóng `abandoned(os_session_lost)`.
-    + `pending` còn hạn & còn phiên OS: chuyển `active`; hết hạn: kết thúc OS, chuyển `discarded`; không còn phiên OS: chuyển `discarded`.
+    + `pending`: chỉ chuyển sang `active` nếu tìm thấy phiên OS trên `seat0` được tạo SAU thời điểm quyết định (`decided_at`) và còn hạn (ghi nhận `os_session_id`); nếu không còn phiên OS hoặc phiên OS được tạo trước `decided_at` (phiên cũ còn sót) hoặc đã hết hạn: dọn phiên OS cũ (nếu có) và chuyển `pending` thành `discarded`.
 
 ### SnapshotBuilder (Distribution)
-Dựng Snapshot cho một máy: lấy Schedule áp dụng (đích là máy hoặc zone của máy), gom user và nhóm liên quan, thẻ của các user đó (kể cả thẻ `disabled`, user `inactive`). Mục thẻ chứa `CardMatchKey` tính bằng khóa riêng của máy (ADR-007), không chứa UID gốc. Tăng version khi nội dung đổi. Ghi `desired_version` vào SyncState rồi phát `SnapshotPublished`.
+Dựng Snapshot cho một máy: lấy Schedule áp dụng (đích là máy hoặc zone của máy), gom user và nhóm liên quan, thẻ của các user đó (kể cả thẻ `disabled`, user `inactive`), metadata allowlist profile và `key_version` của máy trạm. Mục thẻ chứa `CardMatchKey` tính bằng khóa riêng của máy (ADR-007), không chứa UID gốc. Tăng version khi nội dung đổi. Ghi `desired_version` vào SyncState rồi phát `SnapshotPublished`.
 
 ### LeaseRenewalService (Distribution)
 Nhận thông điệp Hello / heartbeat từ máy: nếu `acked_version == desired_version`, phản hồi xác nhận gia hạn thời hạn tin cậy; nếu máy tụt lại (`acked_version < desired_version`), gửi Snapshot mới nhất (đầy đủ).
 
 ### SnapshotApplier (Edge)
-Nhận snapshot: kiểm tra hợp lệ, version lớn hơn bản đang dùng; thay thế nguyên tử; làm mới thời hạn tin cậy; phát `SnapshotApplied`. Không hợp lệ thì giữ bản cũ.
+Nhận snapshot: kiểm tra hợp lệ, version lớn hơn bản đang dùng, đối chiếu `key_version` khớp với khóa máy; thay thế nguyên tử; làm mới thời hạn tin cậy; phát `SnapshotApplied`. Không hợp lệ hoặc lệch `key_version` thì giữ bản cũ.
 
 ### AuditIngestService (Operations)
 Nhận bản ghi từ Edge; loại trùng theo `entry_id`; lưu `received_at`. Xử lý lặp lại an toàn.
@@ -195,7 +205,15 @@ Nhận bản ghi từ Edge; loại trùng theo `entry_id`; lưu `received_at`. X
 Chuẩn hóa UID; chưa có → tạo thẻ `active` với chủ; đã có và `unbound` → gắn lại; đã có chủ → từ chối.
 
 ### AgentEnrollmentService (Device)
-Kiểm tra token dùng được; tìm máy theo MAC (có thì gắn vào bản ghi đó, chưa có thì tạo máy mới); ghi một lượt dùng token và cấp định danh trong cùng một thao tác.
+- Tiếp nhận yêu cầu đăng ký từ Agent (gửi kèm `machine_id`, `mac_address`, `hostname`, `public_key`, và `enrollment_token_id` nếu có): tạo bản ghi `EnrollmentRequest` ở trạng thái `pending`.
+- Nếu `mac_address` trùng với một `Workstation` đã có trong hệ thống: đánh dấu cờ cảnh báo `duplicate_mac_detected` trên Dashboard và bắt buộc giữ yêu cầu ở trạng thái `pending` để Admin phê duyệt thủ công (Workstation hiện tại đang chạy vẫn giữ nguyên quyền và snapshot/lease, không bị ảnh hưởng).
+- Nếu có `EnrollmentToken` hợp lệ (còn lượt, chưa hết hạn, `active`) và `mac_address` chưa từng tồn tại: tự động duyệt yêu cầu, tiêu thụ 1 lượt token và chuyển `EnrollmentRequest` sang `approved`.
+- Khi Admin phê duyệt `EnrollmentRequest` trên Dashboard:
+  * Gán Zone cho máy trạm.
+  * Tạo mới `Workstation` hoặc cập nhật `Workstation` hiện có (nếu cài lại: tăng `key_version`, thu hồi Client Certificate cũ).
+  * Ký phát hành Client Certificate mTLS chính thức và tính khóa riêng của máy `K_m = HKDF(master_key, workstation_id || ":" || key_version)`.
+  * Chuyển `EnrollmentRequest.status = approved`.
+  * Phát `WorkstationEnrollmentApproved` (kích hoạt khởi tạo trạng thái bên Operations và dựng snapshot bên Distribution).
 
 ### DeletionGuard (cross-context)
 Không xóa User, Group, Workstation, Zone nếu còn Schedule tham chiếu.
@@ -206,10 +224,10 @@ Không xóa User, Group, Workstation, Zone nếu còn Schedule tham chiếu.
 | UserDeactivated, UserActivated, UserUpdated | Identity | Đổi trạng thái hoặc thông tin user | Distribution |
 | GroupMembershipChanged | Identity | Thêm hoặc bớt thành viên | Distribution |
 | CardBound, CardUnbound, CardDisabled, CardEnabled | Identity | Thao tác thẻ | Distribution |
-| WorkstationEnrollmentRequested | Device | Agent gửi yêu cầu đăng ký lần đầu hoặc đăng ký lại (kèm CSR mTLS) | Operations, Admin |
-| WorkstationEnrollmentApproved | Device | Admin phê duyệt máy trạm và gán Zone (cấp Client Cert mTLS và K_m) | Distribution, Edge |
-| WorkstationProfilesDiscovered | Device | Agent báo cáo danh mục profile OS phát hiện trên máy trạm | Operations, Device |
-| AgentEnrolled | Device | Agent đăng ký thành công | Distribution |
+| WorkstationEnrollmentRequested | Device | Agent gửi yêu cầu đăng ký mới hoặc cài lại máy (kèm machine_id, MAC, public key) | Operations, Admin |
+| WorkstationEnrollmentApproved | Device | Admin phê duyệt máy trạm và gán Zone (cấp Client Cert mTLS và K_m) | Operations, Distribution, Edge |
+| WorkstationProfilesDiscovered | Device | Agent báo cáo danh mục profile OS phát hiện trên máy trạm | Device, Operations, Distribution |
+| WorkstationProfileConfigured | Device | Admin cấu hình bật/tắt profile hoặc chọn profile mặc định | Distribution |
 | WorkstationZoneChanged, ZoneDeleted | Device | Đổi zone của máy, xóa zone | Distribution |
 | ScheduleCreated, ScheduleUpdated, ScheduleEnabled, ScheduleDisabled, ScheduleDeleted | Scheduling | Thao tác lịch | Distribution |
 | SnapshotPublished | Distribution | Dựng xong snapshot mới | Edge (qua MQTT) |

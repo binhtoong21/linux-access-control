@@ -69,7 +69,7 @@ Khi nối lại, server thấy `boot_id` đổi và (theo XINV-008 cũ) chuyển
 **Đã sửa:**
 - **XINV-008:** suy luận `abandoned` chỉ áp dụng cho phiên `active` còn lại **sau khi outbox của máy đã hết** (hoặc quá thời gian chờ cấu hình). Phiên Agent đã báo kết thúc giữ nguyên báo cáo.
 - **INV-007** giữ nguyên.
-- Phiên có `ended_at` do suy luận nên được gắn nhãn (`end_source: reported | inferred`), để UC-008 phân biệt.
+- Phiên có `ended_at` nên được gắn nhãn nguồn gốc (`end_source: reported | reconstructed | inferred`), để UC-008 và Operations phân biệt (khớp domain-model và reboot.md).
 
 ## Câu hỏi cho 06
 | ADR | Câu hỏi |

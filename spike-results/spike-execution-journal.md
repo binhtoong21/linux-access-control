@@ -346,8 +346,8 @@ abf1fbd1-4562-46c9-816b-dcf87c83005e|123ccd9b-3a41-476d-91a5-9b1e80dc7667|binhto
 | **Gán danh tính động** | Nghi vấn `pam_set_item` có nhận username rỗng không | `pam_set_item(pamh, PAM_USER, user)` hoạt động hoàn hảo | **Chốt luồng quẹt thẻ không cần gõ hay chọn username trước** |
 | **Màn hình khóa (BR-008)** | Định dùng màn hình khóa OS với PAM service riêng | Lockscreen GNOME xung đột `light-locker`; LightDM unlock bỏ qua PAM | **Bác bỏ lockscreen OS; Chốt để Agent daemon gọi `loginctl terminate-session`** để thực thi quy tắc `superseded` |
 | **Dự phòng (Fallback)** | Cần nút chuyển chế độ dự phòng | LightDM tự động ẩn ô mật khẩu khi có NFC và tự hiện lại ô mật khẩu khi Agent tắt | **Tự động hóa hoàn toàn luồng Fallback**, không cần nút bấm chuyển chế độ thủ công |
-| **Mô hình Tài khoản OS** | Cân nhắc giữa Pool chung và Tài khoản riêng | Quyền `750` cách ly dữ liệu tự nhiên; tài khoản chung nguy cơ lộ dữ liệu | **Chốt chọn Phương án B:** Tạo tài khoản Linux theo mã sinh viên dựa trên Snapshot |
-| **Dọn dẹp Tiến trình** | Dự kiến chỉ gọi `loginctl terminate-session` | Tiến trình bẫy `SIGTERM` sống dai; `pkill -u` làm rớt SSH quản trị | **Chốt quy trình dọn dẹp cgroup theo session:** `loginctl terminate-session` kết hợp `kill-session -s SIGKILL` sau 2 giây |
+| **Mô hình Tài khoản OS** | Cân nhắc giữa Pool chung và Tài khoản riêng | Quyền `750` cách ly dữ liệu tự nhiên; tài khoản chung nguy cơ lộ dữ liệu | **Ban đầu chọn Phương án B (tạo `stu_*`), nhưng sau đó đã được thay thế chính thức bằng ADR-004:** Mô hình Profile OS dùng chung (`student` với `passwd -l`) để triệt tiêu hoàn toàn độ trễ khởi tạo tài khoản |
+| **Dọn dẹp Tiến trình** | Dự kiến chỉ gọi `loginctl terminate-session` | Tiến trình bẫy `SIGTERM` sống dai; `pkill -u` làm rớt SSH quản trị | **Chốt quy trình dọn dẹp cgroup:** Thực nghiệm ban đầu dùng `kill-session`, sau đó đã được chuẩn hóa theo A6/ADR-004 sang cấp user slice (`loginctl terminate-user` kết hợp `kill-user -s SIGKILL`), kết hợp chặn SSH bằng `DenyGroups labstudent` |
 | **Lưu Snapshot Bền vững** | Ghi đè file snapshot trực tiếp | Mất điện đột ngột có thể làm mất metadata rename nếu không sync thư mục | **Chốt mô hình POSIX atomic write:** `.tmp` + `fsync` file + `atomic replace` + **`fsync` thư mục cha** (Sống sót 100% qua hard reset SysRq `b`) |
 | **An toàn Đồng hồ** | Đo giờ hệ điều hành `time.time()` | Lỗ hổng khi máy bị lùi giờ hoặc chết pin CMOS | **Chốt triển khai `CLOCK_BOOTTIME` theo chuẩn ADR-001**, đo thời gian trôi qua độc lập với đồng hồ hệ thống |
 | **Thay thế Phiên (BR-008)** | Cấp quyền ngay khi quẹt thẻ người mới | LightDM mất 0.5s - 1.5s dọn display server; cấp quyền ngay gây race condition | **Chốt cơ chế khóa trạng thái (Locking/Handshake):** Chỉ kích hoạt auth phiên mới khi seat0 đã về trạng thái rảnh |
@@ -673,7 +673,7 @@ Nhằm hoàn thiện việc bảo vệ tính toàn vẹn thời gian của máy 
 - Máy trạm tính toán sai lệch tức thời: `drift = abs(server_time - local_time)`.
 - **Ngưỡng cho phép (`max_drift`):** 60.0 giây.
   - Nếu `drift <= max_drift`: Chấp nhận Lease, kéo dài thời hạn tin cậy `trusted_until`.
-  - Nếu `drift > max_drift`: Từ chối Lease lập tức (`clock_drift_exceeded`), giữ nguyên mốc cũ và kích hoạt cờ `ClockSuspect` gửi lên Server qua bản tin Heartbeat định kỳ.
+  - Nếu `drift > max_drift`: Ban đầu định từ chối Lease (`clock_drift_exceeded`). Tuy nhiên, theo thiết kế chuẩn hóa (FR-056, ADR-001, D-012), nhằm đảm bảo tính sẵn sàng tại Edge, Agent vẫn chấp nhận Lease nhưng kích hoạt cảnh báo kiểm toán `clock_skew_detected` (với `CLOCK_SKEW_WARN_THRESHOLD = 60s`). Mốc sàn xác minh lease/quẹt thẻ được tính tách biệt theo công thức: `floor = max(snapshot.created_at, last_server_time) - CLOCK_FLOOR_TOLERANCE` (`CLOCK_FLOOR_TOLERANCE = 60s`).
 
 #### 2. Kết quả Thực nghiệm Thực tế:
 Script đo đạc `~/spike/s5_clock_drift.py` chạy trực tiếp trên máy trạm Ubuntu 22.04 LTS:
@@ -697,6 +697,7 @@ Local time: 1793049261.81 | Server time: 1793049357.21
 - **Ý nghĩa Kiến trúc:**
   - Chứng minh cơ chế phòng thủ chiều sâu (Defense-in-Depth) tại Edge: Không phó mặc thời gian cho NTP hay đồng hồ RTC của bo mạch chủ.
   - Ngăn chặn hoàn toàn kịch bản kẻ xấu cố tình chỉnh giờ máy tính tiến/lùi để kéo dài ca sử dụng bất hợp pháp.
+  - *Lưu ý tiến hóa thiết kế (FR-056, ADR-001, D-012):* Để tránh việc gián đoạn hoạt động tại phòng lab khi có sai lệch mạng nhẹ, phản ứng khi trôi đồng hồ > 60s được chuyển thành cảnh báo kiểm toán `clock_skew_detected`, không từ chối lease. Mốc sàn đồng hồ được chuẩn hóa thành `floor = max(snapshot.created_at, last_server_time) - CLOCK_FLOOR_TOLERANCE` (với dung sai 60s).
 
 ### 8.15. Thực nghiệm Kiểm chứng Phản biện Bổ sung: Ràng buộc PAM_USER, Greeter Crash, Discarded Sát giờ & Stress Test 10 Chu kỳ
 
