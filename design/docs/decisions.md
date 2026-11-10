@@ -104,6 +104,10 @@ Hợp nhất toàn bộ Snapshot, Lease, Session và AuditOutbox vào một CSDL
 Phân tách danh tính sinh viên (User/Card) dùng cho kiểm soát truy cập và ghi AuditLog với Profile Linux dùng chung (`WorkstationProfile`, ví dụ `student`) để mở Desktop phục vụ học tập. Vô hiệu hóa Lock Screen và User Switching để triệt tiêu trạng thái lửng lơ. Cơ chế Teardown đa pha được tách sang ADR-008 dựa trên kết quả Spike S7.
 **Nguồn:** [ADR-004](06-architecture/decisions/ADR-004-mo-hinh-profile-os-dung-chung.md), D-006; giải quyết P1-2, P1-3, P2-1.
 
+### ADR-005 (Proposed): Kiến trúc PAM module C, Lab Custom Greeter và cơ chế khôi phục
+Chốt chuyển sang Display Manager LightDM. Module PAM viết bằng C thuần (`pam_nfc.so`), giao tiếp IPC không khóa qua Unix socket `/run/nfc-agent.sock` với fallback tức thì 22ms về mật khẩu cục bộ khi Agent treo/chết (BR-004, NFR-M01), bảo vệ cấp nhân bằng `SO_PEERCRED`. Xây dựng Lab Custom Greeter bằng Python GTK3 nhận tín hiệu đẩy qua `/run/nfc-control.sock` để đăng nhập 0-chạm (< 1.0s), loại trừ lỗi bấm login 2 lần. Áp dụng Startup Handshake 1.2s và cơ chế cứu hộ TTY2/SSH một lệnh.
+**Nguồn:** [ADR-005](06-architecture/decisions/ADR-005-pam-greeter-va-display-manager.md), S2, S3, S3b, S6, D-006.5, D-007.2.
+
 ### ADR-007 (Accepted): Khóa so khớp UID thẻ và phạm vi lưu UID gốc
 Server lưu UID mã hóa (AES-256-GCM) kèm chỉ mục mù (HMAC-SHA256). Snapshot chứa `CardMatchKey` = HMAC theo khóa riêng của máy (`K_m = HKDF(master_key, workstation_id || ":" || key_version)`), không chứa UID gốc. Nhật ký mang UID của lần quẹt qua TLS. Admin giải mã khi xem dashboard. Phạm vi bảo vệ: chiếm root một máy không làm lộ thẻ của người không liên quan tới máy đó.
 **Nguồn:** [ADR-007](06-architecture/decisions/ADR-007-khoa-so-khop-uid.md); giải quyết PD-002.
