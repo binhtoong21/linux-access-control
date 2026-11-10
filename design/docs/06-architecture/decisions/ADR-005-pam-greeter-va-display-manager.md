@@ -47,7 +47,7 @@ Cần một quyết định kiến trúc chuẩn hóa lựa chọn Display Manag
 - **Ưu điểm:**
   - LightDM nhẹ, hỗ trợ kiến trúc greeter dạng module qua thư viện `liblightdm-gobject-1`.
   - Module PAM viết bằng C thuần siêu nhẹ (`pam_nfc.so`), chỉ đóng vai trò ủy quyền qua Unix Domain Socket (`/run/nfc-agent.sock`).
-  - Custom Greeter (`lab_greeter.py`) lắng nghe tín hiệu đẩy từ Agent qua Control Socket: khi thẻ hợp lệ, Agent bắn tín hiệu $\rightarrow$ Greeter lập tức kích hoạt `authenticate()` 0-chạm.
+  - Custom Greeter (`lab_greeter.py`) lắng nghe tín hiệu đẩy từ Agent qua Control Socket: khi thẻ hợp lệ, Agent bắn tín hiệu -> Greeter lập tức kích hoạt `authenticate()` 0-chạm.
   - Khung nhập mật khẩu dự phòng hiển thị độc lập, phục vụ kỹ thuật viên cứu hộ.
 - **Nhược điểm:** Cần duy trì mã nguồn Custom Greeter và script kiểm tra tính sẵn sàng khi khởi động.
 
@@ -67,12 +67,14 @@ flowchart TD
         Agent["NFC Agent Daemon"]
     end
 
-    subgraph IPC_SOCKETS["Giao Tiếp Unix Domain Sockets"]
-        AgentSock["/run/nfc-agent.sock<br>(0660 root:root / SO_PEERCRED)"]
-        ControlSock["/run/nfc-control.sock<br>(0770 root:lightdm)"]
+    subgraph IPC_SOCKETS["3 Kênh Giao Tiếp Unix Domain Sockets"]
+        AgentSock["/run/nfc-agent.sock<br>(0660 root:root / SO_PEERCRED root)<br>PAM Client <-> Agent (Verify Token)"]
+        GreeterSock["/run/nfc/greeter-push.sock<br>(0770 root:lightdm)<br>Agent Push -> Custom Greeter Event"]
+        ControlSock["/run/nfc-control.sock<br>(0770 root:root)<br>Admin CLI / Operator Control"]
     end
 
     subgraph DISPLAY["LightDM Subsystem"]
+        Wrapper["lab-greeter-wrapper.sh<br>(Tự động Fallback sau 3 Crash)"]
         Greeter["Lab Custom Greeter<br>(Python GTK3 / liblightdm)"]
         PAM["PAM Stack (/etc/pam.d/lightdm)<br>pam_nfc.so -> pam_unix.so"]
     end
@@ -82,8 +84,9 @@ flowchart TD
     end
 
     Reader -- "1. Quẹt thẻ" --> Agent
-    Agent -- "2. Push event (valid user)" --> ControlSock
-    ControlSock --> Greeter
+    Agent -- "2. Push event (valid user)" --> GreeterSock
+    Wrapper --> Greeter
+    GreeterSock --> Greeter
     Greeter -- "3. authenticate('student')" --> PAM
     PAM -- "4. Verify staged token" --> AgentSock
     AgentSock --> Agent
@@ -99,54 +102,45 @@ flowchart TD
 
 1. **Lựa chọn Display Manager:** Master Image của máy trạm phòng lab bắt buộc chuyển đổi Display Manager mặc định sang **LightDM**:
    ```bash
-   sudo apt-get install -y lightdm
-   sudo echo "/usr/sbin/lightdm" > /etc/X11/default-display-manager
+   sudo apt-get install -y lightdm lightdm-gtk-greeter
+   echo "/usr/sbin/lightdm" | sudo tee /etc/X11/default-display-manager
    ```
 2. **Vô hiệu hóa Lock Screen và User Switching trong Master Image (A3, P1-3):**
    - Do tài khoản dùng chung (`student`) bị khóa mật khẩu (`passwd -l`), màn hình khóa GNOME không hỗ trợ mở khóa qua thẻ sẽ làm kẹt sinh viên.
-   - Bắt buộc khóa chết các tính năng này qua cấu hình hệ thống dconf:
-     ```ini
-     # /etc/dconf/db/local.d/00-disable-lockscreen
-     [org/gnome/desktop/screensaver]
-     lock-enabled=false
-
-     [org/gnome/desktop/lockdown]
-     disable-lock-screen=true
-     disable-user-switching=true
-     ```
+   - Bắt buộc khóa chết các tính năng này qua cấu hình hệ thống dconf theo quy chuẩn [ADR-004](ADR-004-mo-hinh-profile-os-dung-chung.md):
+     * Cấu hình tệp `/etc/dconf/profile/user` (user-db:user, system-db:local).
+     * Cấu hình `/etc/dconf/db/local.d/00-lockscreen` (`lock-enabled=false`, `disable-lock-screen=true`, `disable-user-switching=true`).
+     * Khóa bắt buộc trong `/etc/dconf/db/local.d/locks/00-lockscreen` và thực thi `sudo dconf update`.
    - Sinh viên chỉ có thể kết thúc lượt dùng bằng thao tác **Đăng xuất (Logout)** hoặc chờ **hết hạn ca học** để hệ thống dọn dẹp theo [ADR-008](ADR-008-vong-doi-phien-va-teardown-da-pha.md).
 
 ---
 
-### 2. Kiến Trúc Module PAM C Tối Giản (`pam_nfc.so`)
+### 2. Kiến Trúc 3 Kênh IPC Unix Domain Socket và Module PAM C Tối Giản (`pam_nfc.so`)
 
-Module PAM được viết bằng ngôn ngữ C thuần, biên dịch thành thư viện động `/lib/security/pam_nfc.so` với các đặc tính kỹ thuật:
-
-1. **Nguyên tắc Thiết kế:** Module PAM hoàn toàn **stateless (không giữ trạng thái)**, không chứa logic nghiệp vụ phân quyền hay kiểm tra cơ sở dữ liệu. Module chỉ đóng vai trò Client kết nối tới Agent qua Unix Domain Socket `/run/nfc-agent.sock`.
-2. **Cấu hình Chuỗi PAM (`/etc/pam.d/lightdm`):**
-   ```text
-   # Bổ sung pam_nfc lên đầu nhánh auth
-   auth    sufficient    pam_nfc.so
-   @include common-auth
-   ```
-3. **Cơ chế Fallback Tức Thì (NFR-M01, BR-004):**
-   - Khi Agent không phản hồi trong **`TIMEOUT = 3000ms`** (sử dụng hàm `poll()`) hoặc file socket không tồn tại: `pam_nfc.so` lập tức trả về mã **`PAM_IGNORE`**.
-   - Chuỗi PAM của Linux tự động rơi xuống module tiếp theo (`pam_unix.so`) để mở nhắc lệnh hỏi mật khẩu truyền thống mà không làm đơ hay kẹt tiến trình đăng nhập (đã kiểm chứng đo đạc ở Spike S2: thời gian fallback chỉ mất 22ms).
-4. **Hỗ Trợ Gán Danh Tính Động (`PAM_USER`):**
-   - Khi Custom Greeter gọi xác thực, `pam_nfc.so` nhận kết quả từ Agent và sử dụng hàm chuẩn của PAM API `pam_set_item(pamh, PAM_USER, target_username)` để cập nhật tài khoản đăng nhập đích (ví dụ `student`).
-   - Cho phép tài khoản bị khóa mật khẩu (`passwd -l`) đăng nhập thành công 100% vào Desktop (Spike S3 Ca 8).
-5. **Bảo Vệ Đa Lớp Cấp Nhân Linux (Defense-in-Depth & `SO_PEERCRED`):**
-   - *Lớp 1 (DAC):* Socket sở hữu bởi `root:root`, quyền truy cập `0660`.
-   - *Lớp 2 (Kernel Peer Credentials):* Khi nhận kết nối `connect()`, Agent gọi syscall `getsockopt(..., SOL_SOCKET, SO_PEERCRED, ...)` để trích xuất cấu trúc `ucred`. Agent **từ chối tuyệt đối mọi tiến trình không có UID = 0 (root)**. Ngăn chặn triệt để người dùng thường can thiệp vào IPC xác thực.
+Hệ thống phân tách ranh giới an ninh thành 3 kênh Unix Domain Socket độc lập:
+1. **Kênh Xác Thực PAM (`/run/nfc-agent.sock`):**
+   - Phân quyền `0660 root:root`.
+   - Dành riêng cho `pam_nfc.so` gọi sang Agent để thẩm định token quẹt thẻ đã staged.
+   - **Bảo vệ cấp nhân qua `SO_PEERCRED`:** Khi nhận kết nối `connect()`, Agent gọi syscall `getsockopt(..., SOL_SOCKET, SO_PEERCRED, ...)` để trích xuất cấu trúc `ucred`. Agent **từ chối tuyệt đối mọi tiến trình không có UID = 0 (root)**. Ngăn chặn triệt để người dùng thường can thiệp vào IPC xác thực.
+   - **Đặc tính Fallback Tức Thì (NFR-M01, BR-004):** Module C hoàn toàn stateless. Khi Agent không phản hồi trong **`TIMEOUT = 3000ms`** (hàm `poll()`) hoặc file socket không tồn tại, `pam_nfc.so` lập tức trả về mã **`PAM_IGNORE`**. Chuỗi PAM rơi xuống `pam_unix.so` mở nhắc lệnh hỏi mật khẩu dự phòng trong < 25ms.
+   - **Cập nhật danh tính đích (`PAM_USER`):** Module gọi chuẩn `pam_set_item(pamh, PAM_USER, target_username)` để cập nhật tài khoản đích (ví dụ `student`), cho phép tài khoản bị khóa mật khẩu (`passwd -l`) đăng nhập thành công 100% vào Desktop (Spike S3 Ca 8).
+2. **Kênh Đẩy Sự Kiện Greeter (`/run/nfc/greeter-push.sock`):**
+   - Phân quyền `0770 root:lightdm` (thuộc thư mục `/run/nfc/` phân quyền `0755 root:root`).
+   - Dành riêng cho luồng giao tiếp 2 chiều giữa Agent Daemon và Custom Greeter:
+     * Agent đẩy sự kiện `card_swiped` sang Greeter khi có thẻ quẹt.
+     * Greeter gửi gói tin bắt tay `greeter_ready` sang Agent khi giao diện đã sẵn sàng (Mục 4).
+3. **Kênh Quản Trị Cục Bộ (`/run/nfc-control.sock`):**
+   - Phân quyền `0770 root:root`.
+   - Dành cho công cụ dòng lệnh quản trị viên (`lab-admin` CLI / local operator) để truy vấn trạng thái Agent, ép nạp snapshot (`force-sync`), ép ngắt phiên (`force-logout`), hoặc chuyển máy trạm sang chế độ bảo trì (`drain`).
 
 ---
 
-### 3. Lab Custom Greeter Đăng Nhập 0-Chạm và Kênh Tín Hiệu Đẩy
+### 3. Lab Custom Greeter Đăng Nhập 0-Chạm và Hiển Thị Lý Do Từ Chối Chuẩn Hóa
 
 Giao diện đăng nhập chuyên dụng cho phòng lab (`/usr/local/bin/lab_greeter.py`) được xây dựng bằng Python GTK3 và `liblightdm-gobject-1`:
 
 1. **Kênh Nhận Tín Hiệu Đẩy (Push Event):**
-   - Greeter mở luồng ngầm kết nối Unix Domain Socket `/run/nfc-control.sock`.
+   - Greeter mở luồng ngầm kết nối Unix Domain Socket `/run/nfc/greeter-push.sock`.
    - Khi sinh viên quẹt thẻ hợp lệ tại đầu đọc NFC, Agent vừa bọc giao dịch ghi bền vững vào `edge.db` ([ADR-003](ADR-003-luu-tru-cuc-bo-va-xac-thuc-snapshot.md)), vừa bắn gói tin push:
      ```json
      {
@@ -157,48 +151,71 @@ Giao diện đăng nhập chuyên dụng cho phòng lab (`/usr/local/bin/lab_gre
      }
      ```
 2. **Quy Trình Đăng Nhập 0-Chạm Tức Thì (< 1.0 giây):**
-   - Ngay khi nhận được sự kiện `card_swiped`, Greeter cập nhật giao diện thông báo xanh: *"✅ Thẻ hợp lệ: Nguyễn Văn A! Đang vào Desktop..."*.
+   - Ngay khi nhận được sự kiện `card_swiped`, Greeter cập nhật giao diện thông báo xanh: *"Thẻ hợp lệ: Nguyễn Văn A! Đang vào Desktop..."*.
    - Greeter lập tức gọi API `lightdm_greeter_authenticate(greeter, "student")` và `lightdm_greeter_start_session_sync(greeter, "ubuntu")`.
    - Màn hình tự động mở thẳng vào Desktop GNOME mà người dùng không cần chạm vào bất kỳ thiết bị nhập liệu nào.
-3. **Hiển Thị Lý Do Từ Chối Rõ Ràng (FR-010, FR-011):**
-   - Khi quẹt thẻ vi phạm, Agent bắn sự kiện `denied` kèm mã lý do chuẩn hóa:
-     * `card_unknown`: *"❌ Thẻ chưa được đăng ký trong hệ thống!"*
-     * `card_disabled`: *"❌ Thẻ đã bị khóa do vi phạm nội quy!"*
-     * `schedule_mismatch`: *"❌ Bạn không có ca học trong khung giờ này!"*
-     * `data_stale`: *"⚠️ Dữ liệu phòng lab tạm thời quá hạn. Vui lòng liên hệ Kỹ thuật viên!"*
-     * `workstation_busy`: *"⚠️ Máy đang có phiên của người khác. Vui lòng chờ hết ca!"*
-   - Thông báo đỏ xuất hiện nổi bật trong 4.0 giây rồi tự động chuyển về trạng thái sẵn sàng ban đầu.
+3. **Hiển Thị Lý Do Từ Chối Đồng Bộ Nghiệp Vụ (FR-010, FR-011, CR-001):**
+   - Khi quẹt thẻ không được cấp quyền, Agent bắn sự kiện `denied` kèm mã lý do chuẩn hóa:
+     * `user_inactive`: *"Tài khoản sinh viên đang bị tạm khóa hoặc thôi học!"*
+     * `card_disabled`: *"Thẻ sinh viên đã bị vô hiệu hóa hoặc báo mất!"*
+     * `schedule_mismatch`: *"Bạn không có ca học hợp lệ trong khung giờ này!"*
+     * `profile_disabled`: *"Môi trường học tập (profile OS) đang tạm đóng!"*
+     * `profile_not_found`: *"Không tìm thấy cấu hình môi trường máy trạm!"*
+     * `ambiguous_profile`: *"Lịch học bị xung đột môi trường máy trạm!"*
+     * `noop(already_active)`: *"Bạn đang trong phiên làm việc của mình!"*
+     * `workstation_busy`: *"Máy đang có phiên của người khác chưa hết giờ!"*
+     * `data_stale`: *"Dữ liệu phòng lab tạm thời quá hạn lease. Vui lòng báo Kỹ thuật viên!"*
+   - Thông báo xuất hiện nổi bật trong 4.0 giây rồi tự động hoàn nguyên về trạng thái chờ quẹt thẻ ban đầu.
 
 ---
 
-### 4. Cơ Chế Bắt Tay Khởi Động (Startup Handshake 1.2s - Giải Quyết Xung Đột D-Bus)
+### 4. Cơ Chế Bắt Tay Khởi Động (Startup Handshake 1.2s - Tránh Xung Đột D-Bus)
 
 Dựa trên phát hiện kỹ thuật đắt giá của Spike S6 và S7:
 - Dưới tải nặng CPU hoặc khi LightDM vừa dọn xong phiên cũ, Display Server và D-Bus bus cần khoảng 0.4s – 0.7s để ổn định.
 - **Quy tắc Bắt tay 2 Chiều:**
   1. Khi tiến trình Greeter mới khởi động, giao diện dành khoảng **1.2 giây đệm** để hoàn tất việc vẽ khung đồ họa và kết nối D-Bus session.
-  2. Greeter chủ động gửi thông điệp `{"action": "greeter_ready"}` sang Agent qua control socket.
+  2. Greeter chủ động gửi thông điệp `{"action": "greeter_ready"}` sang Agent qua kênh `/run/nfc/greeter-push.sock`.
   3. Chỉ khi nhận được `greeter_ready`, Agent mới kích hoạt bàn giao các yêu cầu quẹt thẻ đang chờ (`staged_auth`).
   - Triệt tiêu 100% hiện tượng xung đột D-Bus gây treo đen màn hình ~110 giây (ADR-008).
 
 ---
 
-### 5. Khung Nhập Mật Khẩu Dự Phòng (Fallback) và Quy Trình Khôi Phục (BR-004)
+### 5. Khung Nhập Mật Khẩu Dự Phòng và Kịch Bản Tự Hồi Phục Qua Launcher Wrapper Script
 
 1. **Phân Định Đối Tượng Sử Dụng Fallback (D-007):**
    - Màn hình Custom Greeter cung cấp khung nhập mật khẩu dự phòng gồm 2 ô: **Username** và **Password**.
    - Khung này **chỉ dành riêng cho Kỹ thuật viên / Quản trị viên IT** sử dụng tài khoản bảo trì độc lập (ví dụ `labadmin`, `binhtong` có mật khẩu). Sinh viên không có mật khẩu đăng nhập tài khoản dùng chung `student`.
-2. **Khôi Phục Khi Greeter Gặp Sự Cố (Operational Recovery - D-006.5):**
-   - *Trường hợp crash tức thời:* LightDM tự động phát hiện và khởi động lại tiến trình Greeter mới trong ~0.2 giây (đã kiểm chứng ở S3b Ca 7).
-   - *Trường hợp lỗi mã nguồn / thiếu thư viện kéo dài:*
-     - LightDM dừng display-manager để tránh vòng lặp khởi động vô tận (Crash Loop).
-     - **Quy trình Cứu hộ Kỹ thuật:** Kỹ thuật viên chuyển sang Virtual Terminal bằng phím tắt **`Ctrl + Alt + F2`** (TTY2) hoặc truy cập từ xa qua SSH, đăng nhập tài khoản `labadmin`.
-     - Chuyển đổi về giao diện chuẩn `lightdm-gtk-greeter` bằng một lệnh duy nhất:
-       ```bash
-       sudo sed -i 's/lab-greeter/lightdm-gtk-greeter/' /etc/lightdm/lightdm.conf.d/99-lab-greeter.conf
-       sudo systemctl restart lightdm
-       ```
-     - Hệ thống trở lại giao diện đăng nhập đồ họa truyền thống ngay lập tức mà không cần can thiệp cài đặt lại hệ điều hành.
+2. **Kịch Bản Tự Động Hồi Phục Qua Launcher Wrapper Script (`lab-greeter-wrapper.sh`):**
+   - Thay vì LightDM trực tiếp gọi `lab_greeter.py`, cấu hình `/etc/lightdm/lightdm.conf.d/99-lab-greeter.conf` chỉ định greeter program là script bọc bảo vệ:
+     `greeter-session = lab-greeter-wrapper`
+   - Kịch bản `/usr/local/bin/lab-greeter-wrapper.sh`:
+     ```bash
+     #!/bin/bash
+     CRASH_LOG="/run/lab-greeter-crashes"
+     NOW=$(date +%s)
+     # Đếm số lần crash trong vòng 60 giây gần nhất
+     if [ -f "$CRASH_LOG" ]; then
+         RECENT_CRASHES=$(awk -v now="$NOW" '$1 > now - 60' "$CRASH_LOG" | wc -l)
+     else
+         RECENT_CRASHES=0
+     fi
+
+     if [ "$RECENT_CRASHES" -ge 3 ]; then
+         echo "Lab Greeter crash liên tiếp 3 lần trong 60s! Kích hoạt fallback đồ họa..."
+         exec /usr/sbin/lightdm-gtk-greeter
+     fi
+
+     echo "$NOW" >> "$CRASH_LOG"
+     exec python3 /usr/local/bin/lab_greeter.py
+     ```
+   - *Lợi ích vận hành:* Nếu Custom Greeter bị lỗi cú pháp, thiếu thư viện hoặc crash lặp, sau 3 lần crash (< 2 giây), hệ thống tự động rơi về `lightdm-gtk-greeter` chuẩn. Màn hình vẫn hiển thị giao diện đăng nhập đồ họa cho kỹ thuật viên nhập mật khẩu bảo trì mà không bị đen màn hình hay đòi hỏi phải gõ lệnh qua TTY.
+3. **Quy trình Cứu hộ Thủ công Qua Virtual Terminal (TTY2):**
+   - Trong trường hợp xấu nhất, kỹ thuật viên nhấn tổ hợp phím **`Ctrl + Alt + F2`** (TTY2) hoặc SSH từ xa, đăng nhập bằng `labadmin` và chuyển đổi hẳn sang GTK Greeter bằng lệnh:
+     ```bash
+     sudo sed -i 's/lab-greeter-wrapper/lightdm-gtk-greeter/' /etc/lightdm/lightdm.conf.d/99-lab-greeter.conf
+     sudo systemctl restart lightdm
+     ```
 
 ---
 

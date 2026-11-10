@@ -18,7 +18,9 @@
 | S4 | Ánh xạ tài khoản OS và kết thúc phiên | 3 ngày | Cao |
 | S5 | Agent, MQTT, lưu trữ nguyên tử | 3 ngày | Trung bình |
 | S6 | Walking skeleton | 3 ngày | Tích hợp |
-| S7 | Teardown liên tiếp cùng UID & Linger | 1 ngày | Cao (chốt chặn ADR-004) |
+| S7 | Teardown liên tiếp cùng UID & Linger (Đạt một phần cgroup) | 1 ngày | Cao (chốt chặn ADR-004) |
+| S7b | Teardown thật qua GNOME/LightDM & SIGTERM Trap | 1 ngày | Cao (xác nhận ADR-004/008) |
+| S8 | Kiểm chứng Mật mã, mTLS & Giao dịch Node.js | 0,5 ngày | Trung bình (xác nhận ADR-006) |
 
 Nên đặt mua hoặc mượn đầu đọc ngay hôm nay vì có thời gian chờ, S1 chạy song song với S0. Trình tự S2 → S3 → S4 vì chúng phụ thuộc nhau. S5 có thể làm xen.
 
@@ -115,6 +117,27 @@ quẹt thẻ → Agent đánh giá CR-001 → ghi nhật ký → PAM cho vào �
 
 **Đạt khi:** demo hết kịch bản trên một máy thật, quay lại video làm bằng chứng.
 
+## S7: Teardown liên tiếp cùng UID & Linger (Cgroup tầng nhân)
+
+Kiểm chứng tốc độ giải phóng cgroup `user-<UID>.slice` và `/run/user/<UID>` khi lặp 20 lần chu kỳ teardown trên cùng UID `student` dưới tải CPU 100%, và phản ứng dập tắt `enable-linger`.
+**Kết quả:** Đạt một phần (cgroup giải phóng < 170ms; diệt sạch linger). Giới hạn: chưa đo trên môi trường đồ họa GNOME/LightDM thật.
+
+## S7b: Teardown thật qua GNOME/LightDM & SIGTERM Trap
+
+**Câu hỏi:** Khi đăng nhập thật qua Custom Greeter vào Desktop GNOME trên cùng UID `student`, có tiến trình bẫy `SIGTERM` để ép kích hoạt `kill-user -s SIGKILL`, tổng thời gian từ lúc quẹt thẻ đến khi Desktop mới nạp xong là bao nhiêu dưới tải CPU 100%?
+**Đạt khi:** 20 chu kỳ lặp lại thành công 100%, không dính lỗi treo D-Bus ~110s, đo đạc phân vị P95 độ trễ teardown thật.
+**Ảnh hưởng:** Xác nhận chính thức ADR-004 và ADR-008 lên trạng thái Accepted.
+
+## S8: Kiểm chứng Mật mã, mTLS & Giao dịch Node.js (Server Spike)
+
+**Câu hỏi:** Nền tảng Node.js / NestJS có thể ký CSR Ed25519, kết nối MQTT 5 mTLS với Mosquitto phân quyền ACL `%u`, và thực thi giao dịch PostgreSQL nguyên tử không?
+**Cần thử:**
+- Cấp Client Certificate mang `CN = workstation_id` từ CSR Ed25519 (dùng `@peculiar/x509` hoặc OpenSSL CLI).
+- Dùng `mqtt.js` kết nối mTLS cổng 8883 vào Mosquitto, kiểm tra ACL `%u` lấy từ CN (`use_identity_as_username true`).
+- Giao dịch PostgreSQL nguyên tử lưu schedule và event outbox.
+**Đạt khi:** Cả 3 bài test chạy pass trong 0.5 ngày.
+**Ảnh hưởng:** Xác nhận chính thức ADR-006 lên trạng thái Accepted.
+
 ## Từ kết quả spike đến ADR
 
 | Kết quả | ADR được viết |
@@ -123,7 +146,8 @@ quẹt thẻ → Agent đánh giá CR-001 → ghi nhật ký → PAM cho vào �
 | S4 | Ánh xạ tài khoản OS |
 | S5 | Giao thức MQTT; lưu trữ cục bộ; snapshot (ADR-003) |
 | S1 | Bổ sung ADR-007 (thứ tự byte, loại đầu đọc) |
-| S7 | ADR-004 (Mô hình profile dùng chung) & ADR-008 (Vòng đời phiên & Teardown đa pha) |
+| S7, S7b | ADR-004 (Mô hình profile dùng chung) & ADR-008 (Vòng đời phiên & Teardown đa pha) |
+| S8 | ADR-006 (Lựa chọn techstack Server NestJS / Node.js) |
 
 ## Quy tắc quyết định
 

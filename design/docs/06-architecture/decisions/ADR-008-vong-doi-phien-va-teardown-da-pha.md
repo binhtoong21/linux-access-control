@@ -4,7 +4,7 @@
 
 | Field | Value |
 |---|---|
-| **Status** | Accepted |
+| **Status** | Proposed |
 | **Date** | 2026-11-10 |
 | **Deciders** | Nhóm tác giả ĐATN & Giảng viên hướng dẫn |
 | **Supersedes** | Tách một phần nội dung kết thúc phiên khỏi [ADR-004](ADR-004-mo-hinh-profile-os-dung-chung.md) |
@@ -70,33 +70,44 @@ Chúng tôi quyết định chuẩn hóa **Cơ chế Quản lý Vòng đời Phi
 
 ---
 
-### 2. Quy trình Two-Phase Teardown Chuẩn hóa (A6, P1-2)
+### 2. Quy trình Two-Phase Teardown Chuẩn hóa và Cơ Cấu Timeout Lồng Nhau (A6, P1-2)
 
-Khi phiên kết thúc (do hết giờ ca học hoặc do thay thế phiên hợp lệ), Agent thực thi chuỗi dọn dẹp theo thứ tự nghiêm ngặt:
+Khi phiên kết thúc (do hết giờ ca học hoặc do thay thế phiên hợp lệ), Agent thực thi chuỗi dọn dẹp theo cơ chế thời gian lồng nhau nghiêm ngặt:
 
 ```mermaid
 flowchart TD
     Start["Hết hạn ca học / Thay phiên hợp lệ"] --> Step1["1. loginctl disable-linger <username>"]
     Step1 --> Step2["2. loginctl terminate-user <username> (Gửi SIGTERM)"]
-    Step2 --> Poll1{"user-<UID>.slice còn sống?<br>(Chờ tối đa 2.0s)"}
+    Step2 --> Poll1{"user-<UID>.slice biến mất?<br>(Timeout Pha 1: 2.0s)"}
     Poll1 -- "Đã giải phóng (< 2.0s)" --> Handshake["Chuyển sang Startup Handshake"]
     Poll1 -- "Vẫn còn sau 2.0s" --> Step3["3. loginctl kill-user <username> -s SIGKILL"]
-    Step3 --> Poll2{"Polling chờ slice giải phóng<br>(Timeout = 3.0s)"}
+    Step3 --> Poll2{"Polling chờ slice giải phóng<br>(Timeout Pha 2: thêm 1.0s, Tổng = 3.0s)"}
     Poll2 -- "Slice sạch" --> Handshake
-    Poll2 -- "Quá 3.0s" --> Alarm["Ghi log cảnh báo TEARDOWN_TIMEOUT_EXCEEDED"]
+    Poll2 -- "Quá 3.0s (Kẹt tài nguyên)" --> Retry{"Retry kiểm tra (tối đa 2 lần x 1.0s)<br>Hiển thị banner vàng chờ dọn dẹp"}
+    Retry -- "Thành công trước 5.0s" --> Handshake
+    Retry -- "Vẫn kẹt sau 5.0s" --> Alarm["Hủy staged_auth, Ghi Audit: teardown_failed_stuck_resource<br>Hiển thị cảnh báo đỏ yêu cầu kỹ thuật viên"]
 ```
 
 1. **Bước 1 — Vô hiệu hóa Linger:** `loginctl disable-linger <username>`. Triệt tiêu quyền duy trì tiến trình nền ngầm của sinh viên.
-2. **Bước 2 — Pha 1: Kết thúc Văn minh (Graceful Termination):** Phát lệnh `loginctl terminate-user <username>`. Systemd sẽ gửi tín hiệu `SIGTERM` đến toàn bộ tiến trình trong slice và ra lệnh cho `user@<UID>.service` tắt tuần tự.
-3. **Bước 3 — Pha 2: Cưỡng chế Bằng SIGKILL:** Agent kiểm tra cgroup `user-<UID>.slice` và thư mục runtime `/run/user/<UID>`. Nếu sau **2.0 giây đệm** mà tài nguyên chưa giải phóng hoàn toàn, Agent lập tức phát lệnh cưỡng chế `loginctl kill-user <username> -s SIGKILL`.
-4. **Bước 4 — Kiểm chứng Đồng bộ Slice (P1-2, S7):**
-   - Agent tiếp tục polling kiểm tra cho đến khi `user-<UID>.slice` và `/run/user/<UID>` biến mất hoàn toàn khỏi nhân Linux.
-   - **Xác thực Thực nghiệm (Spike S7):** Thử nghiệm 20 chu kỳ liên tiếp dưới tải CPU 100% trên cùng UID `student` (1001) đo được:
-     - Thời gian dọn dẹp trung bình: **105.8 ms**.
-     - Thời gian dọn dẹp tối đa: **165.0 ms**.
-     - Số lần vi phạm ngưỡng: **0 / 20 (0%)**.
-   - Do đó, tham số an toàn trần được ấn định là **`SLICE_TEARDOWN_TIMEOUT = 3.0s`**, mang lại biên an toàn lớn hơn 17 lần so với độ trễ tối đa thực tế.
-5. **Bảo tồn Dữ liệu Bài tập (BR-009):** Tuyệt đối **không can thiệp, không xóa tệp tin trong `/home/<username>`**. Việc dọn dẹp file do giảng viên hoặc kỹ thuật viên thực hiện định kỳ.
+2. **Bước 2 — Pha 1: Kết thúc Văn minh (SIGTERM, tối đa 2.0s):**
+   - Phát lệnh `loginctl terminate-user <username>`. Systemd gửi tín hiệu `SIGTERM` đến toàn bộ tiến trình trong slice và ra lệnh cho `user@<UID>.service` tắt tuần tự.
+   - Agent polling kiểm tra `user-<UID>.slice` và `/run/user/<UID>` mỗi 50ms với thời hạn trần **`GRACE_TIMEOUT = 2.0s`**.
+3. **Bước 3 — Pha 2: Cưỡng chế Bằng SIGKILL (thêm 1.0s, Tổng trần = 3.0s):**
+   - Nếu sau 2.0 giây mà slice chưa giải phóng hoàn toàn, Agent lập tức phát lệnh cưỡng chế: `loginctl kill-user <username> -s SIGKILL`.
+   - Polling tiếp tục trong tối đa **1.0 giây bổ sung**. Tổng thời gian cho chu trình tiêu chuẩn là **`TOTAL_TEARDOWN_TIMEOUT = 3.0s`**.
+4. **Xử lý Nhánh Quá 3.0s (Trường hợp Tài nguyên Nhân Linux Bị Kẹt):**
+   - Nếu sau 3.0s slice vẫn chưa biến mất, Agent **không hủy bỏ đột ngột** yêu cầu quẹt thẻ của người mới (`staged_auth`).
+   - Greeter hiển thị banner thông báo màu vàng: *"Đang dọn dẹp phiên trước, vui lòng chờ trong giây lát..."*.
+   - Agent kích hoạt chế độ retry thăm dò tối đa **2 lần** (mỗi lần 1.0 giây, mở rộng trần lên tối đa **5.0s**).
+   - Nếu sau 5.0s tài nguyên vẫn bị kẹt (ví dụ kẹt I/O không thể ngắt - uninterruptible sleep `D state` do lỗi ổ cứng hoặc NFS mount):
+     * Agent chính thức hủy bỏ yêu cầu quẹt thẻ (`staged_auth = null`).
+     * Ghi nhật ký sự cố nghiêm trọng `teardown_failed_stuck_resource` vào `audit_outbox`.
+     * Greeter hiển thị cảnh báo đỏ: *"Máy trạm gặp sự cố giải phóng tài nguyên. Vui lòng liên hệ Kỹ thuật viên!"*.
+5. **Cơ sở Thực nghiệm & Giới hạn Bằng chứng (Spike S7 & S7b):**
+   - Thực nghiệm Spike S7 (20 chu kỳ đo teardown cgroup kernel qua `systemd-run --scope` dưới tải CPU 100% trên UID `student`) ghi nhận thời gian dọn dẹp trung bình **105.8 ms**, tối đa **165.0 ms**, 0/20 trường hợp phải dùng SIGKILL.
+   - *Giới hạn của bằng chứng S7:* Thử nghiệm S7 mới chỉ kiểm chứng ở tầng scope cgroup kernel, chưa đo đạc thời gian giải phóng Display Server (Xorg), VT switch và D-Bus của phiên GNOME thật khi sinh viên quẹt thẻ qua Greeter, và chưa có tiến trình bẫy `SIGTERM` để ép đi vào Pha 2.
+   - *Kế hoạch kiểm chứng hoàn tất (S7b):* Chạy bài thử nghiệm S7b với phiên GNOME đầy đủ qua Greeter, 20 chu kỳ tải CPU 100%, có tiến trình cứng đầu bẫy SIGTERM, đo từ lúc quẹt thẻ đến khi Desktop lên lại. ADR-008 được duy trì ở trạng thái `Proposed` cho đến khi có dữ liệu thực nghiệm hoàn chỉnh từ S7b.
+6. **Bảo tồn Dữ liệu Bài tập (BR-009):** Tuyệt đối **không can thiệp, không xóa tệp tin trong `/home/<username>`**. Việc dọn dẹp file do giảng viên hoặc kỹ thuật viên thực hiện định kỳ.
 
 ---
 
@@ -104,8 +115,8 @@ flowchart TD
 
 Để ngăn ngừa lỗi xung đột D-Bus và hiện tượng bấm login 2 lần (Spike S6):
 1. Khi phiên cũ bị dập tắt, LightDM hồi sinh tiến trình Lab Custom Greeter (`/usr/local/bin/lab_greeter.py`).
-2. **Khoảng đệm Ổn định (Greeter Startup Buffer):** Greeter mới dành **1.2 giây đệm** để hoàn tất việc vẽ khung giao diện, kết nối với Xorg display server và khởi tạo D-Bus. (Thực nghiệm S7 ghi nhận dưới tải CPU 100%, hệ thống cần 0.4s - 0.7s để nạp xong môi trường nền).
-3. **Bắt tay 2 Chiều (Handshake):** Greeter chủ động gửi thông điệp `{"action": "greeter_ready"}` sang Agent qua Unix Control Socket `/run/nfc-control.sock`.
+2. **Khoảng đệm Ổn định (Greeter Startup Buffer):** Greeter mới dành **1.2 giây đệm** để hoàn tất việc vẽ khung giao diện, kết nối với Xorg display server và khởi tạo D-Bus.
+3. **Bắt tay 2 Chiều (Handshake):** Greeter chủ động gửi thông điệp `{"action": "greeter_ready"}` sang Agent qua Unix Socket `/run/nfc/greeter-push.sock` ([ADR-005](ADR-005-pam-greeter-va-display-manager.md)).
 4. **Bàn giao Xác thực (Staged Auth Handoff):**
    - Chỉ khi nhận được `greeter_ready` và user slice cũ đã giải phóng 100%, Agent mới bàn giao quyền xác thực đang chờ (`staged_auth`) cho Greeter.
    - Greeter hiển thị trạng thái chuyển phiên và kích hoạt đăng nhập 0-chạm vào thẳng Desktop mà người dùng không cần chạm chuột hay bàn phím.

@@ -149,19 +149,27 @@ sequenceDiagram
     B->>S: Chuyển tiếp hello
     S->>S: Đánh dấu workstation online
     alt snapshot_version == desired_version (Dữ liệu đã mới nhất)
-        S->>B: PUBLISH QoS 1: lease {server_time, trusted_until}
-        B->>A: Nhận gia hạn lease tức thì -> Phục hồi đăng nhập
+        S->>B: PUBLISH QoS 1: lease [User Property signature] {server_time, trusted_until}
+        B->>A: Nhận gia hạn lease tức thì (thẩm định signature) -> Phục hồi đăng nhập
     else snapshot_version < desired_version (Dữ liệu bị tụt hậu)
-        S->>B: PUBLISH QoS 1 (Retained): snapshot {version, payload, signature}
-        B->>A: Nhận snapshot mới -> Nạp atomic vào edge.db -> Cấp mới lease
+        S->>B: PUBLISH QoS 1 (Retained): snapshot [User Property signature] {version, created_at, ...}
+        B->>A: Nhận snapshot mới -> Thẩm định signature -> Nạp atomic vào edge.db
+        A->>B: PUBLISH QoS 0: heartbeat (Báo snapshot_version mới ngay lập tức)
     end
     Note over A,S: Bắt đầu tiến trình đẩy Outbox nền (xem Mục 5)
     loop Định kỳ mỗi 30 giây
-        A->>B: PUBLISH QoS 0: heartbeat {snapshot_version, local_time}
-        S->>B: PUBLISH QoS 1: lease {server_time, trusted_until}
+        A->>B: PUBLISH QoS 0: heartbeat {boot_id, snapshot_version, trust_state, ...}
+        S->>B: PUBLISH QoS 1: lease [User Property signature] {server_time, trusted_until}
     end
 ```
 
+- **Xác thực toàn vẹn bằng MQTT 5 User Property:**
+  Để chống kẻ xấu giả mạo Lease / Snapshot khi Broker bị chiếm quyền, toàn bộ các bản tin từ Server (`snapshot`, `lease`, `command/ack`) bắt buộc phải mang **MQTT 5 User Property** `signature: <hex>`.
+  - Chữ ký tính trên toàn bộ chuỗi byte thô của payload (`raw_mqtt_payload_bytes`) kèm nhãn miền tách biệt (Domain Separation Tag):
+    * Snapshot: `signature = HMAC-SHA256(K_m, "snapshot-v1:" || raw_mqtt_payload_bytes)`
+    * Lease: `signature = HMAC-SHA256(K_m, "lease-v1:" || raw_mqtt_payload_bytes)`
+    * ACK: `signature = HMAC-SHA256(K_m, "ack-v1:" || raw_mqtt_payload_bytes)`
+  - Agent thẩm định chữ ký trực tiếp trên chuỗi byte nhận được từ MQTT wire trước khi xử lý logic hoặc parse JSON. Nếu chữ ký sai, từ chối ngay lập tức.
 - **Payload Hello (`.../hello`):**
   ```json
   {
@@ -173,6 +181,7 @@ sequenceDiagram
   }
   ```
 - **Payload Phản hồi Lease (`.../lease`):**
+  *(Mang User Property `signature` tương ứng)*
   ```json
   {
     "server_time": 1793049263.96,
@@ -181,6 +190,19 @@ sequenceDiagram
     "max_drift": 60.0
   }
   ```
+- **Payload Heartbeat thống nhất (`.../heartbeat`):**
+  ```json
+  {
+    "workstation_id": "ws-01",
+    "boot_id": "9f2c8d14-...",
+    "snapshot_version": 12,
+    "trust_state": "trusted",
+    "local_time": 1793049263.81,
+    "clock_skew_detected": false,
+    "last_apply_error": null
+  }
+  ```
+  *(Thay thế bản tin `SnapshotApplied` riêng biệt: Ngay sau khi nạp snapshot mới thành công, Agent lập tức phát một bản tin Heartbeat mang `snapshot_version` mới để Server nhận biết mà không cần thêm topic riêng trong ACL).*
 
 ---
 
@@ -189,9 +211,9 @@ sequenceDiagram
 Để đảm bảo tính bất biến **INV-013** (chỉ xóa khỏi outbox sau khi server đã xác nhận) và **XINV-006** (chống trùng lặp):
 
 1. **Đóng lô (Batching):** 
-   - Agent đọc tối đa `BATCH_SIZE = 50` bản ghi từ bảng `audit_outbox` theo thứ tự tăng dần của khóa `seq` (FIFO).
+   - Agent đọc tối đa `BATCH_SIZE = 50` bản ghi từ bảng `audit_outbox` theo thứ tự tăng dần của khóa `outbox_seq` (FIFO).
    - Gói payload mang trường `from_seq` và `to_seq`.
-   - Payload xuất bản lên `lab/workstation/%u/outbox`:
+   - **Bảo toàn Audit Trail đầy đủ (FR-072, ADR-007):** Bản tin Outbox bắt buộc phải chứa `card_uid` thực tế của lần quẹt thẻ và ảnh chụp thông tin người dùng / máy trạm tại thời điểm quẹt (để Server mã hóa AES-256-GCM lưu trữ và Admin có thể xem được trên Dashboard):
      ```json
      {
        "workstation_id": "ws-01",
@@ -201,10 +223,16 @@ sequenceDiagram
        "records": [
          {
            "entry_id": "d-84f9...",
-           "seq": 101,
+           "outbox_seq": 101,
            "timestamp": 1793048324.61,
            "event_type": "swipe_decision",
-           "payload": { "card_uid_hash": "...", "outcome": "granted", "user": "student" }
+           "payload": {
+             "card_uid": "1F0820CF",
+             "outcome": "granted",
+             "user_id": "SV001",
+             "target_os_username": "student",
+             "matched_schedule_id": "SCH_01"
+           }
          }
        ]
      }
@@ -222,7 +250,7 @@ sequenceDiagram
 4. **Xóa cục bộ tại Edge:**
    - Khi nhận được `acked_seq = 150`, Agent thực thi lệnh SQLite:
      ```sql
-     DELETE FROM audit_outbox WHERE seq <= 150;
+     DELETE FROM audit_outbox WHERE outbox_seq <= 150;
      ```
    - Cơ chế xác nhận lũy tiến giúp hệ thống tự phục hồi ngay cả khi một vài gói ACK trung gian bị thất lạc trên mạng.
 
@@ -256,17 +284,26 @@ sequenceDiagram
     Note over W: Khởi động lần đầu (First Boot)<br>systemd tự sinh machine-id mới duy nhất
     W->>W: Agent phát hiện chưa có mTLS Identity<br>Tự sinh Ed25519 Keypair & CSR (CN=ws-temp)
     W->>S: POST /api/v1/workstations/enroll<br>{machine_id, hostname, mac_address, csr}
-    S->>DB: Ghi EnrollmentRequest (status='pending')
+    S->>DB: Ghi EnrollmentRequest (status='pending', token=UUIDv4)
     alt Phát hiện trùng MAC hoặc machine-id cũ (P1-4)
         S->>DB: Đánh dấu duplicate_mac_detected = true<br>(Giữ pending, KHÔNG tước quyền máy cũ)
     end
+    S-->>W: 201 Created {enrollment_request_id, poll_interval_sec: 5}
+    Note over W: Lưu enrollment_request_id làm One-Time Bearer Token
     Admin->>S: Mở Dashboard xem danh sách chờ duyệt
     Admin->>S: Bấm "Phê duyệt" (Approve) máy ws-01
-    S->>CA: Ký Certificate (CN="ws-01", TTL=1 năm)
+    S->>CA: Ký Certificate (CN="ws-01", TTL=3 năm)
     S->>S: Sinh khóa bí mật K_m = HKDF(master_key, "ws-01:1")
     S->>DB: Chuyển EnrollmentRequest -> 'approved'
-    W->>S: Polling GET /api/v1/workstations/enroll/status
-    S-->>W: Trả về: Client Certificate PEM, K_m, CA Cert
+    loop Polling (kèm Bearer Token)
+        W->>S: GET /api/v1/workstations/enroll/{id}/status<br>Authorization: Bearer <enrollment_request_id>
+        alt Chưa duyệt
+            S-->>W: 200 OK {status: "pending"}
+        else Đã duyệt
+            S-->>W: 200 OK {status: "approved", client_cert, K_m, ca_cert}
+            S->>DB: Thu hồi/Hủy Bearer Token (One-time download)
+        end
+    end
     W->>W: Lưu bền vững vào /var/lib/nfc-agent/identity/<br>Quyền file 0600 root:root
     Note over W: Kết nối Mosquitto Broker qua mTLS Port 8883
 ```
@@ -278,24 +315,27 @@ sequenceDiagram
    - Agent khởi động, nhận thấy thiếu chứng chỉ số sẽ tự động sinh cặp khóa riêng Ed25519 và Certificate Signing Request (CSR) lưu tại `/var/lib/nfc-agent/identity.key` với quyền `0600 root:root`.
 3. **Đăng ký tập trung qua HTTPS REST API:**
    - Agent gửi yêu cầu đăng ký `POST /api/v1/workstations/enroll` chứa: `machine_id`, `hostname`, `mac_address`, và nội dung tệp `csr`.
-   - Server ghi nhận vào bảng `enrollment_requests` ở trạng thái **`pending`**.
+   - Server ghi nhận vào bảng `enrollment_requests` ở trạng thái **`pending`**, sinh một `enrollment_request_id` ngẫu nhiên (UUID v4 bí mật) đóng vai trò **One-Time Bearer Token**, và trả về cho Agent trong HTTP response code 201.
    - *Phòng vệ trùng MAC (P1-4):* Nếu phát hiện MAC hoặc `machine-id` trùng với một máy trạm đang hoạt động, Server **tuyệt đối không ghi đè** hay tước quyền máy cũ, mà chỉ gắn cờ cảnh báo `duplicate_mac_detected = true` và đưa vào danh sách chờ duyệt riêng biệt để chống giả mạo ARP/MAC cướp credential.
 4. **Phê duyệt trên Web Dashboard:**
    - Quản trị viên đối chiếu danh sách máy mới trong phòng lab và bấm phê duyệt (hỗ trợ duyệt hàng loạt theo Zone).
-   - Server cấp phát `workstation_id` chính thức, ký chứng chỉ số Client Certificate (`CN = workstation_id`), đồng thời trích xuất khóa định danh máy `K_m = HKDF(master_key, workstation_id || ":" || key_version)` theo [ADR-007](ADR-007-khoa-so-khop-uid.md).
-5. **Kích hoạt mTLS:**
-   - Agent nhận chứng chỉ và khóa `K_m`, lưu vào đĩa an toàn. Kể từ thời điểm này, Agent ngắt kênh HTTP bootstrap và chuyển sang sử dụng 100% kênh mTLS bảo mật cổng 8883 kết nối với Broker Mosquitto.
+   - Server cấp phát `workstation_id` chính thức, ký chứng chỉ số Client Certificate (`CN = workstation_id`) với thời hạn **TTL = 3 năm** (đủ cho trọn vẹn chu kỳ hoạt động đồ án mà không gây gián đoạn do hết hạn chứng chỉ giữa chừng; việc tự động xoay vòng cert trước khi hết hạn được ghi nhận là Future Extension).
+   - Đồng thời trích xuất khóa định danh máy `K_m = HKDF(master_key, workstation_id || ":" || key_version)` theo [ADR-007](ADR-007-khoa-so-khop-uid.md).
+5. **Kích hoạt mTLS và Thu hồi Token:**
+   - Agent gửi yêu cầu `GET /api/v1/workstations/enroll/{enrollment_request_id}/status` kèm header `Authorization: Bearer <enrollment_request_id>`. Kẻ tấn công trên mạng LAN dù biết `hostname` hay `mac_address` cũng không thể tải trộm chứng chỉ và `K_m` nếu không sở hữu Bearer Token bí mật này.
+   - Sau khi trả về chứng chỉ và `K_m` thành công 1 lần, Server hủy ngay quyền tải tiếp (One-time fetch) để ngăn rò rỉ.
+   - Agent lưu chứng chỉ và `K_m` vào đĩa an toàn. Kể từ thời điểm này, Agent ngắt kênh HTTP bootstrap và chuyển sang sử dụng 100% kênh mTLS bảo mật cổng 8883 kết nối với Broker Mosquitto.
 
 ---
 
 ## Consequences
 
 ### Positive
-- **Bảo mật Đỉnh cao:** mTLS ngăn chặn 100% nghe lén trên mạng LAN phòng lab; Mosquitto ACL tách biệt đọc/ghi triệt tiêu nguy cơ máy trạm can thiệp cấu hình của nhau.
+- **Bảo mật Đỉnh cao:** mTLS ngăn chặn 100% nghe lén trên mạng LAN phòng lab; Mosquitto ACL tách biệt đọc/ghi triệt tiêu nguy cơ máy trạm can thiệp cấu hình của nhau; Bearer token một lần bảo vệ K_m trong quy trình bootstrap.
 - **Vận hành Tiện lợi (Zero-Touch):** Kỹ thuật viên clone hàng loạt không cần cấu hình mật khẩu hay token thủ công trên từng máy trạm; quản trị phê duyệt tập trung trên Web Dashboard.
 - **Toàn vẹn Dữ liệu Tuyệt đối:** Kết hợp Outbox batching và Cumulative ACK loại trừ rủi ro mất mát hay gửi trùng lặp bản ghi kiểm toán khi đứt mạng.
 - **Chống Bão Kết nối:** Cơ chế Exponential Backoff có Jitter bảo vệ hạ tầng máy chủ khi phòng lab 40-100 máy trạm cùng khởi động lại.
 
 ### Negative & Operational Trade-offs
-- **Gánh nặng Hạ tầng PKI:** Server trung tâm phải quản lý CA nội bộ để ký và gia hạn chứng chỉ số X.509 hàng năm.
-- **Ràng buộc Thời gian Ban đầu:** Quá trình mTLS yêu cầu đồng hồ máy trạm không được lệch quá xa (sai số không quá hạn của chứng chỉ X.509); tuy nhiên chứng chỉ có thời hạn 1 năm nên dung sai này hoàn toàn khả thi trong thực tế phòng lab.
+- **Gánh nặng Hạ tầng PKI:** Server trung tâm phải quản lý CA nội bộ để ký chứng chỉ số X.509. (Giải pháp: Đặt TTL = 3 năm cho MVP để giảm bớt độ phức tạp của auto-renewal cert).
+- **Ràng buộc Thời gian Ban đầu:** Quá trình mTLS yêu cầu đồng hồ máy trạm không được lệch quá thời hạn chứng chỉ X.509; với chứng chỉ 3 năm, rủi ro lệch giờ cản trở mTLS ban đầu là gần như bằng không.

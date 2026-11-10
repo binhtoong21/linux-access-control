@@ -4,7 +4,7 @@
 
 | Field | Value |
 |---|---|
-| **Status** | Accepted |
+| **Status** | Proposed |
 | **Date** | 2026-11-05 |
 | **Deciders** | Nhóm tác giả ĐATN & Giảng viên hướng dẫn |
 | **Supersedes** | Quyết định Phương án B trong Spike S4 (Tài khoản riêng `stu_<id>`) |
@@ -69,11 +69,29 @@ Chúng tôi quyết định áp dụng **Mô hình Profile OS Dùng Chung (Share
    - **Tuyệt đối KHÔNG tự động xóa thư mục `/home` hay dữ liệu file cục bộ** của profile dùng chung sau phiên. Sinh viên lưu bài tập trên máy; việc dọn dẹp file do giảng viên hoặc kỹ thuật viên thực hiện định kỳ.
 4. **Vô hiệu hóa Lock Screen và User Switching cho Profile dùng chung (A3, P1-3):**
    - Do tài khoản dùng chung đã bị khóa mật khẩu (`passwd -l`) và GNOME lock screen trên LightDM không hỗ trợ quẹt thẻ mở khóa, sinh viên có thể tự khóa mình cho đến hết ca học nếu màn hình bị khóa.
-   - Master Image bắt buộc cấu hình dconf vô hiệu hóa màn hình khóa, screensaver lock và tính năng chuyển người dùng:
-     * `org.gnome.desktop.screensaver lock-enabled=false`
-     * `org.gnome.desktop.lockdown disable-lock-screen=true`
-     * `org.gnome.desktop.lockdown disable-user-switching=true`
-     Triệt tiêu hoàn toàn trạng thái "về Greeter mà phiên cũ vẫn sống", bảo đảm sinh viên chỉ có thể rời máy bằng Đăng xuất (Logout) hoặc chờ hết ca.
+   - Master Image bắt buộc cấu hình dconf khóa cưỡng bức từ cấp hệ thống (System-wide Mandatory Locks), ngăn chặn triệt để việc sinh viên dùng terminal gõ `gsettings` để tự bật lại:
+     * Tệp profile `/etc/dconf/profile/user`:
+       ```ini
+       user-db:user
+       system-db:local
+       ```
+     * Tệp giá trị `/etc/dconf/db/local.d/00-lockscreen`:
+       ```ini
+       [org/gnome/desktop/screensaver]
+       lock-enabled=false
+
+       [org/gnome/desktop/lockdown]
+       disable-lock-screen=true
+       disable-user-switching=true
+       ```
+     * Tệp khóa bắt buộc `/etc/dconf/db/local.d/locks/00-lockscreen`:
+       ```ini
+       /org/gnome/desktop/screensaver/lock-enabled
+       /org/gnome/desktop/lockdown/disable-lock-screen
+       /org/gnome/desktop/lockdown/disable-user-switching
+       ```
+     * Thực thi lệnh bắt buộc: `sudo dconf update`.
+     Quy chuẩn này triệt tiêu hoàn toàn trạng thái "về Greeter mà phiên cũ vẫn sống", bảo đảm sinh viên chỉ có thể rời máy bằng Đăng xuất (Logout) hoặc chờ hết ca.
 5. **Nhận thức rủi ro & Khuyến nghị vận hành (A4):**
    - Thừa nhận rủi ro `workstation_busy` (A4): Sinh viên rời máy mà quên đăng xuất thì máy tiếp tục bận đến hết hạn ca học; kỹ thuật viên xử lý bằng đăng xuất thủ công (fallback).
    - Thừa nhận giới hạn: Các ứng dụng chạy trong cùng một user OS sẽ chia sẻ cookie, session trình duyệt và lịch sử terminal.

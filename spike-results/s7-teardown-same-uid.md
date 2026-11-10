@@ -133,10 +133,8 @@ Trạng thái service ngầm:
 - Dưới tải CPU 100%, thời gian dài nhất để systemd thu hồi toàn bộ cgroup `user-1001.slice` và unmount `/run/user/1001` chỉ là **165.0 ms**.
 - Ngưỡng thiết kế `3.0s` đem lại **biên an toàn gấp hơn 17 lần**, đảm bảo hệ thống không bao giờ bị nghẽn cgroup hay rò rỉ mount point khi sinh viên quẹt thẻ vào liên tiếp.
 
-### 2. Hiện tượng trễ khởi tạo phiên dưới tải nặng & Luận cứ cho Handshake Greeter 1.2s
-- Trong các chu kỳ thử nghiệm, sau khi gọi `systemd-run`, nếu kiểm tra ngay ở mốc 0.3s thì cgroup chưa kịp xuất hiện (`⚠️ Phiên chưa kịp kích hoạt, thử lại...`). Khi ngủ thêm 0.5s (tổng 0.8s), phiên đã sẵn sàng 100%.
-- Dưới tải CPU 100%, nhân Linux cần khoảng **0.4s – 0.7s** để lập lịch khởi tạo session scope và runtime directories.
-- Đây là **bằng chứng thực nghiệm then chốt củng cố thiết kế của Custom Greeter (ADR-005)**: Greeter cần duy trì khoảng đệm 1.2s (Startup Handshake) trước khi nhận quẹt thẻ mới, bảo đảm Display Server và systemd đã ổn định hoàn toàn.
+### 2. Hiện tượng trễ khởi tạo phiên trong bài đo
+- Cảnh báo *"⚠️ Phiên chưa kịp kích hoạt, thử lại..."* xuất hiện ở mốc 0.3s phản ánh giới hạn của script harness khi kiểm tra quá sớm trước khi systemd hoàn tất đăng ký transient unit dưới tải nặng. Khi tăng thời gian đệm lên 0.8s, phiên đã sẵn sàng 100%.
 
 ### 3. Phòng thủ triệt để trước nguy cơ Linger và Service ngầm
 - Khi sinh viên cố tình dùng quyền người dùng để bật `enable-linger` và chạy service nền độc hại (như đào coin hay bot ngầm), chỉ cần Agent thực thi đúng thứ tự:
@@ -147,6 +145,19 @@ Trạng thái service ngầm:
 
 ---
 
-## 5. Kết luận
-**ĐẠT YÊU CẦU 100% CÁC TIÊU CHÍ CỦA SPIKE S7.**
-Lỗ hổng bằng chứng lớn nhất về việc teardown liên tiếp trên cùng một UID `student` theo Mô hình Profile OS Dùng Chung (ADR-004) đã được đóng lại hoàn toàn bằng số liệu thực nghiệm định lượng. Giả định kiến trúc `SLICE_TEARDOWN_TIMEOUT = 3.0s` và cơ chế Two-Phase Teardown đứng vững và sẵn sàng đưa vào áp dụng chính thức trong **ADR-008**.
+## 5. Giới Hạn của Bằng Chứng (Limitations of Evidence)
+1. **Chưa đo đạc trên phiên đồ họa thật (X11 / GNOME Desktop):** Bài đo sử dụng `systemd-run --scope` đại diện cho một scope tiến trình người dùng đơn giản (`sleep`). Nguyên nhân chính gây ra hiện tượng đụng độ và treo ~110 giây ở Spike S6 là do Display Server (Xorg), Virtual Terminal (VT7) và D-Bus Session Bus của môi trường Desktop GNOME hoàn chỉnh. Do đó, thời gian 165.0 ms của S7 có thể đánh giá thấp độ trễ dọn dẹp phiên thực tế.
+2. **Nhánh cưỡng chế `SIGKILL` chưa được kích hoạt:** Kết quả `hard_kill_count = 0/20` (100% giải phóng ở pha 1) xảy ra do tiến trình `sleep` chết ngay khi nhận `SIGTERM`. Bài test chưa đưa vào các tiến trình ngoan cố (stubborn process) bẫy `SIGTERM` như từng làm ở S4, do đó nhánh `kill-user -s SIGKILL` chưa được kiểm chứng thực tế trong chuỗi 20 vòng lặp này.
+3. **Mẫu thử Linger hạn chế:** Thử nghiệm Linger mới được chạy với số lần N = 1.
+4. **Handoff & Recovery:** Chưa có số liệu đo đạc định lượng về thời gian từ lúc quẹt thẻ đến khi Desktop GNOME nạp xong trong chuỗi đăng nhập lại liên tiếp.
+
+---
+
+## 6. Kết luận & Đề Xuất Spike S7b
+**ĐẠT MỘT PHẦN (PARTIAL PASS) — MỚI KIỂM CHỨNG CGROUP TẦNG NHÂN.**
+- **Đã đạt:** Khẳng định nhân Linux dọn dẹp cgroup `user-1001.slice` và runtime `/run/user/1001` rất nhanh (< 170ms) cho cùng một UID; quy trình diệt linger hoạt động hiệu quả.
+- **Kế hoạch kiểm chứng bổ sung (Spike S7b):** Để có bằng chứng thép đưa ADR-004 và ADR-008 lên trạng thái Accepted, cần thực hiện Spike S7b:
+  - Đăng nhập thật bằng quẹt thẻ qua Custom Greeter vào Desktop GNOME với tài khoản `student`.
+  - Khởi chạy một tiến trình ngoan cố bẫy `SIGTERM` (`trap '' SIGTERM`) bên trong Desktop để ép Agent phải chờ hết 2.0s và kích hoạt nhánh `kill-user -s SIGKILL`.
+  - Đo đạc tổng thời gian từ lúc sinh viên mới quẹt thẻ đến khi Desktop GNOME mới nạp xong hoàn tất (20 chu kỳ dưới tải 100% CPU).
+- **Trạng thái ADR:** Giữ [ADR-004](../design/docs/06-architecture/decisions/ADR-004-mo-hinh-profile-os-dung-chung.md) và [ADR-008](../design/docs/06-architecture/decisions/ADR-008-vong-doi-phien-va-teardown-da-pha.md) ở trạng thái **`Proposed`** trong lúc chờ kết quả đo đạc từ S7b.

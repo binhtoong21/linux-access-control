@@ -61,20 +61,20 @@ Chúng tôi quyết định áp dụng **Mô hình Lưu trữ Hợp nhất SQLit
 ```mermaid
 flowchart TD
     subgraph SERVER["⚙️ Server Distribution"]
-        GenSnap["1. Sinh Snapshot Payload (cards, schedules, version)"]
-        SignSnap["2. Ký HMAC-SHA256 bằng khóa K_m của máy trạm<br>signature = HMAC(K_m, CanonicalPayload)"]
+        GenSnap["1. Sinh Snapshot wire bytes (version, created_at, cards, schedules, ...)"]
+        SignSnap["2. Ký HMAC-SHA256 bằng khóa K_m của máy trạm<br>MQTT 5 User Property: signature = HMAC(K_m, 'snapshot-v1:' || raw_bytes)"]
     end
 
     subgraph NETWORK["🔒 Kênh Truyền MQTT 5 (mTLS Port 8883)"]
-        Topic["lab/workstation/{id}/snapshot<br>{version, created_at, signature, payload}"]
+        Topic["lab/workstation/{id}/snapshot<br>Wire Bytes Body + User Property 'signature'"]
     end
 
     subgraph EDGE["🖥️ Edge Agent (Local Storage: edge.db)"]
-        Verify{"3. Thẩm định Chữ ký:<br>HMAC(local_K_m, payload) == signature?"}
+        Verify{"3. Thẩm định Chữ ký:<br>HMAC(local_K_m, 'snapshot-v1:' || raw_bytes) == signature?"}
         Reject["Từ chối, ghi Audit: snapshot_signature_invalid"]
         
         subgraph SQLITE_TX["BEGIN IMMEDIATE TRANSACTION"]
-            UpdateMeta["Cập nhật snapshot_meta & lease"]
+            UpdateMeta["Cập nhật snapshot_meta (version, key_version, trusted_until)"]
             ReplaceCards["DELETE FROM snapshot_cards; INSERT ..."]
             ReplaceSched["DELETE FROM snapshot_schedules; INSERT ..."]
         end
@@ -117,111 +117,62 @@ flowchart TD
 
 ---
 
-### 3. Lược Đồ Cơ Sở Dữ Liệu Cục Bộ (`edge.db` Schema)
+### 3. Lược Đồ Cơ Sở Dữ Liệu Cục Bộ (`edge.db` Architecture)
 
-Cơ sở dữ liệu bao gồm 6 bảng quan hệ chặt chẽ:
+Để đảm bảo tính tự trị của Edge và khả năng thẩm định tức thời không cần Server, cơ sở dữ liệu `edge.db` được tổ chức thành 4 phân vùng bảng logic:
+1. **Phân vùng Cấu hình & Trạng thái Tin cậy (Metadata & Lease):** Bảng `agent_meta` và `snapshot_meta`. Đặc biệt `snapshot_meta` bắt buộc lưu `key_version` để từ chối các snapshot lệch thế hệ khóa mã hóa, cùng cặp mốc thời gian tin cậy (`trusted_until`, `last_server_time`).
+2. **Phân vùng Thẩm định Thẻ & Phân Lịch (Identity, Cards & Schedules):** Lưu trữ dữ liệu cấu hình đồng bộ từ Server:
+   - `snapshot_cards`: Ánh xạ `card_match_key` (HMAC theo máy) sang `user_id`, kèm trạng thái kích hoạt của thẻ.
+   - `snapshot_users`: Lưu thông tin sinh viên/giảng viên, trạng thái hoạt động (`active`/`inactive`).
+   - `snapshot_schedules`: Lưu lịch thực hành được gán cho người dùng hoặc nhóm lớp, profile hệ điều hành đích (`target_os_username`), ngày hiệu lực và khung giờ cho phép (`start_time`, `end_time`, `days_of_week`).
+   - `snapshot_profiles`: Danh sách các profile hệ điều hành được phép trên máy trạm (ví dụ: `student`, `exam`).
+3. **Phân vùng Phiên Làm Việc (Session Management):** Bảng `local_sessions` theo dõi trọn vẹn vòng đời phiên [ADR-008](ADR-008-vong-doi-phien-va-teardown-da-pha.md). Bắt buộc lưu trữ: `decided_at` (thời điểm Agent chốt cấp quyền, dùng để phát hiện phiên đua khi recovery), `boottime_limit` (mốc MONOTONIC/BOOTTIME tuyệt đối để cưỡng chế ngắt), `boot_id`, `os_session_id`, `status` (`pending`, `active`, `ended`), `end_reason` (`schedule_expired`, `superseded`, `user_logout`, `os_session_lost`, `workstation_rebooted`).
+4. **Phân vùng Hàng Đợi Kiểm Toán (Audit Outbox):** Bảng `audit_outbox` với khóa đơn điệu tự tăng `seq` phục vụ cơ chế xác nhận lũy tiến (Cumulative ACK) và khóa loại trùng `entry_id` (INV-013, INV-014).
 
-```sql
--- 1. Metadata cấu hình máy và mốc thời gian
-CREATE TABLE IF NOT EXISTS agent_meta (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL,
-    updated_at REAL NOT NULL
-);
-
--- 2. Metadata Snapshot và Lease tin cậy (D-002, D-012)
-CREATE TABLE IF NOT EXISTS snapshot_meta (
-    version INTEGER PRIMARY KEY,
-    created_at REAL NOT NULL,
-    trusted_until REAL NOT NULL,
-    last_server_time REAL NOT NULL,
-    signature TEXT NOT NULL,
-    applied_at REAL NOT NULL
-);
-
--- 3. Bảng thẻ hợp lệ đã băm theo máy (ADR-007 CardMatchKey)
-CREATE TABLE IF NOT EXISTS snapshot_cards (
-    card_match_key TEXT PRIMARY KEY,  -- HMAC-SHA256(K_m, card_uid)
-    user_id TEXT NOT NULL,
-    target_os_username TEXT NOT NULL, -- Profile Linux đích (ví dụ: student)
-    status TEXT NOT NULL DEFAULT 'active'
-);
-CREATE INDEX IF NOT EXISTS idx_cards_user ON snapshot_cards(user_id);
-
--- 4. Bảng phân lịch ba chiều (ai + ở đâu + khi nào - D-004, D-011)
-CREATE TABLE IF NOT EXISTS snapshot_schedules (
-    schedule_id TEXT PRIMARY KEY,
-    target_os_username TEXT NOT NULL,
-    start_time TEXT NOT NULL,          -- Format "HH:MM:SS" (ví dụ: "07:30:00")
-    end_time TEXT NOT NULL,            -- Format "HH:MM:SS" (ví dụ: "11:45:00")
-    days_of_week TEXT NOT NULL         -- JSON array: "[1,2,3,4,5]" (Thứ 2 - Thứ 6)
-);
-
--- 5. Bảng theo dõi phiên làm việc cục bộ (LocalSession - ADR-008)
-CREATE TABLE IF NOT EXISTS local_sessions (
-    session_id TEXT PRIMARY KEY,       -- UUID v4 của phiên
-    entry_id TEXT UNIQUE NOT NULL,     -- Khóa ngoại liên kết 1:1 với audit_outbox
-    user_id TEXT NOT NULL,             -- Mã sinh viên
-    os_username TEXT NOT NULL,         -- Tài khoản Linux đã đăng nhập (student)
-    status TEXT NOT NULL,              -- pending | active | discarded | forced_logout | superseded | abandoned
-    started_at REAL,                   -- Thời điểm bắt được GUI session
-    expires_at REAL NOT NULL,          -- Hạn giờ phiên cố định (BR-001)
-    end_reason TEXT                    -- schedule_expired | superseded | workstation_rebooted
-);
-CREATE INDEX IF NOT EXISTS idx_sessions_status ON local_sessions(status);
-
--- 6. Hàng đợi kiểm toán ngoại tuyến (AuditOutbox - INV-013, INV-014)
-CREATE TABLE IF NOT EXISTS audit_outbox (
-    seq INTEGER PRIMARY KEY AUTOINCREMENT, -- Khóa tự tăng đơn điệu cho ACK lũy tiến
-    entry_id TEXT UNIQUE NOT NULL,         -- Khóa loại trùng idempotent
-    timestamp REAL NOT NULL,               -- Thời điểm xảy ra sự kiện
-    event_type TEXT NOT NULL,              -- swipe_decision | session_started | session_ended
-    payload TEXT NOT NULL                  -- JSON chi tiết sự kiện
-);
-CREATE INDEX IF NOT EXISTS idx_outbox_seq ON audit_outbox(seq);
-```
+> **Lưu ý triển khai:** Định nghĩa chi tiết các trường, kiểu dữ liệu, ràng buộc khóa ngoại và chỉ mục DDL của `edge.db` được đặc tả thống nhất và đầy đủ tại tài liệu tầng dữ liệu: [07-data/data-model.md](../../07-data/data-model.md). ADR-003 chỉ chốt các nguyên tắc kiến trúc lưu trữ, tính nguyên tử và cơ chế kiểm soát toàn vẹn.
 
 ---
 
-### 4. Cơ Chế Xác Thực Toàn Vẹn Snapshot Bằng Khóa K_m (Cryptographic Verification)
+### 4. Cơ Chế Xác Thực Toàn Vẹn Snapshot & Lease Bằng Khóa K_m và MQTT 5 User Property
 
-Để ngăn chặn tuyệt đối kịch bản Broker MQTT bị tấn công chiếm quyền tiêm snapshot giả hoặc kẻ xấu sao chép snapshot giữa các máy trạm:
+Để ngăn chặn tuyệt đối kịch bản Broker MQTT bị tấn công chiếm quyền tiêm snapshot giả, tua lại lease hoặc kẻ xấu sao chép snapshot giữa các máy trạm:
 
-1. **Nguồn gốc khóa `K_m` (ADR-007, D-010):**
+1. **Nguồn gốc khóa K_m (ADR-007, D-010):**
    - Khóa bí mật `K_m` là khóa đối xứng 256-bit riêng biệt của từng máy trạm:
      `K_m = HKDF-SHA256(master_key, workstation_id || ":" || key_version)`.
    - Khóa này được Server cấp phát an toàn qua kênh mTLS Bootstrap khi duyệt máy trạm và lưu tại `/var/lib/nfc-agent/identity/k_m.key`.
-2. **Quy trình ký tại Server (Raw-Byte Hashing):**
-   - Server sinh chuỗi byte JSON của `payload` (`raw_payload_bytes`).
-   - Server tính toán chữ ký số HMAC trực tiếp trên chuỗi byte gốc:
-     `signature = HexEncode(HMAC-SHA256(K_m, raw_payload_bytes))`.
-   - Gói bản tin MQTT xuất bản vào topic `lab/workstation/{workstation_id}/snapshot` mang cấu trúc:
-     ```json
-     {
-       "version": 14,
-       "created_at": 1793049263.0,
-       "signature": "3a8f12c9b4e7...",
-       "payload": {
-         "cards": [
-           { "card_match_key": "a1b2...", "user_id": "SV001", "target_os_username": "student" }
-         ],
-         "schedules": [
-           { "schedule_id": "SCH_01", "target_os_username": "student", "start_time": "07:00:00", "end_time": "11:30:00", "days_of_week": "[1,2,3,4,5]" }
-         ]
-       }
-     }
-     ```
+2. **Quy trình ký tại Server (Raw-Byte Hashing & Domain Separation):**
+   - Thay vì nhúng chữ ký vào bên trong nội dung JSON (gây khó khăn cho việc băm chuỗi byte gốc), chữ ký xác thực bắt buộc phải được truyền tải trong **MQTT 5 User Property** `signature`.
+   - Ký trên toàn bộ chuỗi byte thô nhận được từ MQTT wire (`raw_mqtt_payload_bytes`), kết hợp với tiền tố định danh miền (Domain Separation Tag) để triệt tiêu nguy cơ hoán đổi ngữ cảnh:
+     * Snapshot: `signature = HexEncode(HMAC-SHA256(K_m, "snapshot-v1:" || raw_mqtt_payload_bytes))`
+     * Lease: `signature = HexEncode(HMAC-SHA256(K_m, "lease-v1:" || raw_mqtt_payload_bytes))`
+     * ACK Outbox: `signature = HexEncode(HMAC-SHA256(K_m, "ack-v1:" || raw_mqtt_payload_bytes))`
+   - Việc bao gồm toàn bộ wire bytes (chứa cả `version`, `created_at`, `cards`, `schedules`...) vào phạm vi HMAC đảm bảo kẻ tấn công broker không thể làm giả việc tăng `version` ảo để đầu độc máy trạm.
 3. **Quy trình thẩm định tại Edge Agent (Loại trừ rủi ro Canonical JSON):**
-   - Agent đọc `K_m` cục bộ.
-   - Trích xuất chính xác chuỗi byte thô nhận được từ MQTT của trường `payload` (hoặc toàn bộ chuỗi byte của snapshot message trừ field `signature`).
-   - **Băm trực tiếp chuỗi byte nhận được, tuyệt đối không serialize lại:** Tránh hoàn toàn sự sai khác định dạng khoảng trắng, thứ tự key giữa các thư viện JSON của các ngôn ngữ khác nhau (Node.js vs Python).
-   - Tính toán `expected_signature = HexEncode(HMAC-SHA256(K_m, raw_payload_bytes))`.
-   - So khớp bằng thuật toán so sánh thời gian không đổi (`hmac.compare_digest`) để chống tấn công Timing Attack.
-   - **Xử lý vi phạm:** Nếu chữ ký không khớp, Agent **từ chối nạp snapshot ngay lập tức**, ghi nhật ký sự kiện `snapshot_signature_invalid` vào `audit_outbox` và giữ nguyên snapshot hợp lệ cũ đang có.
+   - Agent đọc `K_m` cục bộ từ tệp bí mật.
+   - Lấy chuỗi byte thô nhận được từ tầng mạng MQTT (`message.payload`), tuyệt đối không giải mã JSON rồi mã hóa lại (không round-trip parse/serialize), loại trừ 100% rủi ro sai lệch định dạng khoảng trắng hay thứ tự key giữa Node.js và Python.
+   - Tính toán: `expected_sig = HexEncode(HMAC-SHA256(K_m, "snapshot-v1:" || message.payload))`.
+   - So khớp bằng thuật toán an toàn hằng số thời gian (`hmac.compare_digest`) với giá trị trong MQTT 5 User Property `signature`.
+   - **Xử lý vi phạm:** Nếu chữ ký không khớp hoặc `version` nhỏ hơn `version` hiện hành, Agent **từ chối nạp snapshot ngay lập tức**, ghi nhật ký sự kiện `snapshot_signature_invalid` vào `audit_outbox` và duy trì cấu hình tin cậy cũ.
 
 ---
 
-### 5. Giao Dịch Ghi Trước Nguyên Tử (Atomic Write-Ahead Pairing - D-005)
+### 5. Chính Sách Giảm Tần Suất Ghi Đĩa Cho Lease (Lease Persist Policy)
+
+Trong điều kiện mạng bình thường, Agent nhận bản tin gia hạn Lease định kỳ mỗi 30 giây qua Heartbeat (ADR-002).
+- Nếu mỗi nhịp 30 giây Agent đều thực thi lệnh `UPDATE snapshot_meta ...` với `PRAGMA synchronous = FULL`, ổ cứng thể rắn (SSD) của máy trạm sẽ phải chịu hơn 2.800 lần ghi bắt buộc mỗi ngày, gây suy giảm tuổi thọ bộ nhớ Flash của phòng lab.
+- **Giải pháp tối ưu hóa:**
+  1. Agent cập nhật và duy trì cặp mốc `trusted_until` và `last_server_time` trong **bộ nhớ RAM** để phục vụ việc thẩm định quẹt thẻ với độ trễ 0-ms.
+  2. Agent chỉ thực hiện ghi bền vững (persist) xuống bảng `snapshot_meta` trên SQLite khi:
+     - Giá trị `trusted_until` mới tăng thêm **tối thiểu 5 phút (300 giây)** so với mốc đã lưu trên đĩa; HOẶC
+     - Khi có một giao dịch ghi khác đang diễn ra (ví dụ: vừa nạp Snapshot mới, hoặc vừa ghi nhận một sự kiện quẹt thẻ / mở phiên).
+  3. Khi tắt máy trạm an toàn (`SIGTERM` tới Agent daemon), Agent thực hiện flush mốc lease hiện hành xuống SQLite trước khi thoát.
+
+Chính sách này giảm tần suất ghi đĩa của lease từ 120 lần/giờ xuống còn tối đa 12 lần/giờ mà vẫn bảo toàn tính an toàn khi máy trạm sập nguồn.
+
+---
+
+### 6. Giao Dịch Ghi Trước Nguyên Tử (Atomic Write-Ahead Pairing - D-005)
 
 Mỗi lần quẹt thẻ thành công tại đầu đọc NFC, Agent thực thi một khối giao dịch duy nhất trước khi trả kết quả `granted` cho PAM:
 
@@ -237,19 +188,19 @@ with db_connection:
     
     # 2. Tạo phiên pending chờ Display Manager bắt đầu
     cursor.execute("""
-        INSERT INTO local_sessions (session_id, entry_id, user_id, os_username, status, expires_at)
-        VALUES (?, ?, ?, ?, 'pending', ?);
-    """, (session_id, entry_id, user_id, target_os_user, expires_at))
+        INSERT INTO local_sessions (session_id, entry_id, user_id, os_username, status, decided_at, expires_at)
+        VALUES (?, ?, ?, ?, 'pending', ?, ?);
+    """, (session_id, entry_id, user_id, target_os_user, now, expires_at))
     cursor.execute("COMMIT;")
 ```
 
 Nếu máy tính mất điện đúng thời điểm này:
-- Hoặc cả hai bản ghi đều chưa được ghi $\rightarrow$ PAM không nhận được token, máy không mở phiên, không có dữ liệu rác.
-- Hoặc cả hai bản ghi đều đã nằm an toàn trong WAL $\rightarrow$ Khi máy khởi động lại, Agent phát hiện phiên `pending` mồ côi và dọn dẹp chuyển sang `discarded` theo đúng đặc tả recovery.
+- Hoặc cả hai bản ghi đều chưa được ghi -> PAM không nhận được token, máy không mở phiên, không có dữ liệu rác.
+- Hoặc cả hai bản ghi đều đã nằm an toàn trong WAL -> Khi máy khởi động lại, Agent phát hiện phiên `pending` mồ côi và dọn dẹp chuyển sang `discarded` theo đúng đặc tả recovery.
 
 ---
 
-### 6. Cơ Chế Xóa Outbox Lũy Tiến (Cumulative Truncation - INV-013)
+### 7. Cơ Chế Xóa Outbox Lũy Tiến (Cumulative Truncation - INV-013)
 
 Khi nhận bản tin `ack_outbox` mang số thứ tự `acked_seq` từ Server qua MQTT (ADR-002):
 ```sql

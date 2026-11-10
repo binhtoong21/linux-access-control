@@ -67,10 +67,10 @@ flowchart LR
 
 ### 1. Edge Workstation: Python 3 + C Thuần (PAM Module)
 
-- **Lựa chọn:** **Python 3.10** (cho Agent Daemon và Lab Custom Greeter) kết hợp **C thuần** (cho PAM Module `pam_nfc.so`).
+- **Lựa chọn:** **Python >= 3.10** (cho Agent Daemon và Lab Custom Greeter) kết hợp **C thuần** (cho PAM Module `pam_nfc.so`).
 - **Lý do quyết định:**
   1. *Greeter bắt buộc dùng Python/GTK:* Kết quả Spike S3b chứng minh Custom Greeter chạy trên LightDM thông qua thư viện `liblightdm-gobject-1` yêu cầu binding GTK/GObject. Sử dụng Python cho Agent bảo đảm máy trạm chỉ duy trì **duy nhất một runtime Python**, tránh việc vừa cài Python cho Greeter vừa cài runtime Go/Rust cho Agent.
-  2. *Tái sử dụng 100% mã nguồn thực nghiệm:* Toàn bộ logic lõi của Agent (quản lý PC/SC `pyscard`, SQLite WAL, 2 Unix domain sockets, bắt tay Greeter 1.2s, điều khiển `loginctl` và dọn cgroup) đã được viết, debug và đo đạc thực tế thành công ở S1–S7. Việc phát triển Agent chính thức là quá trình tái cấu trúc (refactoring) mã nguồn sẵn có theo Clean Architecture, không phải viết lại từ đầu.
+  2. *Tái cấu trúc từ bài học và mã nguồn thực nghiệm spike:* Toàn bộ logic lõi của Agent (quản lý PC/SC `pyscard`, SQLite WAL, 3 Unix domain sockets, bắt tay Greeter 1.2s, điều khiển `loginctl` và dọn cgroup) đã được viết, debug và đo đạc thực tế thành công ở S1–S7. Việc phát triển Agent chính thức là quá trình tái cấu trúc (refactoring) mã nguồn sẵn có theo Clean Architecture, không phải viết lại từ đầu.
   3. *Lợi thế Go bị triệt tiêu:* Go khi gọi thư viện phần cứng `pcsclite` bắt buộc phải sử dụng `cgo`, làm mất đi ưu điểm "single static binary" và tăng độ phức tạp khi build.
   4. *Module PAM C tối giản:* Không nhúng Python vào tiến trình đăng nhập của hệ điều hành. Module PAM viết bằng C thuần (`pam_nfc.so`, chỉ ~100 dòng code, không cấp phát heap phức tạp), chỉ làm nhiệm vụ ủy quyền qua socket với độ trễ 22ms và fallback an toàn tuyệt đối (Spike S2).
 
@@ -136,8 +136,8 @@ Trước khi triển khai diện rộng Server, một bài kiểm chứng nhỏ 
   - *Nguy cơ:* Lỗ hổng bộ nhớ hoặc thư viện bên thứ ba khi chạy quyền root.
   - *Biện pháp giảm thiểu:* 
     1. Module PAM C độc lập ngăn sự cố của Agent ảnh hưởng đến chuỗi xác thực hệ thống.
-    2. Cấu hình Systemd Hardening giam lỏng Agent daemon: `ProtectSystem=strict`, `ProtectHome=read-only`, `PrivateTmp=true`, `CapabilityBoundingSet=CAP_KILL CAP_DAC_OVERRIDE`.
-    3. Cố định phiên bản Python 3.10 mặc định của Ubuntu 22.04 LTS và cô lập dependencies trong virtualenv thuộc sở hữu `root:root 0700`.
+    2. Cấu hình Systemd Hardening giam lỏng Agent daemon: `ProtectSystem=strict`, `ProtectHome=read-only`, `PrivateTmp=true`, `ReadWritePaths=/var/lib/nfc-agent /run`, `CapabilityBoundingSet=CAP_KILL CAP_DAC_OVERRIDE CAP_SETUID CAP_SETGID`.
+    3. Cố định phiên bản Python >= 3.10 mặc định của Ubuntu 22.04 LTS và cô lập dependencies trong virtualenv thuộc sở hữu `root:root 0700`.
 - **Duy Trì Hai Ngôn Ngữ:**
   - *Nguy cơ:* Lệch chuẩn hợp đồng giao tiếp JSON qua MQTT.
   - *Biện pháp giảm thiểu:* Định nghĩa JSON Schema chặt chẽ tại [08-api/events.md](../../08-api/events.md) và áp dụng cơ chế Raw-byte HMAC.
