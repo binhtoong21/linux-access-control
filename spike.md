@@ -12,12 +12,13 @@
 | Spike | Câu hỏi | Timebox | Rủi ro |
 |---|---|---|---|
 | S0 | Môi trường | 0,5 ngày | Thấp |
-| S1 | Đầu đọc và PC/SC | 2 ngày | Trung bình (phần cứng) |
+| S1 | Đầu đọc và PC/SC (Đạt một phần) | 2 ngày | Trung bình (phần cứng) |
 | S2 | PAM và Agent | 3 ngày | Cao |
 | S3 | Greeter và màn hình khóa | 4 ngày | **Cao nhất** |
 | S4 | Ánh xạ tài khoản OS và kết thúc phiên | 3 ngày | Cao |
 | S5 | Agent, MQTT, lưu trữ nguyên tử | 3 ngày | Trung bình |
 | S6 | Walking skeleton | 3 ngày | Tích hợp |
+| S7 | Teardown liên tiếp cùng UID & Linger | 1 ngày | Cao (chốt chặn ADR-004) |
 
 Nên đặt mua hoặc mượn đầu đọc ngay hôm nay vì có thời gian chờ, S1 chạy song song với S0. Trình tự S2 → S3 → S4 vì chúng phụ thuộc nhau. S5 có thể làm xen.
 
@@ -122,6 +123,7 @@ quẹt thẻ → Agent đánh giá CR-001 → ghi nhật ký → PAM cho vào �
 | S4 | Ánh xạ tài khoản OS |
 | S5 | Giao thức MQTT; lưu trữ cục bộ; snapshot (ADR-003) |
 | S1 | Bổ sung ADR-007 (thứ tự byte, loại đầu đọc) |
+| S7 | ADR-004 (Mô hình profile dùng chung) & ADR-008 (Vòng đời phiên & Teardown đa pha) |
 
 ## Quy tắc quyết định
 

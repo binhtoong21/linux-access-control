@@ -4,7 +4,7 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | Proposed |
+| **Status** | Accepted |
 | **Date** | 2026-10-16 |
 | **Deciders** | Bình. Cần thầy xác nhận: giá trị lease `D` và việc tin RTC sau khi khởi động lại lúc offline |
 | **Supersedes** | Không |

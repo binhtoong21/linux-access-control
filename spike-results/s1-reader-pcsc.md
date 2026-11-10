@@ -59,5 +59,6 @@ Khi giải mã các byte lịch sử (Historical Bytes) theo ASCII:
 - **Môi trường:** Thiết bị được chuyển tiếp qua USB Passthrough vào máy ảo KVM, chưa thử nghiệm trên môi trường bare-metal phần cứng máy trạm.
 
 ## Kết luận
-**ĐẠT CÁC MỤC TIÊU ĐẶT RA CỦA SPIKE S1.**
-Phần cứng đầu đọc ACR122U USB hoạt động ổn định trên Ubuntu 22.04 LTS qua giao thức PC/SC; cơ chế Debounce chống quẹt lặp (BR-007c) vận hành chuẩn xác; chứng minh bằng thực nghiệm sự khác biệt giữa Static UID và Random UID làm cơ sở lựa chọn loại thẻ cho phòng lab.
+**ĐẠT MỘT PHẦN (PARTIAL PASS) — CẦN CHẠY BỔ SUNG VỚI THẺ SINH VIÊN MIFARE THẬT.**
+- **Đã đạt:** Phần cứng đầu đọc ACR122U USB hoạt động ổn định trên Ubuntu 22.04 LTS qua giao thức PC/SC; cơ chế Debounce chống quẹt lặp (BR-007c) vận hành chuẩn xác; chứng minh bằng thực nghiệm sự khác biệt giữa Static UID và Random UID làm cơ sở lựa chọn loại thẻ cho phòng lab.
+- **Còn thiếu & Kế hoạch bổ sung:** Để tuân thủ nghiêm ngặt nguyên tắc thực chứng không che giấu giả định, S1 cần bổ sung bài đo kiểm 100 lần quẹt liên tục với phôi thẻ sinh viên trường (MIFARE Classic / Ultralight 4-byte/7-byte), chuyển đổi cơ chế đọc từ polling sang ngắt sự kiện trạng thái `SCardGetStatusChange` và đo khả năng tự phục hồi khi rút/cắm nóng (hotplug) đầu đọc USB.

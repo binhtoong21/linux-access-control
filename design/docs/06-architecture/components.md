@@ -7,7 +7,7 @@
 
 ## 1. Phân Tích Thành Phần Bên Trong Server API & Distribution Service
 
-Service máy chủ trung tâm được tổ chức theo kiến trúc Ports and Adapters (Hexagonal Architecture) kết hợp thiết kế hướng miền (Domain-Driven Design), bảo đảm tính độc lập tuyệt đối của tầng nghiệp vụ và trung lập về miền ứng dụng (sử dụng thuật ngữ `User`, `Schedule`, `Workstation` theo [problem.md](file:///c:/Users/ThinkPad/Desktop/DATN/design/docs/01-problem/problem.md)).
+Service máy chủ trung tâm được tổ chức theo kiến trúc Ports and Adapters (Hexagonal Architecture) kết hợp thiết kế hướng miền (Domain-Driven Design), bảo đảm tính độc lập tuyệt đối của tầng nghiệp vụ và trung lập về miền ứng dụng (sử dụng thuật ngữ `User`, `Schedule`, `Workstation` theo [problem.md](../01-problem/problem.md)).
 
 ```mermaid
 flowchart TD

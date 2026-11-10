@@ -4,7 +4,7 @@
 
 | Field | Value |
 |---|---|
-| **Status** | Proposed |
+| **Status** | Accepted |
 | **Date** | 2026-11-05 |
 | **Deciders** | Nhóm tác giả ĐATN & Giảng viên hướng dẫn |
 | **Supersedes** | Quyết định Phương án B trong Spike S4 (Tài khoản riêng `stu_<id>`) |
@@ -63,9 +63,9 @@ Chúng tôi quyết định áp dụng **Mô hình Profile OS Dùng Chung (Share
    - Mỗi Schedule chỉ định `target_os_username` (ví dụ `student`, `labuser`) hoặc để trống để kế thừa profile mặc định của máy trạm. Thiết kế này giải quyết triệt để vấn đề một Schedule gán cho cả Zone nhiều máy mà không bị ràng buộc bởi ID cục bộ theo máy. Khi dựng snapshot, Server chỉ phân phối chuỗi `target_os_username` thô (hoặc rỗng).
    - Việc đối chiếu và kiểm tra profile hợp lệ được thực hiện tại **Agent (Agent-side resolve)** với allowlist cục bộ của máy trạm. Dashboard hiển thị cảnh báo nếu phát hiện máy trong Zone thiếu profile mà Schedule yêu cầu.
    - Khi hợp quyền nhiều Schedule khớp cho một lần quẹt (BR-016), nếu các Schedule này trỏ tới nhiều `target_os_username` khác nhau, kết quả là **mơ hồ và bị từ chối tuyệt đối** (`denied(ambiguous_profile)`). Cấm chọn ngầm theo thứ tự ưu tiên.
-3. **Chính sách kết thúc phiên và dọn dẹp tiến trình (A6, P1-2):**
-   - Khi hết giờ phiên hoặc khi có người khác thay thế phiên hợp lệ: Agent kích hoạt Two-Phase Teardown tiêu diệt 100% tiến trình chạy ngầm thuộc user slice bằng một cách duy nhất: `loginctl terminate-user <UID>`, chờ 2s, cưỡng chế `loginctl kill-user <UID> -s SIGKILL`. Cấu hình SSHD có `DenyGroups labstudent` và tắt linger (`loginctl disable-linger`).
-   - *Đồng bộ Teardown khi cùng UID (P1-2):* Với mô hình profile dùng chung, sinh viên đăng nhập liên tiếp là cùng một UID Linux. Sau khi gửi lệnh cưỡng chế `kill-user`, Agent bắt buộc phải đợi cho đến khi user slice của UID đó (`user-<UID>.slice`) và thư mục runtime `/run/user/<UID>` giải phóng hoàn toàn khỏi nhân Linux (chờ tối đa `SLICE_TEARDOWN_TIMEOUT = 3.0s`) trước khi bàn giao quyền `staged_auth` cho phiên tiếp theo, ngăn ngừa triệt để lỗi race condition D-Bus.
+3. **Chính sách kết thúc phiên và dọn dẹp tiến trình (A6, P1-2 — Quy định chi tiết tại ADR-008):**
+   - Khi hết giờ phiên hoặc khi có người khác thay thế phiên hợp lệ: Agent kích hoạt Two-Phase Teardown tiêu diệt 100% tiến trình chạy ngầm thuộc user slice (tắt linger, `loginctl terminate-user <UID>`, chờ đệm, cưỡng chế `kill-user <UID> -s SIGKILL`). Cấu hình SSHD có `DenyGroups labstudent`.
+   - *Đồng bộ Teardown khi cùng UID (P1-2, S7):* Với mô hình profile dùng chung, sinh viên đăng nhập liên tiếp là cùng một UID Linux. Kết quả thực nghiệm Spike S7 đã kiểm chứng thời gian giải phóng cgroup `user-<UID>.slice` và `/run/user/<UID>` trung bình chỉ đạt 105.8 ms (tối đa 165.0 ms) dưới tải CPU 100%, chứng minh tham số `SLICE_TEARDOWN_TIMEOUT = 3.0s` hoàn toàn an toàn để ngăn chặn triệt để lỗi race condition D-Bus. Chi tiết quy trình đồng bộ và xử lý thay thế phiên được đặc tả độc lập tại **[ADR-008](ADR-008-vong-doi-phien-va-teardown-da-pha.md)**.
    - **Tuyệt đối KHÔNG tự động xóa thư mục `/home` hay dữ liệu file cục bộ** của profile dùng chung sau phiên. Sinh viên lưu bài tập trên máy; việc dọn dẹp file do giảng viên hoặc kỹ thuật viên thực hiện định kỳ.
 4. **Vô hiệu hóa Lock Screen và User Switching cho Profile dùng chung (A3, P1-3):**
    - Do tài khoản dùng chung đã bị khóa mật khẩu (`passwd -l`) và GNOME lock screen trên LightDM không hỗ trợ quẹt thẻ mở khóa, sinh viên có thể tự khóa mình cho đến hết ca học nếu màn hình bị khóa.

@@ -88,13 +88,21 @@ Bản ghi nhật ký phản ánh quyết định của Agent (`LoginDecision`), 
    - Trước Server dump / Rò rỉ sao lưu: Server mã hóa UID bằng AES-256-GCM và chỉ mục mù HMAC-SHA256.
    - Cơ chế HMAC theo máy (`CardMatchKey` trong [ADR-007](06-architecture/decisions/ADR-007-khoa-so-khop-uid.md)) được định vị đúng vai trò: **Khoanh vùng thiệt hại (Blast-radius reduction)** để snapshot của máy này không đối chiếu được trên máy khác khi kẻ tấn công lấy được đĩa cứng; không tuyên bố là cơ chế chống khôi phục UID đối với kẻ đã chiếm được quyền root trên chính máy đó (do UID 4 byte dễ bị vét cạn).
 
-### ADR-001 (Proposed): Xác thực ở edge, dữ liệu cục bộ có thời hạn tin cậy (lease)
+### ADR-001 (Accepted): Xác thực ở edge, dữ liệu cục bộ có thời hạn tin cậy (lease)
 Quyết định ở Agent theo CR-001 từ snapshot cục bộ, không hỏi server khi quẹt thẻ. Dữ liệu cục bộ có thời hạn tin cậy (lease) được gia hạn qua phản hồi heartbeat khi `acked_version == desired_version`. Kiểm tra đồng hồ kết hợp hai hạn (UTC tuyệt đối bền vững và `CLOCK_BOOTTIME` cho phiên) kèm mốc sàn cải tiến `floor = max(snapshot.created_at, last_server_time) - CLOCK_FLOOR_TOLERANCE`. Cần thầy xác nhận: giá trị lease `D` và việc tin RTC sau khi khởi động lại lúc offline.
 **Nguồn:** [ADR-001](06-architecture/decisions/ADR-001-xac-thuc-o-edge-va-lease.md).
 
-### ADR-007 (Proposed): Khóa so khớp UID thẻ và phạm vi lưu UID gốc
+### ADR-004 (Accepted): Mô hình Profile OS dùng chung và phân tách danh tính xác thực
+Phân tách danh tính sinh viên (User/Card) dùng cho kiểm soát truy cập và ghi AuditLog với Profile Linux dùng chung (`WorkstationProfile`, ví dụ `student`) để mở Desktop phục vụ học tập. Vô hiệu hóa Lock Screen và User Switching để triệt tiêu trạng thái lửng lơ. Cơ chế Teardown đa pha được tách sang ADR-008 dựa trên kết quả Spike S7.
+**Nguồn:** [ADR-004](06-architecture/decisions/ADR-004-mo-hinh-profile-os-dung-chung.md), D-006; giải quyết P1-2, P1-3, P2-1.
+
+### ADR-007 (Accepted): Khóa so khớp UID thẻ và phạm vi lưu UID gốc
 Server lưu UID mã hóa (AES-256-GCM) kèm chỉ mục mù (HMAC-SHA256). Snapshot chứa `CardMatchKey` = HMAC theo khóa riêng của máy (`K_m = HKDF(master_key, workstation_id || ":" || key_version)`), không chứa UID gốc. Nhật ký mang UID của lần quẹt qua TLS. Admin giải mã khi xem dashboard. Phạm vi bảo vệ: chiếm root một máy không làm lộ thẻ của người không liên quan tới máy đó.
 **Nguồn:** [ADR-007](06-architecture/decisions/ADR-007-khoa-so-khop-uid.md); giải quyết PD-002.
+
+### ADR-008 (Accepted): Quản lý vòng đời phiên và cơ chế teardown đa pha
+Quy định máy trạng thái vòng đời phiên (`LocalSession`), chính sách từ chối `workstation_busy` khi Desktop đang active (A4) và quy trình Two-Phase Teardown khi thay phiên/hết hạn: tắt linger (`disable-linger`), `terminate-user` (2s), cưỡng chế `kill-user -s SIGKILL` và kiểm tra cgroup giải phóng (`SLICE_TEARDOWN_TIMEOUT = 3.0s`). Kết hợp Startup Handshake 1.2s với Lab Custom Greeter để triệt tiêu lỗi treo D-Bus ~110s.
+**Nguồn:** [ADR-008](06-architecture/decisions/ADR-008-vong-doi-phien-va-teardown-da-pha.md), S6, S7; giải quyết BR-001, BR-008, BR-009, A6, P1-2.
 
 ## Điểm chuyển sang 06
 
