@@ -89,8 +89,16 @@ Bản ghi nhật ký phản ánh quyết định của Agent (`LoginDecision`), 
    - Cơ chế HMAC theo máy (`CardMatchKey` trong [ADR-007](06-architecture/decisions/ADR-007-khoa-so-khop-uid.md)) được định vị đúng vai trò: **Khoanh vùng thiệt hại (Blast-radius reduction)** để snapshot của máy này không đối chiếu được trên máy khác khi kẻ tấn công lấy được đĩa cứng; không tuyên bố là cơ chế chống khôi phục UID đối với kẻ đã chiếm được quyền root trên chính máy đó (do UID 4 byte dễ bị vét cạn).
 
 ### ADR-001 (Accepted): Xác thực ở edge, dữ liệu cục bộ có thời hạn tin cậy (lease)
-Quyết định ở Agent theo CR-001 từ snapshot cục bộ, không hỏi server khi quẹt thẻ. Dữ liệu cục bộ có thời hạn tin cậy (lease) được gia hạn qua phản hồi heartbeat khi `acked_version == desired_version`. Kiểm tra đồng hồ kết hợp hai hạn (UTC tuyệt đối bền vững và `CLOCK_BOOTTIME` cho phiên) kèm mốc sàn cải tiến `floor = max(snapshot.created_at, last_server_time) - CLOCK_FLOOR_TOLERANCE`. Cần thầy xác nhận: giá trị lease `D` và việc tin RTC sau khi khởi động lại lúc offline.
+Quy định ở Agent theo CR-001 từ snapshot cục bộ, không hỏi server khi quẹt thẻ. Dữ liệu cục bộ có thời hạn tin cậy (lease) được gia hạn qua phản hồi heartbeat khi `acked_version == desired_version`. Kiểm tra đồng hồ kết hợp hai hạn (UTC tuyệt đối bền vững và `CLOCK_BOOTTIME` cho phiên) kèm mốc sàn cải tiến `floor = max(snapshot.created_at, last_server_time) - CLOCK_FLOOR_TOLERANCE`. Cần thầy xác nhận: giá trị lease `D` và việc tin RTC sau khi khởi động lại lúc offline.
 **Nguồn:** [ADR-001](06-architecture/decisions/ADR-001-xac-thuc-o-edge-va-lease.md).
+
+### ADR-002 (Proposed): Giao thức MQTT 5, phân quyền ACL, định danh máy trạm và mTLS
+Chuẩn hóa giao thức MQTT 5 qua mTLS cổng 8883. Phân tách Mosquitto ACL triệt để giữa luồng đọc (`command/#`, `snapshot`, `lease`) và luồng ghi (`hello`, `heartbeat`, `outbox`, `status`), bãi bỏ wildcard lỏng lẻo. Giao thức Outbox đẩy theo lô (batch) và xác nhận lũy tiến (Cumulative ACK). Quy trình Master Image sysprep sạch tự sinh Ed25519 CSR và phê duyệt duyệt tập trung trên Web Dashboard, phòng vệ trùng MAC (P1-4).
+**Nguồn:** [ADR-002](06-architecture/decisions/ADR-002-giao-thuc-mqtt-va-dinh-danh-may-tram.md), S5, D-010, `reconnect.md`.
+
+### ADR-003 (Proposed): Lưu trữ cục bộ SQLite WAL, hợp nhất DB và xác thực snapshot bằng K_m
+Hợp nhất toàn bộ Snapshot, Lease, Session và AuditOutbox vào một CSDL SQLite duy nhất `/var/lib/nfc-agent/edge.db` (chế độ WAL, `synchronous=FULL`). Khắc phục mâu thuẫn S5 vs D-006.4: chuyển giao việc fsync cho động cơ SQLite WAL. Bảo đảm tính nguyên tử ghi trước (Atomic Write-Ahead: ghi đồng thời Outbox và LocalSession pending trước khi trả quyền cho PAM). Xác thực toàn vẹn Snapshot bằng chữ ký HMAC-SHA256 tính từ khóa riêng `K_m`, chống broker bị chiếm hoặc replay snapshot giữa các máy.
+**Nguồn:** [ADR-003](06-architecture/decisions/ADR-003-luu-tru-cuc-bo-va-xac-thuc-snapshot.md), S5, D-006.4, INV-011, INV-013, INV-014.
 
 ### ADR-004 (Accepted): Mô hình Profile OS dùng chung và phân tách danh tính xác thực
 Phân tách danh tính sinh viên (User/Card) dùng cho kiểm soát truy cập và ghi AuditLog với Profile Linux dùng chung (`WorkstationProfile`, ví dụ `student`) để mở Desktop phục vụ học tập. Vô hiệu hóa Lock Screen và User Switching để triệt tiêu trạng thái lửng lơ. Cơ chế Teardown đa pha được tách sang ADR-008 dựa trên kết quả Spike S7.
