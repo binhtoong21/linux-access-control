@@ -108,6 +108,10 @@ Phân tách danh tính sinh viên (User/Card) dùng cho kiểm soát truy cập 
 Chốt chuyển sang Display Manager LightDM. Module PAM viết bằng C thuần (`pam_nfc.so`), giao tiếp IPC không khóa qua Unix socket `/run/nfc-agent.sock` với fallback tức thì 22ms về mật khẩu cục bộ khi Agent treo/chết (BR-004, NFR-M01), bảo vệ cấp nhân bằng `SO_PEERCRED`. Xây dựng Lab Custom Greeter bằng Python GTK3 nhận tín hiệu đẩy qua `/run/nfc-control.sock` để đăng nhập 0-chạm (< 1.0s), loại trừ lỗi bấm login 2 lần. Áp dụng Startup Handshake 1.2s và cơ chế cứu hộ TTY2/SSH một lệnh.
 **Nguồn:** [ADR-005](06-architecture/decisions/ADR-005-pam-greeter-va-display-manager.md), S2, S3, S3b, S6, D-006.5, D-007.2.
 
+### ADR-006 (Proposed): Lựa chọn ngôn ngữ và techstack cho Edge Agent, Server và Dashboard
+Chuẩn hóa 3 phân vùng độc lập nhằm tối thiểu hóa độ dốc học tập (tập trung năng lượng vào rủi ro Edge): Edge dùng Python 3.10 + C (PAM) để tận dụng một runtime duy nhất cùng Greeter GTK3 và tái sử dụng 100% code spike S1-S7; Server dùng NestJS/TypeScript + PostgreSQL 15 (tận dụng `node:crypto` và ánh xạ 1:1 với Ports & Adapters trong `components.md`); Dashboard dùng React + Vite. Giảm thiểu rủi ro đa ngôn ngữ bằng Test Vector chung và băm HMAC Snapshot theo chuỗi byte thô.
+**Nguồn:** [ADR-006](06-architecture/decisions/ADR-006-ngon-ngu-va-techstack.md), S3b, S5, S6, S7, D-010.
+
 ### ADR-007 (Accepted): Khóa so khớp UID thẻ và phạm vi lưu UID gốc
 Server lưu UID mã hóa (AES-256-GCM) kèm chỉ mục mù (HMAC-SHA256). Snapshot chứa `CardMatchKey` = HMAC theo khóa riêng của máy (`K_m = HKDF(master_key, workstation_id || ":" || key_version)`), không chứa UID gốc. Nhật ký mang UID của lần quẹt qua TLS. Admin giải mã khi xem dashboard. Phạm vi bảo vệ: chiếm root một máy không làm lộ thẻ của người không liên quan tới máy đó.
 **Nguồn:** [ADR-007](06-architecture/decisions/ADR-007-khoa-so-khop-uid.md); giải quyết PD-002.

@@ -191,10 +191,10 @@ CREATE INDEX IF NOT EXISTS idx_outbox_seq ON audit_outbox(seq);
    - Khóa bí mật `K_m` là khóa đối xứng 256-bit riêng biệt của từng máy trạm:
      `K_m = HKDF-SHA256(master_key, workstation_id || ":" || key_version)`.
    - Khóa này được Server cấp phát an toàn qua kênh mTLS Bootstrap khi duyệt máy trạm và lưu tại `/var/lib/nfc-agent/identity/k_m.key`.
-2. **Quy trình ký tại Server:**
-   - Server tổng hợp dữ liệu Snapshot dành riêng cho `workstation_id` thành chuỗi JSON chuẩn hóa (Canonical JSON — sắp xếp key theo thứ tự alphabet, loại bỏ khoảng trắng thừa).
-   - Server tính toán chữ ký số HMAC:
-     `signature = HexEncode(HMAC-SHA256(K_m, CanonicalJSON(payload)))`.
+2. **Quy trình ký tại Server (Raw-Byte Hashing):**
+   - Server sinh chuỗi byte JSON của `payload` (`raw_payload_bytes`).
+   - Server tính toán chữ ký số HMAC trực tiếp trên chuỗi byte gốc:
+     `signature = HexEncode(HMAC-SHA256(K_m, raw_payload_bytes))`.
    - Gói bản tin MQTT xuất bản vào topic `lab/workstation/{workstation_id}/snapshot` mang cấu trúc:
      ```json
      {
@@ -211,9 +211,11 @@ CREATE INDEX IF NOT EXISTS idx_outbox_seq ON audit_outbox(seq);
        }
      }
      ```
-3. **Quy trình thẩm định tại Edge Agent:**
+3. **Quy trình thẩm định tại Edge Agent (Loại trừ rủi ro Canonical JSON):**
    - Agent đọc `K_m` cục bộ.
-   - Tính toán `expected_signature = HexEncode(HMAC-SHA256(K_m, CanonicalJSON(message["payload"])))`.
+   - Trích xuất chính xác chuỗi byte thô nhận được từ MQTT của trường `payload` (hoặc toàn bộ chuỗi byte của snapshot message trừ field `signature`).
+   - **Băm trực tiếp chuỗi byte nhận được, tuyệt đối không serialize lại:** Tránh hoàn toàn sự sai khác định dạng khoảng trắng, thứ tự key giữa các thư viện JSON của các ngôn ngữ khác nhau (Node.js vs Python).
+   - Tính toán `expected_signature = HexEncode(HMAC-SHA256(K_m, raw_payload_bytes))`.
    - So khớp bằng thuật toán so sánh thời gian không đổi (`hmac.compare_digest`) để chống tấn công Timing Attack.
    - **Xử lý vi phạm:** Nếu chữ ký không khớp, Agent **từ chối nạp snapshot ngay lập tức**, ghi nhật ký sự kiện `snapshot_signature_invalid` vào `audit_outbox` và giữ nguyên snapshot hợp lệ cũ đang có.
 
