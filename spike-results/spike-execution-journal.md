@@ -990,3 +990,11 @@ Trạng thái service ngầm:
 - **Thiết lập & sự cố:** ACR122U nhận qua USB passthrough (`lsusb`: `072f:2200`) nhưng `pcscd` chưa cài và kernel đã nạp `pn533_usb`/`pn533`/`nfc`. Cài `pcscd libccid pcsc-tools python3-pyscard`, chặn ba module trong `/etc/modprobe.d/blacklist-nfc-pn533.conf`, gỡ module, khởi động lại `pcscd` → `readers: ['ACS ACR122U PICC Interface 00 00']`.
 - **Kết quả (8 lần đặt thẻ):** 5 lần đọc UID `1F0820CF` (4 byte, `SW=9000`, ATR `3B8880010073C8400000900062`), giống nhau mọi lần; 8/8 sự kiện đặt và 8/8 sự kiện nhấc được phát hiện, không trùng; 3 lần `Card is unresponsive` ngay lúc vừa đặt thẻ.
 - **Hệ quả:** Bổ sung bước chặn `pn533` vào checklist Master Image (`deployment.md` mục 3b). M1 cài đặt thử kết nối lại khi thẻ còn `PRESENT` trước khi ghi `reader_error`. S1 vẫn "đạt một phần": còn 100 lần quẹt, hotplug, thẻ 7 byte.
+
+---
+
+### 8.24. S1 Bổ sung: Rút/Cắm Nóng Đầu Đọc Với `SwipeDetector` Của Agent
+- **Mục tiêu:** Kiểm phần nối PC/SC của Agent (M1.3) với phần cứng thật, gồm phần rút/cắm nóng S1 còn thiếu.
+- **Lần 1:** 3/3 quẹt đúng; rút đầu đọc báo `ReaderUnavailable` 1 lần. Lộ 2 lỗi: chạm vội ra `reader_error` do kiểm tra thẻ còn hiện diện bằng trạng thái cache; vòng lặp quay liên tục khi không có đầu đọc (`pcscd` trả lỗi ngay). Sửa và thêm 2 test hồi quy.
+- **Lần 2:** đầu đọc vắng ~167 s → báo 1 lần, gắn lại thì tự nhận và đọc 3/3 quẹt; CPU tiến trình 0,12 s cho 235 s.
+- **Hệ quả:** S1 đạt thêm phần rút/cắm nóng; còn 100 lần quẹt và thẻ 7 byte.

@@ -67,9 +67,15 @@ Khi giải mã các byte lịch sử (Historical Bytes) theo ASCII:
 
 **Phát hiện:** khi thẻ mới chạm mép trường RF hoặc chạm quá nhanh, `pcscd` đã báo `PRESENT` nhưng kết nối thất bại. Nếu Agent coi đó là một lần quẹt lỗi thì sinh viên thấy báo lỗi và nhật ký có thêm bản ghi `error(reader_error)` cho một cú chạm vội. **Hiệu chỉnh (M1):** khi thẻ còn `PRESENT`, Agent thử kết nối lại trong một khoảng ngắn (ví dụ tối đa 3 lần cách nhau 100 ms) rồi mới ghi `reader_error`; nếu thẻ rời đi trước khi đọc được UID thì không tính là một lần quẹt (BR-007c: lần quẹt gắn với UID đã đọc được).
 
+### Rút/cắm nóng đầu đọc với `SwipeDetector` của Agent (2026-11-11)
+Chạy `nfc_agent.infra.reader` (PcscBackend + SwipeDetector) với đầu đọc thật trên VM.
+- **Lần 1:** 3/3 quẹt đọc đúng `1F0820CF`; rút đầu đọc → `ReaderUnavailable` đúng 1 lần. Lộ 2 lỗi của Agent: (a) chạm vội vẫn ra `reader_error (Card is unpowered)` vì kiểm tra "thẻ còn trên đầu đọc" dùng trạng thái cache cũ; (b) khi không có đầu đọc, `pcscd` trả lỗi ngay nên vòng lặp quay liên tục. Đã sửa: hỏi trạng thái thật với timeout 0, và chờ hết chu kỳ khi không có thiết bị.
+- **Lần 2 (sau khi sửa, 235 s):** đầu đọc vắng mặt từ đầu → `ReaderUnavailable` 1 lần; ~167 s sau gắn lại thì Agent tự nhận và đọc 3/3 quẹt `1F0820CF` mà không khởi động lại; CPU của tiến trình cả lượt chỉ **0,12 s**.
+- **Chưa đo lại sau khi sửa:** chạm vội và để thẻ nằm yên (đã có test đơn vị `tests/test_reader.py`).
+
 ## Giới hạn của Bằng chứng (Limitations of Evidence)
 - **Quy mô mẫu thử:** Thực nghiệm tập trung phân tích bản chất cơ chế trên 2 mẫu thẻ đại diện (1 thẻ contactless ngân hàng và 1 thẻ CCCD gắn chip), chưa chạy bài đo kiểm 100 lần quẹt liên tục với phôi thẻ sinh viên trường.
-- **Cơ chế đọc:** Lần đo đầu dùng polling; lần đo bổ sung 2026-11-11 đã dùng `SCardGetStatusChange` (đạt). Còn thiếu: rút/cắm nóng đầu đọc USB (hotplug) khi daemon đang chạy, và 100 lần quẹt liên tục.
+- **Cơ chế đọc:** Lần đo đầu dùng polling; lần đo bổ sung 2026-11-11 đã dùng `SCardGetStatusChange` (đạt). Rút/cắm nóng đã đạt với Agent (2026-11-11). Còn thiếu: 100 lần quẹt liên tục, thẻ 7 byte.
 - **Môi trường:** Thiết bị được chuyển tiếp qua USB Passthrough vào máy ảo KVM, chưa thử nghiệm trên môi trường bare-metal phần cứng máy trạm.
 
 ## Kết luận
