@@ -24,7 +24,7 @@
 | CROSS-CUTTING | [10-failure](docs/10-failure/failure-model.md) | Failure modes, phụ thuộc, khôi phục | ✅ bản đầu |
 | CROSS-CUTTING | [11-operations](docs/11-operations/) | [deployment](docs/11-operations/deployment.md) (Master Image, triển khai, sao lưu, **Bảng Tham Số**), [observability](docs/11-operations/observability.md) | ✅ bản đầu |
 
-**Còn chờ giảng viên xác nhận:** D-004 (cách hiểu "phân lịch"), giá trị lease `D = 24h` (ADR-001).
+**Không còn mục chờ xác nhận.** Giới hạn bằng chứng còn mở: S1 (thẻ thật), tải 40 máy kết nối lại, mất điện trên ổ vật lý.
 
 ## Đường Đọc Gợi Ý
 

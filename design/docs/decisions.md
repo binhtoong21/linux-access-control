@@ -12,7 +12,7 @@ PC tự quyết định đăng nhập dựa trên snapshot cục bộ, không h�
 ### D-002: Lease giữ ở mức định tính
 Dữ liệu cục bộ có thời hạn tin cậy (lease): quá hạn mà không đồng bộ được thì PC từ chối mọi lần quẹt thẻ, fallback vẫn dùng được. Con số cụ thể chốt ở 06.
 
-**Nguồn:** BR-006. Giá trị đã chốt (D = 24h, chờ thầy xác nhận) ở [Bảng Tham Số](11-operations/deployment.md#bảng-tham-số).
+**Nguồn:** BR-006. Giá trị đã chốt (D = 24h) ở [Bảng Tham Số](11-operations/deployment.md#bảng-tham-số).
 
 ### D-003: Phạm vi MVP và Extension
 - **Nice-to-have:** xác thực khuôn mặt (thư viện có sẵn, xử lý cục bộ).
@@ -23,7 +23,7 @@ Dữ liệu cục bộ có thời hạn tin cậy (lease): quá hạn mà không
 ### D-004: "Phân lịch" hiểu theo cách A
 "Phân lịch" trong đề bài hiểu là: gán user hoặc nhóm vào máy hoặc zone theo khung giờ lặp (Schedule ba chiều: ai + ở đâu + khi nào). Không phải phân chia slot thời gian cố định cho phòng.
 
-**Cần thầy xác nhận.**
+**Đã chốt:** đây là cách hiểu duy nhất khớp với đề bài ("phân lịch, quản lý lịch") và với mô hình Schedule ba chiều toàn bộ thiết kế dựa vào.
 
 ### D-005: Kết quả ghi nhật ký là kết quả của quyết định, không phải của đăng nhập OS
 Bản ghi nhật ký phản ánh quyết định của Agent (`LoginDecision`), được ghi bền vững cùng `LocalSession pending` trước khi trả quyền cho PAM (write-ahead). Nếu đăng nhập OS thất bại hoặc Agent sập, bản ghi vẫn giữ `granted`, không thêm bản ghi thứ hai hay đổi outcome. Trạng thái "granted mà chưa nhận phiên" suy ra bằng phép join qua `decision_id` (`entry_id`).
@@ -134,7 +134,7 @@ Mỗi thao tác ghi của Admin qua API (tạo/sửa/bật/tắt user, thẻ, nh
 **Nguồn:** [09-security/threat-model.md](09-security/threat-model.md), [11-operations/observability.md](11-operations/observability.md).
 
 ### ADR-001 (Accepted): Xác thực ở edge, dữ liệu cục bộ có thời hạn tin cậy (lease)
-Quy định ở Agent theo CR-001 từ snapshot cục bộ, không hỏi server khi quẹt thẻ. Dữ liệu cục bộ có thời hạn tin cậy (lease) được gia hạn qua phản hồi heartbeat khi `acked_version == desired_version`. Kiểm tra đồng hồ kết hợp hai hạn (UTC tuyệt đối bền vững và `CLOCK_BOOTTIME` cho phiên) kèm mốc sàn cải tiến `floor = last_sync_local_time - CLOCK_FLOOR_TOLERANCE`. Cần thầy xác nhận: giá trị lease `D` và việc tin RTC sau khi khởi động lại lúc offline.
+Quy định ở Agent theo CR-001 từ snapshot cục bộ, không hỏi server khi quẹt thẻ. Dữ liệu cục bộ có thời hạn tin cậy (lease) được gia hạn qua phản hồi heartbeat khi `acked_version == desired_version`. Kiểm tra đồng hồ kết hợp hai hạn (UTC tuyệt đối bền vững và `CLOCK_BOOTTIME` cho phiên) kèm mốc sàn cải tiến `floor = last_sync_local_time - CLOCK_FLOOR_TOLERANCE`. Đã chốt: `D = 24h`; tin RTC sau khi khởi động lại lúc offline nếu `local_time >= floor` (D-018).
 **Nguồn:** [ADR-001](06-architecture/decisions/ADR-001-xac-thuc-o-edge-va-lease.md).
 
 ### ADR-002 (Accepted): Giao thức MQTT 5, phân quyền ACL, định danh máy trạm và mTLS

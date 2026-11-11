@@ -56,7 +56,7 @@ Import Excel/CSV, tích hợp API cho hệ thống ngoài, buộc đăng xuất 
 - Đa múi giờ, đa tổ chức trên một lần triển khai.
 
 ## Giả định
-- "Phân lịch" hiểu là gán nhóm hoặc người vào máy hoặc phòng theo khung giờ; thầy có thể xác nhận lại.
+- "Phân lịch" hiểu là gán nhóm hoặc người vào máy hoặc phòng theo khung giờ (chốt ở D-004).
 - Dữ liệu cục bộ có thời hạn tin cậy (lease): quá hạn không liên lạc server thì PC ngừng cho đăng nhập bằng thẻ, chỉ còn dự phòng. Con số chọn sau.
 
 ## Tiêu chí thành công (định tính)

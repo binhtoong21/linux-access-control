@@ -103,7 +103,7 @@ Một nơi duy nhất cho mọi tham số trước đây ghi "chốt sau". Giá 
 
 | Tham số | Giá trị | Ở đâu | Lý do / ghi chú |
 |---|---|---|---|
-| Thời lượng lease `D` | 24h | Server → snapshot/lease | Server sập < 1 ngày không ảnh hưởng; thu hồi thẻ có hiệu lực chậm nhất 1 ngày trên máy offline. *Cần thầy xác nhận* (ADR-001) |
+| Thời lượng lease `D` | 24h | Server → snapshot/lease | Server sập < 1 ngày không ảnh hưởng; thu hồi thẻ có hiệu lực chậm nhất 1 ngày trên máy offline (ADR-001) |
 | `CLOCK_FLOOR_TOLERANCE` | 60s | Agent | D-018 |
 | `CLOCK_SKEW_WARN_THRESHOLD` | 60s | Agent | Chỉ cảnh báo |
 | Cảnh báo trước hết phiên `W` | 5 phút | Server → snapshot | Kịp lưu bài |
