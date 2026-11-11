@@ -451,7 +451,7 @@ erDiagram
 *Thay thế nguyên tử trong cùng transaction `BEGIN IMMEDIATE ... COMMIT` (cùng với `snapshot_meta` và cờ profile trong `local_workstation_profiles`) khi nhận snapshot có `version > snapshot_meta.version` và `key_version == agent_meta.local_key_version`:*
 - **`snapshot_users`:** `user_id TEXT PRIMARY KEY`, `external_id TEXT NOT NULL`, `full_name TEXT NOT NULL`, `status TEXT NOT NULL CHECK (status IN ('active', 'inactive'))`.
 - **`snapshot_user_groups`:** `user_id TEXT NOT NULL REFERENCES snapshot_users(user_id) ON DELETE CASCADE`, `group_id TEXT NOT NULL`, `PRIMARY KEY (user_id, group_id)`. Index `idx_edge_ug_group ON snapshot_user_groups (group_id);`.
-- **`snapshot_cards`:** `card_match_key TEXT PRIMARY KEY` (64-char hex HMAC theo `K_m`), `card_id TEXT NOT NULL UNIQUE`, `user_id TEXT NULL REFERENCES snapshot_users(user_id) ON DELETE CASCADE`, `status TEXT NOT NULL CHECK (status IN ('unbound', 'active', 'disabled'))`.
+- **`snapshot_cards`:** `card_match_key TEXT PRIMARY KEY` (64-char hex HMAC theo `K_m`), `card_id TEXT NOT NULL UNIQUE`, `user_id TEXT NOT NULL REFERENCES snapshot_users(user_id) ON DELETE CASCADE`, `status TEXT NOT NULL CHECK (status IN ('active', 'disabled'))`. Thẻ `unbound` không bao giờ có trong snapshot (chỉ gửi thẻ của user liên quan), nên tra không thấy là `unknown_card` (CR-001 bước 2).
 - **`snapshot_schedules`:**
   - `schedule_id TEXT PRIMARY KEY`
   - `subject_type TEXT NOT NULL CHECK (subject_type IN ('user', 'group'))`
