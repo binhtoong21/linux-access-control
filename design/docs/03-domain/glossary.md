@@ -19,6 +19,9 @@
 | **WorkstationProfile** | Profile tài khoản Linux dùng chung được khai báo trong allowlist của máy trạm | `student`, `labuser` |
 | **Zone** | Nhóm máy theo phòng, danh sách phẳng | Phòng Lab 301 |
 | **Agent** | Phần mềm chạy trên mỗi PC: đọc thẻ, giữ dữ liệu cục bộ, quyết định đăng nhập, báo cáo | Service daemon kèm PAM module |
+| **EnrollmentRequest** | Yêu cầu đăng ký của một máy, chờ Admin duyệt thành máy mới, cài lại máy đã có, hoặc từ chối (D-014) | PC clone xong gửi yêu cầu, Admin "Duyệt tất cả" cho Lab A |
+| **Master Image** | Ảnh đĩa mẫu đã làm sạch định danh, dùng để clone hàng loạt máy trạm (D-010) | Image Ubuntu 22.04 của Lab A |
+| **Tên máy (`mqtt_identity`)** | Tên Admin đặt khi duyệt, dùng làm định danh của máy trên kênh đồng bộ (D-019) | `ws-07` |
 
 ## Lịch (Scheduling)
 | Thuật ngữ | Định nghĩa | Ví dụ |
@@ -35,22 +38,22 @@
 | **Snapshot** | Bản dữ liệu server dựng riêng cho một máy, chỉ chứa phần liên quan tới máy đó, có số phiên bản | Snapshot v12 của PC-01 |
 | **Snapshot version** | Số tăng dần theo máy; PC không nhận bản cũ hơn bản đang dùng | v12 thay v11 |
 | **SyncState** | Phiên bản server mong muốn và phiên bản PC đã xác nhận | PC-03 đang ở v10, mong muốn v12 |
-| **Thời hạn tin cậy (Lease)** | Khoảng thời gian PC được tin dữ liệu cục bộ kể từ lần nhận snapshot gần nhất. Quá hạn thì ngừng cho vào bằng thẻ | PC mất liên lạc quá hạn → từ chối quẹt thẻ |
+| **Thời hạn tin cậy (Lease)** | Khoảng thời gian PC được tin dữ liệu cục bộ, tính theo giờ của PC từ lần nhận snapshot mới hoặc xác nhận gia hạn gần nhất (BR-006). Quá hạn thì ngừng cho vào bằng thẻ | PC mất liên lạc quá hạn → từ chối quẹt thẻ |
 | **Dữ liệu hết hạn (stale)** | Trạng thái PC chưa có snapshot hoặc quá thời hạn tin cậy hoặc đồng hồ lệch | Lý do từ chối `data_stale` |
 
 ## Đăng nhập và vận hành (Edge, Operations)
 | Thuật ngữ | Định nghĩa | Ví dụ |
 |---|---|---|
-| **LoginDecision** | Kết quả PC đánh giá một lần quẹt thẻ: cho vào, từ chối hoặc lỗi | Cho Minh vào PC-01 đến 17:00 |
+| **LoginDecision** | Kết quả PC đánh giá một lần quẹt thẻ: cho vào (`granted`), từ chối (`denied`), không làm gì vì chính người đó đang dùng máy (`noop`), hoặc lỗi (`error`) | Cho Minh vào PC-01 đến 17:00 |
 | **Session** | Từ khi người dùng đăng nhập thành công đến khi phiên kết thúc; có hạn | Phiên của Minh 08:00 đến 11:00 |
-| **Abandoned session** | Phiên kết thúc mà không có báo cáo (máy khởi động lại, bị phiên mới thay) | Mất điện khi đang đăng nhập |
+| **Abandoned session** | Phiên không kết thúc bằng đăng xuất hay hết hạn: máy khởi động lại, bị phiên mới thay (`superseded`), mất phiên OS | Mất điện khi đang đăng nhập |
 | **Heartbeat** | Tín hiệu định kỳ PC gửi để báo còn hoạt động, kèm BootId và phiên bản dữ liệu | |
 | **Online / Offline** | Trạng thái kết nối từ heartbeat. "Đang dùng" suy ra từ Session active | |
 | **BootId** | Định danh một lần khởi động máy | boot_id đổi → máy đã reboot |
 | **Audit Log** | Nhật ký bất biến mỗi lần quẹt thẻ, kèm ảnh chụp danh tính, máy và phiên bản dữ liệu | Thẻ lạ quẹt 2h sáng vẫn được ghi |
 | **AuditOutbox** | Hàng đợi nhật ký trên PC chờ server xác nhận | |
 | **Snapshot (ảnh chụp dữ liệu)** | Dữ liệu tại thời điểm sự kiện (tên, mã, hostname) lưu trong Audit Log | Log giữ tên Minh lúc quẹt |
-| **Fallback** | Đường đăng nhập cục bộ dự phòng, ngoài nền tảng, không tạo Session | Admin đăng nhập root khi cần |
+| **Fallback** | Đường đăng nhập cục bộ dự phòng bằng mật khẩu cho kỹ thuật viên, ngoài nền tảng, không tạo Session (BR-004, D-007) | Kỹ thuật viên đăng nhập tài khoản quản trị cục bộ khi máy `data_stale` |
 | **CardMatchKey** | Khóa so khớp thẻ trong snapshot, tính bằng HMAC của UID với khóa riêng theo máy. Snapshot không chứa UID gốc | PC tính từ UID quẹt rồi tra snapshot |
 
 > Lưu ý: "Snapshot" ở mục Đồng bộ là bản dữ liệu gửi xuống máy; "ảnh chụp" trong Audit Log là dữ liệu danh tính tại thời điểm sự kiện. Hai khái niệm khác nhau, không dùng lẫn.

@@ -365,7 +365,7 @@ erDiagram
 | `id` | `UUID` | No | `gen_random_uuid()` | Primary Key |
 | `entry_id` | `UUID` | No | — | `UNIQUE`, loại trùng khi máy gửi lại (XINV-006) |
 | `workstation_id` | `UUID` | No | — | FK → `workstations(id)` |
-| `kind` | `VARCHAR(32)` | No | — | `CHECK (kind IN ('snapshot_signature_invalid', 'edge_db_recovered', 'key_version_mismatch'))` |
+| `kind` | `VARCHAR(32)` | No | — | `CHECK (kind IN ('snapshot_signature_invalid', 'edge_db_recovered', 'key_version_mismatch', 'teardown_failed_stuck_resource'))` |
 | `detail` | `JSONB` | Yes | `NULL` | Ví dụ `{"lost_outbox_entries": 3}` |
 | `occurred_at` | `TIMESTAMPTZ` | No | — | Giờ của máy |
 | `received_at` | `TIMESTAMPTZ` | No | `now()` | |
@@ -504,7 +504,7 @@ erDiagram
 | `outbox_seq` | `INTEGER` | No | `AUTOINCREMENT` | `INTEGER PRIMARY KEY AUTOINCREMENT` (**bắt buộc `AUTOINCREMENT`** để ngăn tái sử dụng số sau khi xóa hết lô, bảo toàn thứ tự lũy tiến Cumulative ACK) |
 | `entry_id` | `TEXT` | No | — | UUID v4 `UNIQUE` |
 | `occurred_at` | `REAL` | No | — | UTC epoch seconds |
-| `event_type` | `TEXT` | No | — | `CHECK (event_type IN ('swipe_decision', 'session_started', 'session_ended', 'security_alert'))` (`security_alert` gồm `snapshot_signature_invalid`, `edge_db_recovered`) |
+| `event_type` | `TEXT` | No | — | `CHECK (event_type IN ('swipe_decision', 'session_started', 'session_ended', 'security_alert'))` (`security_alert` gồm `snapshot_signature_invalid`, `edge_db_recovered`, `key_version_mismatch`, `teardown_failed_stuck_resource`) |
 | `payload_json` | `TEXT` | No | — | JSON chi tiết gửi lên MQTT `.../outbox` |
 | `created_at` | `REAL` | No | — | Thời điểm ghi đĩa |
 

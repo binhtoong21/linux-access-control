@@ -74,7 +74,7 @@ Không gửi email/chat trong MVP (cảnh báo chủ động thuộc Extension, 
 | `ClockInvalid` / lệch giờ | Cờ đồng hồ | Trung bình | Sửa giờ / pin CMOS / NTP (`failure-model.md` E7) |
 | Đồng bộ kẹt | `stuck_sync` | Trung bình | Xem `last_apply_error`, log Agent |
 | Mục nhật ký lỗi | `ingest_rejects` > 0 | Thấp | Xem nguyên văn, đánh dấu đã xử lý |
-| Cảnh báo an ninh | `workstation_alerts` mới | Cao | `snapshot_signature_invalid`: kiểm tra broker; `edge_db_recovered`: xem số mục mất |
+| Cảnh báo từ máy | `workstation_alerts` mới | Cao | `snapshot_signature_invalid`: kiểm tra broker; `edge_db_recovered`: xem số mục mất; `teardown_failed_stuck_resource`: kiểm tra máy (I/O kẹt), khởi động lại máy |
 | CRL sắp hết hạn | < 30 ngày | Cao | Khởi động lại Server / chạy job CRL (S9) |
 | Phiên quá hạn chưa kết thúc | `overdue_session` | Trung bình | Agent có thể treo: kiểm tra máy |
 

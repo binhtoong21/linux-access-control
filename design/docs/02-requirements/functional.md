@@ -81,7 +81,8 @@
 |----|---------|----------|-------|-------|
 | FR-080 | Admin đăng nhập dashboard | Must | MVP | Tài khoản đầu tiên tạo khi cài server |
 | FR-081 | REST API cho mọi chức năng quản lý; dashboard là một client của API | Must | MVP | |
-| FR-082 | Tài khoản quản trị: tạo, vô hiệu hóa | Should | MVP | Một vai trò duy nhất |
+| FR-082 | Tài khoản quản trị: tạo, vô hiệu hóa | Should | MVP | Một vai trò duy nhất; không vô hiệu hóa được admin hoạt động cuối cùng (INV-016) |
+| FR-083 | Ghi và xem nhật ký thao tác của Admin (ai, lúc nào, sửa gì) | Should | MVP | D-020; chỉ ghi thêm |
 
 ## Extension (đã hạ xuống, giữ để mở rộng sau)
 | Nhóm | FR cũ | Ghi chú |
@@ -90,7 +91,7 @@
 | Tích hợp ngoài | FR-082, 083, 092 | API client, webhook, vai trò Api_* |
 | Thu hồi nâng cao | FR-050, FR-102 | Buộc đăng xuất khi thu hồi thẻ/user |
 | Điều khiển từ xa | FR-051 đến 054 | Lock, restart, shutdown, thông báo |
-| An ninh nâng cao | FR-101, 043, 063, 096 | Chống dò thẻ (sẽ ở agent), cảnh báo, nhật ký thao tác admin, thu hồi định danh máy |
+| An ninh nâng cao | FR-101, 043, 063, 096 | Chống dò thẻ (sẽ ở agent), cảnh báo chủ động (email/chat). *Đã đưa vào MVP:* nhật ký thao tác admin (FR-083, D-020), thu hồi định danh máy (BR-018d, D-014) |
 | Vận hành | FR-006, 007, 044 | Idle, gia hạn phiên, room map |
 | Bỏ hẳn | FR-062, 070, 071 | Thống kê, kiểm kê phần cứng |
 

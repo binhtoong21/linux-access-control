@@ -185,7 +185,7 @@ Quy tắc: `card_uid = null` khi không đọc được UID (`error`); `user`, `
 ```json
 { "payload": { "kind": "edge_db_recovered", "detail": {"lost_outbox_entries": 3} } }
 ```
-`kind` ∈ `snapshot_signature_invalid`, `edge_db_recovered`, `key_version_mismatch`.
+`kind` ∈ `snapshot_signature_invalid`, `edge_db_recovered`, `key_version_mismatch`, `teardown_failed_stuck_resource` (ADR-008: phiên cũ không dọn được sau 5s). Tên `security_alert` giữ cho gọn; thực chất là "cảnh báo từ máy cần Admin xem".
 
 **Xử lý phía Server (D-015):** mỗi mục áp dụng trong một savepoint riêng; mục trùng `entry_id` bỏ qua; mục không áp dụng được vào `ingest_rejects`; lô luôn được ACK đến `to_seq`. `session_ended` thay kết quả suy luận đúng một lần; `session_started` khi máy còn phiên `active` cũ thì phiên cũ được suy luận kết thúc trước.
 

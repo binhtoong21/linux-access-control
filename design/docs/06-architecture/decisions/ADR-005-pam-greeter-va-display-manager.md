@@ -158,7 +158,9 @@ Giao diện đăng nhập chuyên dụng cho phòng lab (`/usr/local/bin/lab_gre
    - Khi quẹt thẻ không được cấp quyền, Agent bắn sự kiện `denied` kèm mã lý do chuẩn hóa:
      * `user_inactive`: *"Tài khoản sinh viên đang bị tạm khóa hoặc thôi học!"*
      * `card_disabled`: *"Thẻ sinh viên đã bị vô hiệu hóa hoặc báo mất!"*
-     * `schedule_mismatch`: *"Bạn không có ca học hợp lệ trong khung giờ này!"*
+     * `unknown_card`: *"Thẻ chưa có trong dữ liệu của máy này!"*
+     * `no_schedule`: *"Bạn không có lịch sử dụng máy này!"*
+     * `out_of_schedule`: *"Bạn không có ca học hợp lệ trong khung giờ này!"*
      * `profile_disabled`: *"Môi trường học tập (profile OS) đang tạm đóng!"*
      * `profile_not_found`: *"Không tìm thấy cấu hình môi trường máy trạm!"*
      * `ambiguous_profile`: *"Lịch học bị xung đột môi trường máy trạm!"*

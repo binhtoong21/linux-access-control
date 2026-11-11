@@ -101,7 +101,7 @@ flowchart TD
    - Agent kích hoạt chế độ retry thăm dò tối đa **2 lần** (mỗi lần 1.0 giây, mở rộng trần lên tối đa **5.0s**).
    - Nếu sau 5.0s tài nguyên vẫn bị kẹt (ví dụ kẹt I/O không thể ngắt - uninterruptible sleep `D state` do lỗi ổ cứng hoặc NFS mount):
      * Agent chính thức hủy bỏ yêu cầu quẹt thẻ (`staged_auth = null`).
-     * Ghi nhật ký sự cố nghiêm trọng `teardown_failed_stuck_resource` vào `audit_outbox`.
+     * Ghi sự kiện cảnh báo `security_alert(kind = teardown_failed_stuck_resource)` vào `audit_outbox` (Server lưu ở `workstation_alerts`, `08-api/events.md` §3.3). Bản ghi `granted` của lần quẹt giữ nguyên (D-005); phiên `pending` chuyển `discarded`.
      * Greeter hiển thị cảnh báo đỏ: *"Máy trạm gặp sự cố giải phóng tài nguyên. Vui lòng liên hệ Kỹ thuật viên!"*.
 5. **Cơ sở Thực nghiệm & Bằng chứng Hoàn chỉnh (Spike S7 & S7b):**
    - *Kết quả tầng kernel (Spike S7):* 20 chu kỳ `systemd-run --scope` dưới tải CPU 100% ghi nhận dọn cgroup trung bình **105.8 ms** (tối đa **165.0 ms**), nhưng chưa kích hoạt GNOME/Xorg thật và `0/20` đi qua Pha 2 (`SIGKILL`).

@@ -130,5 +130,5 @@ Tham số (đã chốt giá trị mặc định tại [Bảng Tham Số](../../1
 
 - **Đồng hồ chạy tới khi offline sau reboot** không bị phát hiện: người có quyền chỉnh BIOS có thể vào ca sớm hơn, chỉ trong phạm vi quyền sẵn có trong snapshot và trước `trusted_until`. Giảm thiểu: khuyến nghị đặt mật khẩu BIOS (11-operations); tùy chọn cờ `clock_anomaly` khi nạp nhật ký (`occurred_at` ở tương lai so với `received_at`, hoặc không đơn điệu theo `outbox_seq`).
 - **Chọn `D` sai:** quá ngắn thì server sập là thẻ ngừng dùng được; quá dài thì thu hồi chậm. Cần xin ý kiến thầy trước khi chốt.
-- **Phản hồi gia hạn giả** (broker bị chiếm) kéo dài lease. Giảm thiểu: TLS và ACL theo máy (ADR-002); việc ký snapshot và phản hồi xét ở ADR-003.
+- **Phản hồi gia hạn giả hoặc phát lại** (broker bị chiếm) kéo dài lease. Đã xử lý: lease ký HMAC theo `K_m` (ADR-003) và phải nhắc lại `lease_nonce` vừa gửi (D-018). Ghi chú cũ: TLS và ACL theo máy (ADR-002); việc ký snapshot và phản hồi xét ở ADR-003.
 - **Lỗi reconcile hoặc SyncState** làm máy tụt phiên bản vĩnh viễn nên không bao giờ được gia hạn. Giảm thiểu: trạng thái `Stuck` và `last_apply_error` trong heartbeat hiện lên dashboard.

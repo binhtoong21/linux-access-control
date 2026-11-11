@@ -51,7 +51,7 @@ Quản lý danh tính người dùng, nhóm, liên kết thẻ và tài khoản 
 ### Device
 Cấu hình tĩnh của máy trạm, phân nhóm theo zone, đăng ký agent, danh mục allowlist profile tài khoản Linux dùng chung.
 - Entities: EnrollmentRequest, Workstation, WorkstationProfile, Zone.
-- Events phát: `WorkstationEnrollmentRequested`, `WorkstationEnrollmentApproved`, `WorkstationZoneChanged`, `ZoneDeleted`, `WorkstationProfileConfigured`.
+- Events phát: `WorkstationEnrollmentRequested`, `WorkstationEnrollmentApproved`, `WorkstationZoneChanged`, `ZoneDeleted`, `WorkstationProfileConfigured`, `WorkstationDisabled`.
 
 ### Scheduling
 Định nghĩa lịch: ai được dùng máy nào, khi nào, vào profile nào.

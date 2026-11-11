@@ -143,7 +143,7 @@ UID chỉ đi vào API, không bao giờ được trả ra trong danh sách; ch�
 | GET | `/ingest-rejects` | Mục nhật ký không áp dụng được (D-015) | `?workstation_id=`, `?resolved=false` | 200 trang |
 | POST | `/ingest-rejects/{id}/resolve` | Đánh dấu đã xem | `{note?}` | 200 |
 | GET | `/admin-audit-logs` | Nhật ký thao tác Admin (D-020) | `?admin_id=`, `?entity_type=`, `?entity_id=`, `?from=`, `?to=` | 200 trang |
-| GET | `/workstation-alerts` | Cảnh báo an ninh từ máy (`snapshot_signature_invalid`, `edge_db_recovered`, `key_version_mismatch`) | `?workstation_id=`, `?from=` | 200 trang |
+| GET | `/workstation-alerts` | Cảnh báo từ máy (`snapshot_signature_invalid`, `edge_db_recovered`, `key_version_mismatch`, `teardown_failed_stuck_resource`) | `?workstation_id=`, `?from=` | 200 trang |
 
 `occurred_at` là giờ của máy trạm; Dashboard hiển thị kèm `received_at` để thấy bản ghi đến muộn hoặc máy lệch giờ.
 

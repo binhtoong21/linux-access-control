@@ -224,6 +224,7 @@ Không xóa User, Group, Workstation, Zone nếu còn Schedule tham chiếu.
 | WorkstationProfilesDiscovered | Device | Agent báo cáo danh mục profile OS phát hiện trên máy trạm | Device, Operations, Distribution |
 | WorkstationProfileConfigured | Device | Admin cấu hình bật/tắt profile hoặc chọn profile mặc định | Distribution |
 | WorkstationZoneChanged, ZoneDeleted | Device | Đổi zone của máy, xóa zone | Distribution |
+| WorkstationDisabled | Device | Admin vô hiệu hóa máy (credential bị thu hồi, D-014) | Device (thu hồi chứng chỉ), Operations |
 | ScheduleCreated, ScheduleUpdated, ScheduleEnabled, ScheduleDisabled, ScheduleDeleted | Scheduling | Thao tác lịch | Distribution |
 | SnapshotPublished | Distribution | Dựng xong snapshot mới | Edge (qua MQTT) |
 | SnapshotApplied | Edge | PC dùng bản mới | Distribution (cập nhật SyncState) |
