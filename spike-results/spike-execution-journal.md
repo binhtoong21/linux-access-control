@@ -933,3 +933,17 @@ Trạng thái service ngầm:
   - Ghi nhận khuyến nghị gỡ/tắt `snapd-desktop-integration` trong Master Image phòng lab (ADR-004).
   - Sửa lỗi logic đếm crash trong `lab-greeter-wrapper.sh` của **ADR-005** (chỉ ghi nhận crash khi exit code khác `0`, xóa log khi thoát sạch `0` để tránh kích hoạt fallback nhầm sau 3 lần đăng nhập bình thường trong 60 giây).
   - **Chi tiết báo cáo:** Xem [s7b-teardown-gnome-e2e.md](s7b-teardown-gnome-e2e.md).
+
+
+---
+
+### 8.19. Thực nghiệm Spike S8: Ed25519 CSR, MQTT 5 mTLS ACL & PostgreSQL Transaction trên Node.js
+- **Mục tiêu:** Chứng minh nền tảng Node.js cho Server ([ADR-006](../design/docs/06-architecture/decisions/ADR-006-ngon-ngu-va-techstack.md)) qua 3 bài test trong 0.5 ngày: ký cấp Client Cert từ Ed25519 CSR + khớp HKDF/HMAC với Python; `mqtt.js` kết nối MQTT 5 mTLS (`8883`) + Mosquitto ACL `%u`; và giao dịch nguyên tử PostgreSQL (`BEGIN/COMMIT/ROLLBACK`).
+- **Môi trường & Khắc phục thiết lập:** Ubuntu 22.04 LTS, Node.js `v20.20.2` (cài từ NodeSource do `apt` mặc định là bản cũ), Mosquitto `2.0.11`, PostgreSQL `14.24`. Hai điểm kỹ thuật thực tế rút ra khi chạy:
+  1. `@peculiar/x509` sử dụng `tsyringe` bên dưới nên khi chạy script Node lẻ ngoài NestJS cần cài và `import 'reflect-metadata'` đầu file.
+  2. Thư mục cert/ACL cho Mosquitto phải đặt ngoài `/home/<user>` (`0750`), ví dụ `/etc/mosquitto/s8/` (`0755`, key `0640 root:mosquitto`) nếu không daemon gặp lỗi quyền `status=13`.
+- **Kết quả đo (Đạt 3/3):**
+  - **Test 1:** `@peculiar/x509` xác thực thành công CSR `Ed25519` (`CN=ws-test-01`, `Valid: true`), ký cấp `client-issued.crt` bằng CA P-256, và `HKDF+HMAC` trùng khớp hoàn toàn giữa Node.js (`crypto.hkdfSync`/`createHmac`) và Python 3 (`HKDF+HMAC Parity Node vs Python: true`).
+  - **Test 2:** `mqtt.js` MQTT 5 mTLS dùng cert Ed25519 kết nối thành công cổng `8883`; `ws-test-01` nhận đủ tin `ws-test-01/snapshot` kèm `userProperties.signature = 'sig-ok-42'` và **nhận 0 bản tin rò rỉ** từ `ws-other-99/snapshot`; mọi `PUBLISH` trái phép vào `ws-test-01/snapshot` và `ws-other-99/hello` đều bị chặn ngay với mã lỗi MQTT 5 **`135` (`0x87 Not Authorized`)**. Đồng thời phát hiện thực tế: Mosquitto `acl_file` (`pattern read ...`) chấp nhận `SUBACK (qos: 1)` và lọc chặn ở khâu chuyển phát (egress), không trả `0x87` tại `SUBACK` như tài liệu ADR-002 ghi nhận trước đó -> đã cập nhật làm rõ tại **ADR-002**.
+  - **Test 3:** Giao dịch `pg` (`BEGIN ... COMMIT` + lỗi giả lập `ROLLBACK`) cho kết quả sạch `schedules=1, outbox_events=1`.
+- **Hệ quả Kiến trúc:** Chính thức nâng cấp **ADR-006** từ `Proposed` lên `Accepted`. Chi tiết xem [s8-server-crypto-mtls-pg.md](s8-server-crypto-mtls-pg.md).

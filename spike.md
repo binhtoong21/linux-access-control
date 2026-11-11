@@ -20,7 +20,7 @@
 | S6 | Walking skeleton | 3 ngày | Tích hợp | ✅ Đạt |
 | S7 | Teardown liên tiếp cùng UID & Linger (Đạt một phần cgroup) | 1 ngày | Cao (chốt chặn ADR-004) | ⚠️ Đạt một phần |
 | S7b | Teardown thật qua GNOME/LightDM & SIGTERM Trap | 1 ngày | Cao (xác nhận ADR-004/008) | ✅ Đạt (20/20) |
-| S8 | Kiểm chứng Mật mã, mTLS & Giao dịch Node.js | 0,5 ngày | Trung bình (xác nhận ADR-006) | ⏳ Chưa chạy |
+| S8 | Kiểm chứng Mật mã, mTLS & Giao dịch Node.js | 0,5 ngày | Trung bình (xác nhận ADR-006) | ✅ Đạt (3/3) |
 
 Nên đặt mua hoặc mượn đầu đọc ngay hôm nay vì có thời gian chờ, S1 chạy song song với S0. Trình tự S2 → S3 → S4 vì chúng phụ thuộc nhau. S5 có thể làm xen.
 
@@ -137,7 +137,8 @@ Kiểm chứng tốc độ giải phóng cgroup `user-<UID>.slice` và `/run/use
 - Dùng `mqtt.js` kết nối mTLS cổng 8883 vào Mosquitto, kiểm tra ACL `%u` lấy từ CN (`use_identity_as_username true`).
 - Giao dịch PostgreSQL nguyên tử lưu schedule và event outbox.
 **Đạt khi:** Cả 3 bài test chạy pass trong 0.5 ngày.
-**Ảnh hưởng:** Xác nhận chính thức ADR-006 lên trạng thái Accepted.
+**Kết quả (2026-11-11):** **✅ Đạt 3/3** trên Node.js `v20.20.2`, Mosquitto `2.0.11`, PostgreSQL `14.24`: (1) `@peculiar/x509` + `reflect-metadata` + `crypto.webcrypto` xác thực & ký Client Cert từ CSR Ed25519 (`Valid: true`) và `HKDF+HMAC` khớp Python 3 `100%`; (2) `mqtt.js` mTLS `8883` nhận tin có MQTT 5 `User Property`, nhận `0` tin rò rỉ từ `ws-other-99`, chặn `PUBLISH` trái phép với `135 (0x87)` (đồng thời phát hiện `acl_file` lọc `read` ở egress thay vì chặn `SUBACK` — đã hiệu chỉnh vào ADR-002); (3) giao dịch `pg` `COMMIT` + `ROLLBACK` sạch `schedules=1, outbox_events=1`. Xem [spike-results/s8-server-crypto-mtls-pg.md](spike-results/s8-server-crypto-mtls-pg.md).
+**Ảnh hưởng:** Xác nhận chính thức **ADR-006** lên trạng thái `Accepted`.
 
 ## Từ kết quả spike đến ADR
 

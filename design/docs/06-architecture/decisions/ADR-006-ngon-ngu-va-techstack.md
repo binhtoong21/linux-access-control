@@ -4,7 +4,7 @@
 
 | Field | Value |
 |---|---|
-| **Status** | Proposed |
+| **Status** | Accepted |
 | **Date** | 2026-11-11 |
 | **Deciders** | Nhóm tác giả ĐATN & Giảng viên hướng dẫn |
 | **Supersedes** | Không |
@@ -27,7 +27,7 @@ Khi đối chiếu với thực tiễn triển khai của một Đồ án Tốt 
 ## Decision Drivers
 
 - **Tối Thiểu Hóa Độ Dốc Học Tập (Cognitive Load Driver):** Giữ phần phải học mới ở mức nhỏ nhất. Không dàn trải việc học ngôn ngữ mới ở cả hai đầu, tập trung năng lượng vào xử lý các rủi ro cốt lõi tại Edge.
-- **Tái Sử Dụng Triệt Để Bằng Chứng Thực Nghiệm (Spike Reuse):** Tận dụng mã nguồn đã chạy thành công và đo đạc thực tế từ Spike S1 đến S7 (`pyscard`, Unix sockets, LightDM Greeter GTK3, SQLite WAL, cgroup teardown).
+- **Tái Sử Dụng Triệt Để Bằng Chứng Thực Nghiệm (Spike Reuse):** Tận dụng mã nguồn đã chạy thành công và đo đạc thực tế từ Spike S1 đến S8 (`pyscard`, Unix sockets, LightDM Greeter GTK3, SQLite WAL, cgroup/GNOME teardown, Node.js `@peculiar/x509`, `mqtt.js` mTLS, `pg`).
 - **Nguyên Tắc Đơn Runtime Tại Máy Trạm (Single Runtime on Edge):** Tránh việc cài cắm và duy trì nhiều môi trường thực thi (runtime) khác nhau trên cùng một máy trạm phòng lab.
 - **Khớp 1:1 Với Kiến Trúc Hexagonal / DDD:** Tầng Server có các bounded contexts rõ ràng (Identity, Device, Scheduling, Distribution, Operations), cần một framework hỗ trợ Dependency Injection và Module Pattern tự nhiên.
 - **An Toàn Mật Mã và Tính Khả Thi CA (Crypto & PKI Feasibility):** Thư viện nền tảng phải hỗ trợ đầy đủ các thuật toán mật mã chuẩn: HKDF (RFC 5869), HMAC-SHA256, AES-256-GCM và cấp phát chứng chỉ X.509 từ CSR Ed25519.
@@ -70,7 +70,7 @@ flowchart LR
 - **Lựa chọn:** **Python >= 3.10** (cho Agent Daemon và Lab Custom Greeter) kết hợp **C thuần** (cho PAM Module `pam_nfc.so`).
 - **Lý do quyết định:**
   1. *Greeter bắt buộc dùng Python/GTK:* Kết quả Spike S3b chứng minh Custom Greeter chạy trên LightDM thông qua thư viện `liblightdm-gobject-1` yêu cầu binding GTK/GObject. Sử dụng Python cho Agent bảo đảm máy trạm chỉ duy trì **duy nhất một runtime Python**, tránh việc vừa cài Python cho Greeter vừa cài runtime Go/Rust cho Agent.
-  2. *Tái cấu trúc từ bài học và mã nguồn thực nghiệm spike:* Toàn bộ logic lõi của Agent (quản lý PC/SC `pyscard`, SQLite WAL, 3 Unix domain sockets, bắt tay Greeter 1.2s, điều khiển `loginctl` và dọn cgroup) đã được viết, debug và đo đạc thực tế thành công ở S1–S7. Việc phát triển Agent chính thức là quá trình tái cấu trúc (refactoring) mã nguồn sẵn có theo Clean Architecture, không phải viết lại từ đầu.
+  2. *Tái cấu trúc từ bài học và mã nguồn thực nghiệm spike:* Toàn bộ logic lõi của Agent (quản lý PC/SC `pyscard`, SQLite WAL, 3 Unix domain sockets, bắt tay Greeter 1.2s, điều khiển `loginctl` và dọn cgroup) đã được viết, debug và đo đạc thực tế thành công ở S1–S7b. Việc phát triển Agent chính thức là quá trình tái cấu trúc (refactoring) mã nguồn sẵn có theo Clean Architecture, không phải viết lại từ đầu.
   3. *Lợi thế Go bị triệt tiêu:* Go khi gọi thư viện phần cứng `pcsclite` bắt buộc phải sử dụng `cgo`, làm mất đi ưu điểm "single static binary" và tăng độ phức tạp khi build.
   4. *Module PAM C tối giản:* Không nhúng Python vào tiến trình đăng nhập của hệ điều hành. Module PAM viết bằng C thuần (`pam_nfc.so`, chỉ ~100 dòng code, không cấp phát heap phức tạp), chỉ làm nhiệm vụ ủy quyền qua socket với độ trễ 22ms và fallback an toàn tuyệt đối (Spike S2).
 
@@ -115,11 +115,11 @@ Do hệ thống sử dụng hai ngôn ngữ khác nhau giữa Edge (Python) và 
 - Phía Server NestJS ký HMAC trực tiếp trên chuỗi byte thô của payload JSON xuất bản lên MQTT.
 - Phía Edge Python nhận gói tin MQTT sẽ **băm trực tiếp chuỗi byte thô nhận được từ đường truyền**, tuyệt đối không parse thành dict rồi serialize lại. Giải pháp này triệt tiêu hoàn toàn rủi ro sai lệch chữ ký giữa hai ngôn ngữ.
 
-### 3. Kế Hoạch Nửa Ngày Kiểm Chứng Nhanh (Half-Day Verification Spike)
-Trước khi triển khai diện rộng Server, một bài kiểm chứng nhỏ (timebox: 0.5 ngày) được thực thi độc lập trên môi trường Node.js:
-1. Viết script Node.js nhận Ed25519 CSR từ Edge và ký cấp Client Certificate mang `CN = workstation_id`.
-2. Kiểm chứng thư viện `mqtt.js` kết nối mTLS cổng 8883 vào Mosquitto, bảo đảm broker nhận diện đúng biến `%u` từ trường Common Name của chứng chỉ (`use_identity_as_username true`).
-3. Thực thi một giao dịch PostgreSQL nguyên tử lưu trữ cấu hình phân lịch kèm bản ghi sự kiện outbox (`BEGIN ... COMMIT`).
+### 3. Kết Quả Kiểm Chứng Thực Tế (Spike S8 — Đạt 3/3)
+Bài kiểm chứng thực tế trên **Node.js `v20.20.2` + Mosquitto `2.0.11` + PostgreSQL `14.24`** ([Chi tiết Spike S8](../../../../spike-results/s8-server-crypto-mtls-pg.md)) đã đạt toàn bộ 3 hạng mục:
+1. `@peculiar/x509` (kèm `import 'reflect-metadata'` do phụ thuộc `tsyringe`) + `crypto.webcrypto` xác thực chữ ký **CSR Ed25519** (`CN=ws-test-01`, `Valid: true`) và ký phát hành X.509 Client Certificate thành công mà không cần fallback OpenSSL CLI; đối khớp `crypto.hkdfSync` + `crypto.createHmac` với Python 3 (`hashlib`/`hmac`) cho kết quả trùng khớp từng byte (`Parity: true`).
+2. `mqtt.js` (MQTT v5) kết nối mTLS cổng `8883` bằng Client Cert Ed25519 qua `use_identity_as_username true` -> `%u`: nhận bản tin kèm MQTT 5 `User Property` hợp lệ, nhận **0 tin rò rỉ** từ topic máy khác (`ws-other-99/snapshot`), và mọi `PUBLISH` trái phép bị Broker từ chối với mã `135 (0x87 Not Authorized)`.
+3. Thư viện `pg` thực thi giao dịch nguyên tử PostgreSQL (`BEGIN ... COMMIT` + `ROLLBACK` khi ném lỗi) ghi `schedules` + `outbox_events` sạch sẽ (`schedules=1, outbox_events=1`).
 
 ---
 
@@ -127,7 +127,7 @@ Trước khi triển khai diện rộng Server, một bài kiểm chứng nhỏ 
 
 ### Positive
 - **Tối Ưu Tuyệt Đối Nguồn Lực ĐATN:** Không phải học Go hay Rust, toàn bộ thời gian học mới được dành trọn vẹn cho việc làm chủ Linux PAM, systemd cgroup và đầu đọc thẻ NFC.
-- **Tiến Độ Chắc Chắn:** Tận dụng toàn bộ mã nguồn của 7 Spike kỹ thuật đã kiểm chứng thành công.
+- **Tiến Độ Chắc Chắn:** Tận dụng toàn bộ mã nguồn của 8 nhóm Spike kỹ thuật (S1–S8) đã kiểm chứng thành công.
 - **Kiến Trúc Sạch Sẽ:** Phân định rõ ràng ranh giới giữa Edge Agent (hệ thống nhúng/hệ điều hành) và Server (quản trị phân tán).
 - **Trải Nghiệm Phát Triển Frontend Mượt Mà:** Sử dụng chung TypeScript giữa Dashboard và Server API.
 

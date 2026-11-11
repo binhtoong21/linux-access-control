@@ -34,7 +34,7 @@ Tài liệu này ghi nhận các quyết định kiến trúc chuẩn hóa kênh
 - **Không Cần Cấu Hình Thủ Công Tại Từng Máy (Zero-Touch Provisioning - D-010):** Kỹ thuật viên clone hàng loạt máy mà không cần ngồi gõ token hay cấu hình IP/tên máy thủ công.
 - **Bảo toàn Dữ liệu Kiểm toán (Audit Durability - INV-013, NFR-A04):** Không bao giờ làm mất hay trùng lặp bản ghi nhật ký kiểm toán khi đứt mạng hay sập nguồn.
 - **Khả năng Phục hồi Tự động & Chống Bão Mạng (Resilience & Thundering Herd Prevention - NFR-A01):** Tự động kết nối lại an toàn với độ lùi ngẫu nhiên.
-- **Dựa trên Bằng chứng Thực nghiệm (Spike S5):** Payload 500 thẻ truyền trong 1 message MQTT TLS chỉ mất < 0.01s; Mosquitto ACL phân tách read/write hoạt động ổn định với mã lỗi `0x87 Not Authorized`.
+- **Dựa trên Bằng chứng Thực nghiệm (Spike S5 & S8):** Payload 500 thẻ truyền trong 1 message MQTT TLS chỉ mất < 0.01s (S5); kết nối mTLS bằng Client Cert Ed25519 do Node.js cấp (`CN=ws-test-01` -> `%u`) cô lập hoàn toàn dữ liệu giữa các máy trạm (0 byte rò rỉ) và chặn ghi trái phép bằng mã lỗi `0x87 / 135 (Not Authorized)` (S8).
 
 ---
 
@@ -104,7 +104,9 @@ Hệ thống phân tách tuyệt đối giữa luồng ĐỌC (Subscribe) và lu
 | **Máy trạm gửi kiểm toán** | **Write-Only** (PUBLISH) | `pattern write lab/workstation/%u/outbox` | Gửi các lô bản ghi AuditLog và sự kiện phiên |
 | **Máy trạm báo trạng thái** | **Write-Only** (PUBLISH) | `pattern write lab/workstation/%u/status` | Kênh xuất bản trạng thái online và Last Will (LWT) |
 
-> **Bảo vệ an ninh:** Bất kỳ nỗ lực nào của máy trạm nhằm publish vào topic `/snapshot` hay subscribe trộm topic của máy trạm khác đều bị Mosquitto Broker từ chối ngay lập tức ở tầng giao thức với mã lỗi MQTT 5: **`0x87 (Not Authorized)`** (đã kiểm chứng tại Spike S5).
+> **Bảo vệ an ninh & Hành vi thực tế Mosquitto `acl_file` (kiểm chứng tại Spike S5 & S8):**
+> - Mọi nỗ lực `PUBLISH` trái phép của máy trạm (như tự ghi vào `/snapshot` hay ghi trộm topic máy khác) đều bị Mosquitto Broker từ chối ngay lập tức ở tầng giao thức với mã lỗi MQTT 5: **`0x87 / 135 (Not Authorized)`** (S5, S8).
+> - Đối với `SUBSCRIBE` trái phép sang máy trạm khác: khi dùng `acl_file` truyền thống (`pattern read ...`), Mosquitto chấp nhận gói `SUBACK` (`qos: 1`) nhưng **kiểm soát quyền `read` lúc chuyển phát (egress)** và âm thầm loại bỏ bản tin, bảo đảm máy trạm nhận **0 byte rò rỉ** (đã kiểm chứng thực tế bằng cert Ed25519 `CN=ws-test-01` tại Spike S8). Nếu muốn broker từ chối ngay cả gói `SUBACK` bằng mã `0x87`, có thể chuyển sang plugin `dynamic-security` của Mosquitto 2.x khi triển khai nâng cao.
 
 ---
 
