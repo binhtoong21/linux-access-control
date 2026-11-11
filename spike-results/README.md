@@ -129,7 +129,7 @@ Kiểm chứng tốc độ giải phóng cgroup `user-<UID>.slice` và `/run/use
 
 **Câu hỏi:** Khi đăng nhập thật qua Custom Greeter vào Desktop GNOME trên cùng UID `student`, có tiến trình bẫy `SIGTERM` để ép kích hoạt `kill-user -s SIGKILL`, tổng thời gian từ lúc quẹt thẻ đến khi Desktop mới nạp xong là bao nhiêu dưới tải CPU 100%?
 **Đạt khi:** 20 chu kỳ lặp lại thành công 100%, không dính lỗi treo D-Bus ~110s, đo đạc phân vị P95 độ trễ teardown thật.
-**Kết quả (2026-11-11):** **✅ Đạt 20/20** trên Ubuntu 22.04 GNOME + LightDM + `pam_nfc.so` + `lab_greeter.py` (1.2s Handshake), ép chạy Pha 2 `SIGKILL` **20/20** (`113.2`–`262.2 ms`), tổng teardown Min `2142.4 ms` | Mean `2210.8 ms` | P95/Max `2314.8 ms` (`0/20` vượt trần `3.0s`), Login -> GNOME Mean `5793 ms` (P95 `7133 ms`), Linger **5/5 (`N=5`)**, `started > decided_at` **20/20**. Phát hiện thêm nghẽn CPU của `snapd-desktop-integration` (Lần chạy 1) và sửa lỗi logic đếm crash trong `lab-greeter-wrapper.sh` (ADR-005). Xem [spike-results/s7b-teardown-gnome-e2e.md](spike-results/s7b-teardown-gnome-e2e.md).
+**Kết quả (2026-11-11):** **✅ Đạt 20/20** trên Ubuntu 22.04 GNOME + LightDM + `pam_nfc.so` + `lab_greeter.py` (1.2s Handshake), ép chạy Pha 2 `SIGKILL` **20/20** (`113.2`–`262.2 ms`), tổng teardown Min `2142.4 ms` | Mean `2210.8 ms` | P95/Max `2314.8 ms` (`0/20` vượt trần `3.0s`), Login -> GNOME Mean `5793 ms` (P95 `7133 ms`), Linger **5/5 (`N=5`)**, `started > decided_at` **20/20**. Phát hiện thêm nghẽn CPU của `snapd-desktop-integration` (Lần chạy 1) và sửa lỗi logic đếm crash trong `lab-greeter-wrapper.sh` (ADR-005). Xem [spike-results/s7b-teardown-gnome-e2e.md](s7b-teardown-gnome-e2e.md).
 **Ảnh hưởng:** Xác nhận chính thức **ADR-004** và **ADR-008** lên trạng thái `Accepted`.
 
 ## S8: Kiểm chứng Mật mã, mTLS & Giao dịch Node.js (Server Spike)
@@ -140,25 +140,25 @@ Kiểm chứng tốc độ giải phóng cgroup `user-<UID>.slice` và `/run/use
 - Dùng `mqtt.js` kết nối mTLS cổng 8883 vào Mosquitto, kiểm tra ACL `%u` lấy từ CN (`use_identity_as_username true`).
 - Giao dịch PostgreSQL nguyên tử lưu schedule và event outbox.
 **Đạt khi:** Cả 3 bài test chạy pass trong 0.5 ngày.
-**Kết quả (2026-11-11):** **✅ Đạt 3/3** trên Node.js `v20.20.2`, Mosquitto `2.0.11`, PostgreSQL `14.24`: (1) `@peculiar/x509` + `reflect-metadata` + `crypto.webcrypto` xác thực & ký Client Cert từ CSR Ed25519 (`Valid: true`) và `HKDF+HMAC` khớp Python 3 `100%`; (2) `mqtt.js` mTLS `8883` nhận tin có MQTT 5 `User Property`, nhận `0` tin rò rỉ từ `ws-other-99`, chặn `PUBLISH` trái phép với `135 (0x87)` (đồng thời phát hiện `acl_file` lọc `read` ở egress thay vì chặn `SUBACK` — đã hiệu chỉnh vào ADR-002); (3) giao dịch `pg` `COMMIT` + `ROLLBACK` sạch `schedules=1, outbox_events=1`. Xem [spike-results/s8-server-crypto-mtls-pg.md](spike-results/s8-server-crypto-mtls-pg.md).
+**Kết quả (2026-11-11):** **✅ Đạt 3/3** trên Node.js `v20.20.2`, Mosquitto `2.0.11`, PostgreSQL `14.24`: (1) `@peculiar/x509` + `reflect-metadata` + `crypto.webcrypto` xác thực & ký Client Cert từ CSR Ed25519 (`Valid: true`) và `HKDF+HMAC` khớp Python 3 `100%`; (2) `mqtt.js` mTLS `8883` nhận tin có MQTT 5 `User Property`, nhận `0` tin rò rỉ từ `ws-other-99`, chặn `PUBLISH` trái phép với `135 (0x87)` (đồng thời phát hiện `acl_file` lọc `read` ở egress thay vì chặn `SUBACK` — đã hiệu chỉnh vào ADR-002); (3) giao dịch `pg` `COMMIT` + `ROLLBACK` sạch `schedules=1, outbox_events=1`. Xem [spike-results/s8-server-crypto-mtls-pg.md](s8-server-crypto-mtls-pg.md).
 **Ảnh hưởng:** Xác nhận chính thức **ADR-006** lên trạng thái `Accepted`.
 
 ## S9: Thu hồi chứng chỉ bằng CRL (Mosquitto `crlfile`)
 
 **Câu hỏi:** Mosquitto 2.0.11 có từ chối chứng chỉ máy đã thu hồi mà vẫn nhận chứng chỉ mới cùng CN không; nạp lại CRL thế nào; có tình huống CRL làm tự khóa toàn hệ thống không?
-**Kết quả (2026-11-11):** **✅ Đạt** trên Mosquitto `2.0.11` + OpenSSL `3.0.2`: thu hồi theo serial, chứng chỉ mới cùng CN `ws-01` vẫn vào được; `SIGHUP` nạp lại CRL nhưng **không ngắt** kết nối đang mở của chứng chỉ đã thu hồi (phải khởi động lại broker); CRL **hết hạn** làm broker từ chối mọi client; **thiếu tệp** CRL thì broker không khởi động. Xem [spike-results/s9-mosquitto-crl.md](spike-results/s9-mosquitto-crl.md).
+**Kết quả (2026-11-11):** **✅ Đạt** trên Mosquitto `2.0.11` + OpenSSL `3.0.2`: thu hồi theo serial, chứng chỉ mới cùng CN `ws-01` vẫn vào được; `SIGHUP` nạp lại CRL nhưng **không ngắt** kết nối đang mở của chứng chỉ đã thu hồi (phải khởi động lại broker); CRL **hết hạn** làm broker từ chối mọi client; **thiếu tệp** CRL thì broker không khởi động. Xem [spike-results/s9-mosquitto-crl.md](s9-mosquitto-crl.md).
 **Ảnh hưởng:** Hiệu chỉnh ADR-002 §1 và D-014 điểm 5 (khởi động lại broker, CRL hạn dài + làm mới định kỳ, tệp luôn tồn tại và ghi nguyên tử).
 
 ## S10: Smoke-test wrapper greeter (ADR-005)
 
 **Câu hỏi:** `lab-greeter-wrapper.sh` có rơi về `lightdm-gtk-greeter` sau 3 crash, không đếm nhầm đăng nhập bình thường, và chuyển tiếp SIGTERM không để lại tiến trình mồ côi không?
-**Kết quả (2026-11-11):** **✅ Đạt sau khi sửa**: bản trong ADR ghi tệp đếm ở `/run` mà user `lightdm` không ghi được, nên LightDM crash lặp tới khi systemd dừng hẳn (màn hình đen, không fallback). Chuyển sang `/var/lib/lightdm`: 3 crash thì rơi về greeter chuẩn; 3 lần đăng nhập GNOME thật qua harness S7b không kích hoạt fallback, chỉ còn 1 tiến trình greeter. Xem [spike-results/s10-greeter-wrapper.md](spike-results/s10-greeter-wrapper.md).
+**Kết quả (2026-11-11):** **✅ Đạt sau khi sửa**: bản trong ADR ghi tệp đếm ở `/run` mà user `lightdm` không ghi được, nên LightDM crash lặp tới khi systemd dừng hẳn (màn hình đen, không fallback). Chuyển sang `/var/lib/lightdm`: 3 crash thì rơi về greeter chuẩn; 3 lần đăng nhập GNOME thật qua harness S7b không kích hoạt fallback, chỉ còn 1 tiến trình greeter. Xem [spike-results/s10-greeter-wrapper.md](s10-greeter-wrapper.md).
 **Ảnh hưởng:** Sửa ADR-005 (đường dẫn tệp đếm, cách gắn wrapper qua `.desktop`, ràng buộc với giới hạn khởi động lại systemd); nâng ADR-005 lên `Accepted`.
 
 ## S11: Agent dưới systemd hardening (ADR-006)
 
 **Câu hỏi:** Với `ProtectSystem=strict`, `ProtectHome=read-only`, `PrivateTmp`, `ReadWritePaths` và `CapabilityBoundingSet` của ADR-006, Agent có còn mở socket cho greeter/PAM, ghi `edge.db`, gọi logind dọn phiên được không? (S6, S7b chạy không có hardening.)
-**Kết quả (2026-11-11):** **✅ Đạt sau khi sửa**: đúng như ADR-006 thì `chown` socket đẩy sự kiện cho nhóm `lightdm` bị chặn (`EPERM`), greeter không kết nối được, 0 lần đăng nhập. Thêm `CAP_CHOWN`: 3/3 chu kỳ GNOME thật đạt, teardown ≤ 2246.6 ms. Xem [spike-results/s11-agent-systemd-hardening.md](spike-results/s11-agent-systemd-hardening.md).
+**Kết quả (2026-11-11):** **✅ Đạt sau khi sửa**: đúng như ADR-006 thì `chown` socket đẩy sự kiện cho nhóm `lightdm` bị chặn (`EPERM`), greeter không kết nối được, 0 lần đăng nhập. Thêm `CAP_CHOWN`: 3/3 chu kỳ GNOME thật đạt, teardown ≤ 2246.6 ms. Xem [spike-results/s11-agent-systemd-hardening.md](s11-agent-systemd-hardening.md).
 **Ảnh hưởng:** Bổ sung `CAP_CHOWN` vào ADR-006.
 
 ## Từ kết quả spike đến ADR

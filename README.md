@@ -18,18 +18,25 @@ Hệ thống quản lý và kiểm soát truy cập phòng máy thực hành th�
 ## 📂 Cấu Trúc Repository
 
 ```text
-├── design/                 # Toàn bộ tài liệu phân tích và thiết kế hệ thống
+├── design/                 # Toàn bộ tài liệu phân tích và thiết kế hệ thống (mục lục: design/README.md)
+│   ├── README.md           # Mục lục, trạng thái từng phần, đường đọc gợi ý
+│   ├── WORKFLOW-GUIDE.md   # Quy trình viết tài liệu cùng AI
+│   ├── _templates/         # Template ADR, use case
 │   ├── docs/
 │   │   ├── 01-problem/     # Hiện trạng, bài toán, mục tiêu và phạm vi
 │   │   ├── 02-requirements/# Business Rules (BR), Functional (FR), Non-Functional (NFR)
 │   │   ├── 03-domain/      # Domain model, Glossary, Invariants, Bounded Contexts
 │   │   ├── 04-use-cases/   # Đặc tả các ca sử dụng (Use Cases)
-│   │   ├── 05-behavior/    # Biểu đồ tuần tự (Sequences) chi tiết từng luồng hoạt động
+│   │   ├── 05-behavior/    # Sequence diagrams từng luồng & state machines
 │   │   ├── 06-architecture/# Kiến trúc C4 & Quyết định Kiến trúc (ADR-001 đến ADR-008)
 │   │   ├── 07-data/        # Thiết kế CSDL (PostgreSQL & SQLite WAL)
-│   │   ├── 08-api/         # REST API & MQTT Events Specification
-│   │   └── decisions.md    # Nhật ký các quyết định kiến trúc đã chốt (D-001 đến D-013)
-├── spike-results/          # Báo cáo và kết quả thực nghiệm thực chứng (Empirical Spikes)
+│   │   ├── 08-api/         # REST API & hợp đồng bản tin MQTT
+│   │   ├── 09-security/    # Threat model, ma trận quyền, quản lý khóa
+│   │   ├── 10-failure/     # Failure modes & quy trình khôi phục
+│   │   ├── 11-operations/  # Triển khai, Master Image, Bảng Tham Số, observability
+│   │   └── decisions.md    # Nhật ký quyết định đã chốt (D-001 đến D-020)
+├── spike-results/          # Kế hoạch & kết quả thực nghiệm (Empirical Spikes)
+│   ├── README.md           # Kế hoạch, phương pháp luận và tổng hợp kết quả S0–S11
 │   ├── s1-reader-pcsc.md   # Thử nghiệm đầu đọc NFC ACR122U & chuẩn PC/SC
 │   ├── s2-pam-agent.md     # Thử nghiệm tích hợp Linux PAM module và Unix Socket IPC
 │   ├── s3-greeter-lockscreen.md # Thử nghiệm Custom LightDM Greeter và màn hình khóa
@@ -44,7 +51,6 @@ Hệ thống quản lý và kiểm soát truy cập phòng máy thực hành th�
 │   ├── s10-greeter-wrapper.md     # Smoke-test wrapper greeter trong vòng boot LightDM
 │   ├── s11-agent-systemd-hardening.md # Agent dưới systemd hardening
 │   └── spike-execution-journal.md # Nhật ký chi tiết toàn bộ chuỗi thực nghiệm S1-S11
-├── spike.md                # Kế hoạch và phương pháp luận thực hiện các spike (S0 - S11)
 ├── .gitignore              # Cấu hình bỏ qua các file tạm thời, cache và nhạy cảm
 └── README.md               # Tài liệu tổng quan dự án
 ```
@@ -53,6 +59,8 @@ Hệ thống quản lý và kiểm soát truy cập phòng máy thực hành th�
 
 ## 🚀 Tài Liệu Tham Khảo Nhanh
 
+- **Mục lục tài liệu thiết kế:** Xem [design/README.md](design/README.md)
+- **Kế hoạch & tổng hợp spike:** Xem [spike-results/README.md](spike-results/README.md)
 - **Nhật ký quyết định kiến trúc:** Xem [design/docs/decisions.md](design/docs/decisions.md)
 - **Mục lục ADR kiến trúc:** Xem [design/docs/06-architecture/decisions/README.md](design/docs/06-architecture/decisions/README.md)
 - **Nhật ký thực nghiệm chi tiết (S1-S11):** Xem [spike-results/spike-execution-journal.md](spike-results/spike-execution-journal.md)

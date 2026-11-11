@@ -12,7 +12,7 @@
 
 ## 1. Câu Hỏi Cần Chứng Minh
 
-Theo [spike.md](../spike.md) và [ADR-006](../design/docs/06-architecture/decisions/ADR-006-ngon-ngu-va-techstack.md):
+Theo [kế hoạch spike](README.md) và [ADR-006](../design/docs/06-architecture/decisions/ADR-006-ngon-ngu-va-techstack.md):
 > Nền tảng **Node.js / NestJS** có thể:
 > 1. Xác thực và ký cấp Client Certificate (`CN = workstation_id`) từ **CSR Ed25519** của Edge, đồng thời khớp HKDF/HMAC-SHA256 theo chuỗi byte thô với Python 3?
 > 2. Dùng thư viện **`mqtt.js`** kết nối **MQTT 5 mTLS (cổng 8883)** vào Mosquitto với `use_identity_as_username true`, thực thi phân quyền ACL theo `%u` và truyền nhận `User Properties`?

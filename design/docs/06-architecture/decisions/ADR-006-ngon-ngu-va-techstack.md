@@ -18,7 +18,7 @@ Hệ thống quản lý và xác thực phòng máy trạm bao gồm 3 phân vù
 2. **Server API & Distribution Service (Máy chủ trung tâm):** Xử lý nghiệp vụ quản trị, cấp phát định danh mTLS (CA), phân phối Snapshot và thu thập nhật ký kiểm toán qua MQTT 5 Broker, lưu trữ trên cơ sở dữ liệu quan hệ PostgreSQL.
 3. **Web Dashboard (Giao diện quản trị):** Cung cấp bảng điều khiển cho Quản trị viên duyệt máy trạm, xếp lịch học và theo dõi audit log thời gian thực.
 
-Trong các tài liệu ban đầu và `spike.md`, quyết định về ngôn ngữ được tạm gác lại ("quyết ở ADR sau"), README ghi nhận tùy chọn "Python/Rust", còn tài liệu kiến trúc `containers.md` đề xuất "FastAPI / Go". 
+Trong các tài liệu ban đầu và kế hoạch spike (`spike-results/README.md`), quyết định về ngôn ngữ được tạm gác lại ("quyết ở ADR sau"), README ghi nhận tùy chọn "Python/Rust", còn tài liệu kiến trúc `containers.md` đề xuất "FastAPI / Go". 
 
 Khi đối chiếu với thực tiễn triển khai của một Đồ án Tốt nghiệp (thời gian có hạn, nguồn lực cá nhân), kiến trúc sư hệ thống phải đối mặt với bài toán tối ưu hóa chi phí học tập: **Làm sao để giữ phần công nghệ phải học mới ở mức nhỏ nhất, dồn toàn bộ ngân sách thời gian vào vùng rủi ro kỹ thuật cao nhất của đề tài (tầng Edge Authentication)?**
 

@@ -4,26 +4,7 @@
 
 ## Quy ước
 
-- Đặt tên file: `SEQ-XXX-ten-sequence.md`
-- Sử dụng Mermaid `sequenceDiagram` syntax
-- Mỗi file chứa 1 sequence diagram kèm mô tả
-
-## Template
-
-```mermaid
-sequenceDiagram
-    actor User
-    participant API
-    participant Service
-    participant DB
-
-    User->>API: Request
-    API->>Service: Process
-    Service->>DB: Query
-    DB-->>Service: Result
-    Service-->>API: Response
-    API-->>User: Result
-```
+Mỗi file một luồng, tên file theo nội dung (`swipe-login.md`…), sơ đồ Mermaid `sequenceDiagram` kèm Nguyên tắc, Ngoại lệ, Tham số. Máy trạng thái `LocalSession` nằm trong `session-expiry.md`, trạng thái tin cậy của Agent trong `lease-expiration.md`; các máy trạng thái còn lại ở [`../state-machines/`](../state-machines/README.md).
 
 ## Sequence Index
 

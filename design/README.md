@@ -1,56 +1,41 @@
-# 📐 Design Documentation
+# 📐 Tài Liệu Thiết Kế
 
-> Bộ tài liệu thiết kế hệ thống — portable, drop vào root bất kỳ dự án nào.
+> Thiết kế hệ thống đăng nhập máy trạm Linux bằng thẻ NFC theo mô hình edge authentication. Tổng quan dự án: [README gốc](../README.md). Bằng chứng thực nghiệm: [spike-results/](../spike-results/README.md).
 
-## Cấu trúc Hệ thống (The 4 Layers)
+## Nguồn Sự Thật
 
-Tài liệu được chia thành 4 tầng và các khía cạnh cross-cutting, trả lời các câu hỏi khác nhau:
+- **[docs/decisions.md](docs/decisions.md)**: nhật ký quyết định D-001…; quyết định mới hơn thắng tài liệu cũ hơn.
+- **[docs/06-architecture/decisions/](docs/06-architecture/decisions/README.md)**: ADR-001…008, đều đã `Accepted`, mỗi ADR bám một hoặc nhiều spike.
+- Tài liệu 01–11 bên dưới; chỗ nào mâu thuẫn với hai nguồn trên thì sửa tài liệu theo quyết định.
 
-### 1. WHY (Tại sao cần hệ thống này?)
-| Section | Mô tả | Đường dẫn |
-|---------|-------|-----------|
-| **01. Problem** | Bài toán, hiện trạng, stakeholders, actors & goals | [docs/01-problem](docs/01-problem/) |
+## Mục Lục
 
-### 2. WHAT (Hệ thống là gì & phải làm được gì?)
-*Phần này phải xong trước khi bắt tay vào thiết kế kỹ thuật.*
-| Section | Mô tả | Đường dẫn |
-|---------|-------|-----------|
-| **02. Requirements** | Yêu cầu chức năng, phi chức năng, business rules | [docs/02-requirements](docs/02-requirements/) |
-| **03. Domain** | Domain model, glossary, invariants, bounded contexts | [docs/03-domain](docs/03-domain/) |
-| **04. Use Cases** | Các use-case tương tác của người dùng | [docs/04-use-cases](docs/04-use-cases/) |
+| Tầng | Phần | Nội dung | Trạng thái |
+|---|---|---|---|
+| WHY | [01-problem](docs/01-problem/) | [problem](docs/01-problem/problem.md), [as-is](docs/01-problem/as-is.md), [stakeholders](docs/01-problem/stakeholders.md) | ✅ |
+| WHAT | [02-requirements](docs/02-requirements/) | [functional](docs/02-requirements/functional.md), [non-functional](docs/02-requirements/non-functional.md), [business-rules](docs/02-requirements/business-rules.md) (BR, CR-001, VR) | ✅ |
+| WHAT | [03-domain](docs/03-domain/) | [domain-model](docs/03-domain/domain-model.md), [invariants](docs/03-domain/invariants.md), [bounded-contexts](docs/03-domain/bounded-contexts.md), [glossary](docs/03-domain/glossary.md) | ✅ |
+| WHAT | [04-use-cases](docs/04-use-cases/use-cases.md) | 10 use case, sơ đồ, truy vết | ✅ |
+| BEHAVIOR | [05-behavior](docs/05-behavior/) | [sequences/](docs/05-behavior/sequences/README.md) (6 luồng), [state-machines](docs/05-behavior/state-machines/README.md) | ✅ |
+| HOW | [06-architecture](docs/06-architecture/) | [context](docs/06-architecture/context.md), [containers](docs/06-architecture/containers.md), [components](docs/06-architecture/components.md), [dependency-rules](docs/06-architecture/dependency-rules.md), [extension-points](docs/06-architecture/extension-points.md), [ADR](docs/06-architecture/decisions/README.md) | ✅ |
+| HOW | [07-data](docs/07-data/) | [data-model](docs/07-data/data-model.md) (PostgreSQL + SQLite Edge), [migrations](docs/07-data/migrations.md) | ✅ |
+| HOW | [08-api](docs/08-api/) | [api](docs/08-api/api.md) (REST), [events](docs/08-api/events.md) (hợp đồng MQTT, domain event) | ✅ bản đầu |
+| CROSS-CUTTING | [09-security](docs/09-security/threat-model.md) | Phạm vi, tài sản, STRIDE, ma trận quyền, quản lý khóa | ✅ bản đầu |
+| CROSS-CUTTING | [10-failure](docs/10-failure/failure-model.md) | Failure modes, phụ thuộc, khôi phục | ✅ bản đầu |
+| CROSS-CUTTING | [11-operations](docs/11-operations/) | [deployment](docs/11-operations/deployment.md) (Master Image, triển khai, sao lưu, **Bảng Tham Số**), [observability](docs/11-operations/observability.md) | ✅ bản đầu |
 
-### 3. WHEN / BEHAVIOR (Hệ thống vận hành như thế nào theo thời gian?)
-| Section | Mô tả | Đường dẫn |
-|---------|-------|-----------|
-| **05. Behavior** | Workflows, sequence diagrams, state machines | [docs/05-behavior](docs/05-behavior/) |
+**Còn chờ giảng viên xác nhận:** D-004 (cách hiểu "phân lịch"), giá trị lease `D = 24h` (ADR-001).
 
-### 4. HOW (Thiết kế kỹ thuật ra sao?)
-| Section | Mô tả | Đường dẫn |
-|---------|-------|-----------|
-| **06. Architecture** | C4 model, ADRs, dependency rules, extension points | [docs/06-architecture](docs/06-architecture/) |
-| **07. Data** | Data model, database schema, migrations | [docs/07-data](docs/07-data/) |
-| **08. API** | API contracts, events, idempotency | [docs/08-api](docs/08-api/) |
+## Đường Đọc Gợi Ý
 
-### 5. CROSS-CUTTING (Các khía cạnh phi chức năng khác)
-| Section | Mô tả | Đường dẫn |
-|---------|-------|-----------|
-| **09. Security** | Threat model, permission matrix (RBAC) | [docs/09-security](docs/09-security/) |
-| **10. Failure** | Failure modes, resilience (circuit breaker, retry) | [docs/10-failure](docs/10-failure/) |
-| **11. Operations** | Observability (logs, metrics, traces, audit), deployment | [docs/11-operations](docs/11-operations/) |
+1. **Hiểu bài toán:** `problem.md` → `business-rules.md` (CR-001 là luật đánh giá quẹt thẻ) → `domain-model.md`.
+2. **Hiểu một lần quẹt thẻ:** `swipe-login.md` → ADR-001 (edge + lease) → ADR-005 (PAM, greeter) → ADR-008 (vòng đời phiên).
+3. **Hiểu đồng bộ:** `schedule-sync.md`, `reconnect.md` → ADR-002 (MQTT) → ADR-003 (lưu trữ, chữ ký) → `events.md`.
+4. **Hiểu vận hành:** `deployment.md` → `failure-model.md` → `threat-model.md`.
 
-## Cách sử dụng
+## Quy Ước
 
-> **ĐỌC TRƯỚC TIÊN:** Xem file [WORKFLOW-GUIDE.md](WORKFLOW-GUIDE.md) để hiểu quy trình làm việc phối hợp giữa Con người (bạn) và AI khi điền các tài liệu này.
-
-1. Copy thư mục `design/` vào root dự án
-2. Mở file bạn cần thiết kế, gạch đầu dòng thô các ý tưởng của bạn (nháp).
-3. Đưa cho AI format lại, đề xuất bổ sung, phân tích rủi ro.
-4. Bạn review, chốt quyết định và lưu bản cuối cùng.
-5. Xóa các hướng dẫn placeholder (bắt đầu bằng dấu `>`) khi đã điền nội dung thực tế.
-## Templates
-
-| Template | Mục đích | Đường dẫn |
-|----------|----------|-----------|
-| Use Case | Mô tả một use-case | [_templates/use-case.md](_templates/use-case.md) |
-| ADR | Ghi nhận quyết định kiến trúc | [_templates/adr.md](_templates/adr.md) |
-| Workflow | Mô tả một workflow | [_templates/workflow.md](_templates/workflow.md) |
+- `03-domain` không chứa bảng, khóa, cột; những thứ đó thuộc `07-data`.
+- Mọi con số tham số nằm ở một chỗ: [Bảng Tham Số](docs/11-operations/deployment.md#bảng-tham-số).
+- Mã tham chiếu: `BR-`, `CR-`, `VR-` (quy tắc), `FR-`, `NFR-` (yêu cầu), `INV-`, `XINV-` (bất biến), `UC-` (use case), `D-` (quyết định), `ADR-`, `S0…S11` (spike).
+- Quy trình viết tài liệu cùng AI: [WORKFLOW-GUIDE.md](WORKFLOW-GUIDE.md). Template: [ADR](_templates/adr.md), [use case](_templates/use-case.md).
