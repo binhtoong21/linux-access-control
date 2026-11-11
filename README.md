@@ -20,7 +20,6 @@ Hệ thống quản lý và kiểm soát truy cập phòng máy thực hành th�
 ```text
 ├── design/                 # Toàn bộ tài liệu phân tích và thiết kế hệ thống (mục lục: design/README.md)
 │   ├── README.md           # Mục lục, trạng thái từng phần, đường đọc gợi ý
-│   ├── WORKFLOW-GUIDE.md   # Quy trình viết tài liệu cùng AI
 │   ├── _templates/         # Template ADR, use case
 │   ├── docs/
 │   │   ├── 01-problem/     # Hiện trạng, bài toán, mục tiêu và phạm vi

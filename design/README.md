@@ -38,4 +38,4 @@
 - `03-domain` không chứa bảng, khóa, cột; những thứ đó thuộc `07-data`.
 - Mọi con số tham số nằm ở một chỗ: [Bảng Tham Số](docs/11-operations/deployment.md#bảng-tham-số).
 - Mã tham chiếu: `BR-`, `CR-`, `VR-` (quy tắc), `FR-`, `NFR-` (yêu cầu), `INV-`, `XINV-` (bất biến), `UC-` (use case), `D-` (quyết định), `ADR-`, `S0…S11` (spike).
-- Quy trình viết tài liệu cùng AI: [WORKFLOW-GUIDE.md](WORKFLOW-GUIDE.md). Template: [ADR](_templates/adr.md), [use case](_templates/use-case.md).
+- Template: [ADR](_templates/adr.md), [use case](_templates/use-case.md).
