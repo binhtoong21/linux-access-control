@@ -107,7 +107,7 @@ Chọn **Option 4** với hai quyết định con **gia hạn qua phản hồi h
 7. **Lease chỉ chặn lần quẹt mới.** Phiên đang chạy không bị ảnh hưởng (BR-006) và kết thúc theo hạn riêng (BR-009). Thu hồi không buộc đăng xuất (BR-010).
 8. **Đường dự phòng độc lập với lease** (BR-004).
 
-Tham số chốt sau, theo thứ tự ưu tiên: `D` (gợi ý bắt đầu từ 24 giờ, cân giữa thời gian server được phép sập và cửa sổ thu hồi trên máy offline), dung sai mốc sàn đồng hồ `CLOCK_FLOOR_TOLERANCE` (60s), ngưỡng cảnh báo lệch đồng hồ `CLOCK_SKEW_WARN_THRESHOLD` (60s), chu kỳ heartbeat và số lần bỏ lỡ.
+Tham số (đã chốt giá trị mặc định tại [Bảng Tham Số](../../11-operations/deployment.md#bảng-tham-số); `D` vẫn chờ thầy xác nhận), theo thứ tự ưu tiên: `D` (gợi ý bắt đầu từ 24 giờ, cân giữa thời gian server được phép sập và cửa sổ thu hồi trên máy offline), dung sai mốc sàn đồng hồ `CLOCK_FLOOR_TOLERANCE` (60s), ngưỡng cảnh báo lệch đồng hồ `CLOCK_SKEW_WARN_THRESHOLD` (60s), chu kỳ heartbeat và số lần bỏ lỡ.
 
 ## Consequences
 

@@ -75,7 +75,7 @@ stateDiagram-v2
 - **`Stuck` (suy ra):** `PendingSync` kéo dài quá ngưỡng trong khi máy `Online`. Dấu hiệu snapshot bị từ chối; dashboard hiển thị `last_apply_error` từ heartbeat.
 - Nhãn "đã đồng bộ" chỉ đáng tin khi không còn sự kiện thay đổi nào chưa được xử lý (cửa sổ giữa commit và reconcile).
 - Máy báo phiên bản **lớn hơn** `desired_version` (chỉ xảy ra khi server khôi phục từ bản sao lưu cũ): server nâng phiên bản kế tiếp lên `max(desired_version, phiên bản máy báo) + 1`, dựng lại snapshot và gửi đi; không coi đó là lỗi (INV-011, D-016).
-- Tham số chốt sau: ngưỡng `Stuck`.
+- Ngưỡng `Stuck`: 10 phút ([Bảng Tham Số](../../11-operations/deployment.md#bảng-tham-số)).
 
 ## Các thực thể còn lại (không cần sơ đồ)
 | Thực thể | Trạng thái | Ghi chú |

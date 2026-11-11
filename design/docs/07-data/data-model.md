@@ -41,6 +41,7 @@ erDiagram
     workstations ||--o{ audit_logs : logs
     workstations ||--o{ ingest_rejects : rejects
     workstations ||--o{ workstation_alerts : alerts
+    admin_accounts ||--o{ admin_audit_logs : performs
 ```
 
 ---
@@ -371,6 +372,21 @@ erDiagram
 
 - Tách khỏi `audit_logs` vì đây không phải lần quẹt thẻ (BR-007 "đúng một bản ghi cho mỗi lần quẹt"). Chỉ ghi thêm.
 - `CREATE INDEX idx_ws_alerts_ws ON workstation_alerts (workstation_id, occurred_at DESC);`
+
+#### `admin_audit_logs` (D-020)
+| Column | Type | Nullable | Default | Mô tả & Ràng buộc |
+|---|---|---|---|---|
+| `id` | `BIGSERIAL` | No | — | Primary Key |
+| `admin_id` | `UUID` | No | — | FK → `admin_accounts(id)` |
+| `action` | `VARCHAR(64)` | No | — | Ví dụ `card.disable`, `schedule.update`, `enrollment.approve_reinstall`, `workstation.disable` |
+| `entity_type` | `VARCHAR(32)` | No | — | `user`, `card`, `group`, `schedule`, `zone`, `workstation`, `profile`, `enrollment_request`, `admin` |
+| `entity_id` | `UUID` | Yes | `NULL` | |
+| `before` | `JSONB` | Yes | `NULL` | Giá trị trước (không UID thô, không mật khẩu) |
+| `after` | `JSONB` | Yes | `NULL` | Giá trị sau |
+| `occurred_at` | `TIMESTAMPTZ` | No | `now()` | |
+
+- Ghi cùng giao dịch với thay đổi nghiệp vụ. Trigger `trg_admin_audit_append_only` chặn `UPDATE/DELETE`.
+- `CREATE INDEX idx_admin_audit_entity ON admin_audit_logs (entity_type, entity_id, occurred_at DESC);`
 
 ---
 

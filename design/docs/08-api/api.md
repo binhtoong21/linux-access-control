@@ -28,6 +28,7 @@ Thao tác ghi từ Dashboard yêu cầu thêm header `X-Requested-With: dashboar
 - JSON UTF-8; thời gian dạng ISO 8601 UTC (`2026-11-11T09:30:00Z`); giờ trong ngày của lịch là `HH:MM` theo `Asia/Ho_Chi_Minh`.
 - Danh sách: `?limit=` (mặc định 50, tối đa 200) và `?cursor=` (con trỏ mờ trả về ở `next_cursor`). Danh sách nhỏ (zone, nhóm, admin) trả hết, không phân trang.
 - Không có `DELETE` cho user và audit (XINV-001, INV-008); "xóa user" là chuyển `inactive`.
+- Mọi thao tác ghi thành công được ghi vào `admin_audit_logs` cùng giao dịch (D-020).
 - Thay đổi trạng thái dùng endpoint hành động (`POST /cards/{id}/disable`) thay vì `PATCH status` tự do, để Server kiểm tra đúng chuyển trạng thái hợp lệ (INV-006).
 
 ## Endpoints
@@ -141,6 +142,7 @@ UID chỉ đi vào API, không bao giờ được trả ra trong danh sách; ch�
 | GET | `/sessions` | Phiên | `?workstation_id=`, `?user_id=`, `?status=`, `?from=`, `?to=` | 200 trang `Session[]` (kèm `end_source`) |
 | GET | `/ingest-rejects` | Mục nhật ký không áp dụng được (D-015) | `?workstation_id=`, `?resolved=false` | 200 trang |
 | POST | `/ingest-rejects/{id}/resolve` | Đánh dấu đã xem | `{note?}` | 200 |
+| GET | `/admin-audit-logs` | Nhật ký thao tác Admin (D-020) | `?admin_id=`, `?entity_type=`, `?entity_id=`, `?from=`, `?to=` | 200 trang |
 | GET | `/workstation-alerts` | Cảnh báo an ninh từ máy (`snapshot_signature_invalid`, `edge_db_recovered`, `key_version_mismatch`) | `?workstation_id=`, `?from=` | 200 trang |
 
 `occurred_at` là giờ của máy trạm; Dashboard hiển thị kèm `received_at` để thấy bản ghi đến muộn hoặc máy lệch giờ.

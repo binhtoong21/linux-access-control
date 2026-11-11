@@ -87,5 +87,8 @@ Khi nối lại, server thấy `boot_id` đổi và (theo XINV-008 cũ) chuyển
 | Đồng hồ | Giờ server trong phản hồi gia hạn là nguồn kiểm tra đồng hồ lệch tự nhiên (trả lời câu hỏi "nguồn kiểm tra" ở swipe-login) |
 | Định danh máy | Máy nhân bản từ ảnh đĩa: định danh riêng chỉ cấp lúc đăng ký, không nằm trong ảnh; phát hiện hai máy cùng định danh (broker đá nhau, `boot_id` nhảy liên tục) |
 
-## Tham số chốt sau
+## Tham số
+
+> **Đã chốt** tại [Bảng Tham Số](../../11-operations/deployment.md#bảng-tham-số). Danh sách dưới đây giữ lại để truy vết.
+
 Thời gian chờ outbox trước khi suy luận `abandoned`; tham số lùi dần khi kết nối lại.

@@ -1,6 +1,6 @@
 # ⚡ non-functional.md
 
-> Các con số cụ thể tạm hoãn. Mục "Tham số chốt sau" liệt kê những giá trị cần quyết định ở 06.
+> Các con số cụ thể không ghi ở đây; giá trị đã chốt nằm ở [Bảng Tham Số](../11-operations/deployment.md#bảng-tham-số).
 
 ## Availability & Reliability
 | ID | Yêu cầu |
@@ -54,5 +54,8 @@
 | NFR-U02 | Màn hình login hiển thị rõ đang xử lý, thành công, từ chối kèm lý do |
 | NFR-U03 | Dashboard dùng được không cần đào tạo |
 
-## Tham số chốt sau (06)
-Thời hạn tin cậy của dữ liệu cục bộ (thời lượng lease D); chu kỳ heartbeat và số lần bỏ lỡ; thời gian cảnh báo trước khi hết phiên (W); hạn phiên tối đa (Max Session Duration); thời gian chờ gắn cờ "quá hạn chưa kết thúc"; chu kỳ ghi `last_alive_at`; thời gian chờ Agent lúc khởi động trước greeter; thời gian đẩy outbox khi tắt máy có kế hoạch; ngưỡng lệch đồng hồ; tầm nhìn khi trải lịch lặp (nếu server tính sẵn các khoảng); hạn enrollment token mặc định; thời hạn hiệu lực của cho phép đăng nhập một lần; hạn mức outbox; kích thước tối đa snapshot cho một máy; cửa sổ gộp thay đổi; chu kỳ reconcile định kỳ; thời gian chờ outbox trước khi suy luận abandoned; tham số lùi dần và ngẫu nhiên hóa khi kết nối lại; ngưỡng Stuck (thời gian PendingSync kéo dài của máy Online).
+## Tham số
+
+> **Đã chốt** tại [Bảng Tham Số](../11-operations/deployment.md#bảng-tham-số). Danh sách dưới đây giữ lại để truy vết.
+
+Thời hạn tin cậy của dữ liệu cục bộ (thời lượng lease D); chu kỳ heartbeat và số lần bỏ lỡ; thời gian cảnh báo trước khi hết phiên (W); hạn phiên tối đa (Max Session Duration); thời gian chờ gắn cờ "quá hạn chưa kết thúc"; chu kỳ ghi `last_alive_at`; thời gian chờ Agent lúc khởi động trước greeter; thời gian đẩy outbox khi tắt máy có kế hoạch; ngưỡng lệch đồng hồ; tầm nhìn khi trải lịch lặp (nếu server tính sẵn các khoảng); thời hạn hiệu lực của cho phép đăng nhập một lần; hạn mức outbox; kích thước tối đa snapshot cho một máy; cửa sổ gộp thay đổi; chu kỳ reconcile định kỳ; thời gian chờ outbox trước khi suy luận abandoned; tham số lùi dần và ngẫu nhiên hóa khi kết nối lại; ngưỡng Stuck (thời gian PendingSync kéo dài của máy Online).

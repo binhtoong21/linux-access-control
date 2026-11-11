@@ -12,7 +12,7 @@ PC tự quyết định đăng nhập dựa trên snapshot cục bộ, không h�
 ### D-002: Lease giữ ở mức định tính
 Dữ liệu cục bộ có thời hạn tin cậy (lease): quá hạn mà không đồng bộ được thì PC từ chối mọi lần quẹt thẻ, fallback vẫn dùng được. Con số cụ thể chốt ở 06.
 
-**Nguồn:** BR-006; NFR tham số chốt sau.
+**Nguồn:** BR-006. Giá trị đã chốt (D = 24h, chờ thầy xác nhận) ở [Bảng Tham Số](11-operations/deployment.md#bảng-tham-số).
 
 ### D-003: Phạm vi MVP và Extension
 - **Nice-to-have:** xác thực khuôn mặt (thư viện có sẵn, xử lý cục bộ).
@@ -128,6 +128,10 @@ Khi máy báo `snapshot_version` lớn hơn `desired_version` (chỉ xảy ra kh
 6. **Hai admin sửa cùng lúc thì bản lưu sau thắng**, không khóa bản ghi. Đủ cho MVP một vai trò với vài admin; mọi thay đổi đều sinh event dựng lại snapshot nên trạng thái cuối luôn được phân phối đúng (XINV-005).
 7. **Cảnh báo an ninh từ máy** (`snapshot_signature_invalid`, `edge_db_recovered`, `key_version_mismatch`) lưu ở `workstation_alerts`, tách khỏi `audit_logs`, để giữ BR-007 "mỗi lần quẹt đúng một bản ghi".
 **Nguồn:** [08-api/api.md](08-api/api.md), [08-api/events.md](08-api/events.md), INV-016, BR-016, BR-017, D-014.
+
+### D-020: Ghi nhật ký thao tác của Admin
+Mỗi thao tác ghi của Admin qua API (tạo/sửa/bật/tắt user, thẻ, nhóm, lịch, zone, profile; duyệt/từ chối đăng ký; vô hiệu hóa/xóa máy; tạo/vô hiệu hóa admin) được ghi vào `admin_audit_logs`: ai, lúc nào, hành động, đối tượng, giá trị trước/sau. Chỉ ghi thêm, ghi cùng giao dịch với thay đổi. Lý do: `audit_logs` chỉ ghi lần quẹt thẻ; nếu không có bảng này thì việc cấp thẻ hay sửa lịch trái phép không để lại dấu vết, và mối đe dọa "Admin dùng sai quyền" trong threat model không có biện pháp. Không chứa UID thô và mật khẩu.
+**Nguồn:** [09-security/threat-model.md](09-security/threat-model.md), [11-operations/observability.md](11-operations/observability.md).
 
 ### ADR-001 (Accepted): Xác thực ở edge, dữ liệu cục bộ có thời hạn tin cậy (lease)
 Quy định ở Agent theo CR-001 từ snapshot cục bộ, không hỏi server khi quẹt thẻ. Dữ liệu cục bộ có thời hạn tin cậy (lease) được gia hạn qua phản hồi heartbeat khi `acked_version == desired_version`. Kiểm tra đồng hồ kết hợp hai hạn (UTC tuyệt đối bền vững và `CLOCK_BOOTTIME` cho phiên) kèm mốc sàn cải tiến `floor = last_sync_local_time - CLOCK_FLOOR_TOLERANCE`. Cần thầy xác nhận: giá trị lease `D` và việc tin RTC sau khi khởi động lại lúc offline.

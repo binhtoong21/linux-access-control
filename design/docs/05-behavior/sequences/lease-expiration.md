@@ -86,7 +86,10 @@ sequenceDiagram
 | EF-5 | Máy mới đăng ký, chưa có snapshot | Trạng thái `NoData`, quẹt thẻ bị từ chối; thoát khỏi `NoData` ngay khi nhận snapshot đầu tiên (UC-007). |
 | EF-6 | Gia hạn bị từ chối do máy tụt phiên bản nhưng snapshot mới tải về bị lỗi | Dữ liệu cũ hết hạn dần và chuyển sang `Expired`; dashboard nhận biết qua heartbeat theo nguyên tắc 8. |
 
-## Tham số chốt sau (06)
+## Tham số
+
+> **Đã chốt** tại [Bảng Tham Số](../../11-operations/deployment.md#bảng-tham-số). Danh sách dưới đây giữ lại để truy vết.
+
 - Thời lượng lease D (gợi ý mặc định 24h).
 - Dung sai mốc sàn đồng hồ `CLOCK_FLOOR_TOLERANCE` (mặc định 60 giây).
 - Ngưỡng lệch đồng hồ cảnh báo `CLOCK_SKEW_WARN_THRESHOLD` (mặc định 60 giây).

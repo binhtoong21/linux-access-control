@@ -29,7 +29,7 @@
 |---|---|---|---|---|---|
 | 1 | `20261111_093000_init_identity_and_device.sql` | `users`, `cards`, `groups`, `group_members`, `admin_accounts`, `zones`, `workstations`, `workstation_profiles`, `enrollment_requests`, `revoked_certificates` + Partial Unique Index `uq_ws_default_profile` & CHECK `chk_cards_owner_unbound` | 2026-11-11 | Pending | ✅ (`DROP TABLE ... CASCADE`) |
 | 2 | `20261111_093100_init_scheduling_and_distribution.sql` | `schedules` (XOR subject/target + Recurrence checks), `snapshots` (`payload_raw BYTEA`, `hmac_signature`), `sync_states`, `server_outbox` + partial index pending | 2026-11-11 | Pending | ✅ (`DROP TABLE ... CASCADE`) |
-| 3 | `20261111_093200_init_operations_and_triggers.sql` | `workstation_statuses`, `sessions` (CHECK `chk_sessions_lifecycle` + `uq_sessions_active_ws`), `audit_logs`, `ingest_rejects`, `workstation_alerts` + Trigger `trg_audit_logs_append_only` (`INV-008`) & `trg_sessions_immutable_terminal` (`INV-007`, cho phép `inferred → reported` một lần) | 2026-11-11 | Pending | ✅ chỉ dev/test (`DROP TRIGGER / TABLE`) |
+| 3 | `20261111_093200_init_operations_and_triggers.sql` | `workstation_statuses`, `sessions` (CHECK `chk_sessions_lifecycle` + `uq_sessions_active_ws`), `audit_logs`, `ingest_rejects`, `workstation_alerts`, `admin_audit_logs` + Trigger `trg_admin_audit_append_only`, `trg_audit_logs_append_only` (`INV-008`) & `trg_sessions_immutable_terminal` (`INV-007`, cho phép `inferred → reported` một lần) | 2026-11-11 | Pending | ✅ chỉ dev/test (`DROP TRIGGER / TABLE`) |
 
 ### 2.2. Edge Agent (SQLite 3 WAL — `/var/lib/nfc-agent/edge.db`)
 | `user_version` | Migration Script | Nội dung Lược đồ & Chỉ mục | Rollback / Khôi phục |

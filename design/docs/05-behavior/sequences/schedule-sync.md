@@ -82,5 +82,8 @@ Trạng thái "đã đồng bộ" chỉ đáng tin khi không còn sự kiện t
 | Dựng snapshot | Cửa sổ gộp thay đổi; tối ưu tính tập máy bị ảnh hưởng thay vì reconcile tất cả (bảng event → tập máy hữu ích làm test, đặt ở 06); cách đảm bảo nội dung chuẩn tắc |
 | Lưu trữ cục bộ | Định dạng file snapshot, kiểm tra toàn vẹn, quy trình đổi nguyên tử |
 
-## Tham số chốt sau
+## Tham số
+
+> **Đã chốt** tại [Bảng Tham Số](../../11-operations/deployment.md#bảng-tham-số). Danh sách dưới đây giữ lại để truy vết.
+
 Kích thước tối đa snapshot cho một máy; cửa sổ gộp thay đổi; chu kỳ reconcile định kỳ.

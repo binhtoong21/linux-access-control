@@ -55,7 +55,10 @@ sequenceDiagram
 | EF-5 | Máy reboot trong lúc đang ở trạng thái `Authorizing` | `LocalSession pending` chuyển thành `discarded`; bản ghi nhật ký `granted` vẫn còn, trên dashboard hiển thị nhãn "chưa nhận phiên". |
 | EF-6 | Pin RTC chết sau khi mất điện | Giờ hệ thống lùi về quá khứ khiến `local_time < floor`: Agent từ chối quẹt thẻ với `data_stale(clock_invalid)` theo CR-001; phiên cũ vẫn được dựng lại bình thường với mốc `last_alive_at`. |
 
-## Tham số chốt sau (06)
+## Tham số
+
+> **Đã chốt** tại [Bảng Tham Số](../../11-operations/deployment.md#bảng-tham-số). Danh sách dưới đây giữ lại để truy vết.
+
 - Chu kỳ ghi `last_alive_at` xuống đĩa (ghi thưa để tránh hao mòn ổ đĩa flash; quyết định độ mịn của `ended_at` ước lượng).
 - Thời gian chờ tối đa của Agent trước khi greeter sẵn sàng.
 - Thời gian chờ đẩy outbox khi tắt máy có kế hoạch.

@@ -40,8 +40,11 @@ Hệ thống quản lý và kiểm soát truy cập phòng máy thực hành th�
 │   ├── s7-teardown-same-uid.md# Đo đạc Teardown trên cùng UID student & triệt tiêu Linger
 │   ├── s7b-teardown-gnome-e2e.md# Kiểm chứng E2E 20/20 GNOME thật qua LightDM/PAM & SIGKILL
 │   ├── s8-server-crypto-mtls-pg.md# Kiểm chứng Ed25519 CSR, MQTT 5 mTLS ACL & PostgreSQL TX (Node.js)
-│   └── spike-execution-journal.md # Nhật ký chi tiết toàn bộ chuỗi thực nghiệm S1-S8
-├── spike.md                # Kế hoạch và phương pháp luận thực hiện các spike (S0 - S8)
+│   ├── s9-mosquitto-crl.md        # Thu hồi chứng chỉ máy trạm bằng CRL của Mosquitto
+│   ├── s10-greeter-wrapper.md     # Smoke-test wrapper greeter trong vòng boot LightDM
+│   ├── s11-agent-systemd-hardening.md # Agent dưới systemd hardening
+│   └── spike-execution-journal.md # Nhật ký chi tiết toàn bộ chuỗi thực nghiệm S1-S11
+├── spike.md                # Kế hoạch và phương pháp luận thực hiện các spike (S0 - S11)
 ├── .gitignore              # Cấu hình bỏ qua các file tạm thời, cache và nhạy cảm
 └── README.md               # Tài liệu tổng quan dự án
 ```
@@ -52,6 +55,6 @@ Hệ thống quản lý và kiểm soát truy cập phòng máy thực hành th�
 
 - **Nhật ký quyết định kiến trúc:** Xem [design/docs/decisions.md](design/docs/decisions.md)
 - **Mục lục ADR kiến trúc:** Xem [design/docs/06-architecture/decisions/README.md](design/docs/06-architecture/decisions/README.md)
-- **Nhật ký thực nghiệm chi tiết (S1-S8):** Xem [spike-results/spike-execution-journal.md](spike-results/spike-execution-journal.md)
+- **Nhật ký thực nghiệm chi tiết (S1-S11):** Xem [spike-results/spike-execution-journal.md](spike-results/spike-execution-journal.md)
 - **Quy tắc nghiệp vụ cốt lõi:** Xem [design/docs/02-requirements/business-rules.md](design/docs/02-requirements/business-rules.md)
 - **Kiến trúc hệ thống (C4):** Xem [design/docs/06-architecture/](design/docs/06-architecture/)
