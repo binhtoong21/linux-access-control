@@ -40,6 +40,7 @@ erDiagram
     workstations ||--o{ sessions : hosts
     workstations ||--o{ audit_logs : logs
     workstations ||--o{ ingest_rejects : rejects
+    workstations ||--o{ workstation_alerts : alerts
 ```
 
 ---
@@ -329,6 +330,7 @@ erDiagram
 | `workstation_snapshot` | `JSONB` | No | — | Ảnh chụp bất biến `{id, mqtt_identity, hostname, zone_name}` |
 | `target_os_username` | `VARCHAR(32)` | Yes | `NULL` | Profile đích (nếu có) |
 | `data_version` | `BIGINT` | Yes | `NULL` | Phiên bản snapshot đã dùng để thẩm định |
+| `matched_schedule_ids` | `UUID[]` | Yes | `NULL` | Các Schedule đã khớp khi `granted`/`noop` (không FK: lịch có thể bị xóa sau đó, nhật ký vẫn bất biến) |
 
 - **Constraints, Indexes & Trigger (`INV-008`):**
   - `CONSTRAINT chk_audit_uid_enc CHECK ((card_uid_encrypted IS NULL AND card_uid_iv IS NULL AND card_uid_auth_tag IS NULL AND encryption_key_id IS NULL) OR (card_uid_encrypted IS NOT NULL AND octet_length(card_uid_iv) = 12 AND octet_length(card_uid_auth_tag) = 16 AND encryption_key_id IS NOT NULL))`
@@ -348,9 +350,27 @@ erDiagram
 | `raw_record` | `JSONB` | No | — | Nguyên văn mục outbox nhận được |
 | `error` | `VARCHAR(255)` | No | — | Lý do không áp dụng được |
 | `received_at` | `TIMESTAMPTZ` | No | `now()` | |
+| `resolved_at` | `TIMESTAMPTZ` | Yes | `NULL` | Admin đánh dấu đã xem (`POST /ingest-rejects/{id}/resolve`) |
+| `resolved_by` | `UUID` | Yes | `NULL` | FK → `admin_accounts(id)` |
+| `note` | `TEXT` | Yes | `NULL` | Ghi chú xử lý |
 
 - Mỗi bản ghi trong lô được áp dụng trong một savepoint riêng; lỗi thì rollback savepoint đó, ghi một dòng vào đây và tiếp tục. Lô vẫn được ACK đến `to_seq`, nên một mục lỗi không chặn hàng đợi của máy. Dashboard hiển thị số mục lỗi theo máy để Admin xem.
 - Không chứa UID thô: trước khi ghi, server thay `card_uid` trong `raw_record` bằng `card_uid_index`.
+- `CREATE INDEX idx_ingest_rejects_open ON ingest_rejects (workstation_id, received_at DESC) WHERE resolved_at IS NULL;`
+
+#### `workstation_alerts` (cảnh báo an ninh từ máy, `08-api/events.md` §3.3)
+| Column | Type | Nullable | Default | Mô tả & Ràng buộc |
+|---|---|---|---|---|
+| `id` | `UUID` | No | `gen_random_uuid()` | Primary Key |
+| `entry_id` | `UUID` | No | — | `UNIQUE`, loại trùng khi máy gửi lại (XINV-006) |
+| `workstation_id` | `UUID` | No | — | FK → `workstations(id)` |
+| `kind` | `VARCHAR(32)` | No | — | `CHECK (kind IN ('snapshot_signature_invalid', 'edge_db_recovered', 'key_version_mismatch'))` |
+| `detail` | `JSONB` | Yes | `NULL` | Ví dụ `{"lost_outbox_entries": 3}` |
+| `occurred_at` | `TIMESTAMPTZ` | No | — | Giờ của máy |
+| `received_at` | `TIMESTAMPTZ` | No | `now()` | |
+
+- Tách khỏi `audit_logs` vì đây không phải lần quẹt thẻ (BR-007 "đúng một bản ghi cho mỗi lần quẹt"). Chỉ ghi thêm.
+- `CREATE INDEX idx_ws_alerts_ws ON workstation_alerts (workstation_id, occurred_at DESC);`
 
 ---
 

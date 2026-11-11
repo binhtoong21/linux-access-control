@@ -183,6 +183,7 @@ sequenceDiagram
   * *Snapshot:* `version` lớn hơn bản đang dùng thì nạp; **bằng** bản đang dùng (snapshot retained được giao lại mỗi lần reconnect) thì bỏ qua lặng lẽ, không ghi lỗi; nhỏ hơn thì bỏ qua và ghi `last_apply_error`.
   * *Lease (D-018):* chỉ nhận khi `desired_version` bằng version cục bộ **và** `nonce` bằng một trong 3 `lease_nonce` gần nhất Agent đã gửi trong Hello/heartbeat (mỗi lần gửi sinh nonce ngẫu nhiên 128-bit mới, chỉ giữ trong RAM). Agent đặt `trusted_until = max(cũ, giờ máy lúc nhận + lease_duration_sec)` và `last_sync_local_time = max(cũ, giờ máy lúc nhận)`. Nonce nằm trong phần được ký nên broker không thể phát lại một bản lease cũ để gia hạn mãi; không phụ thuộc đồng hồ server. `server_time` chỉ dùng để phát hiện lệch giờ (cảnh báo `clock_skew_detected`).
   * *ACK:* `acked_seq` nhỏ hơn hoặc bằng mức đã xóa thì bỏ qua (phát lại vô hại).
+- **Hợp đồng đầy đủ của mọi bản tin** (trường bắt buộc, mã lỗi, loại mục outbox, nội dung snapshot) nằm ở [08-api/events.md](../../08-api/events.md); các ví dụ dưới đây là bản rút gọn.
 - **Payload Hello (`.../hello`):**
   ```json
   {
