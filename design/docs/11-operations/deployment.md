@@ -54,7 +54,8 @@ Gom từ D-006, D-009, D-010, D-014, ADR-004, ADR-005, ADR-006, S7b, S10, S11.
 |---|---|---|
 | 1 | Display manager | `lightdm` là mặc định; `99-lab-greeter.conf`: `greeter-session=lab-greeter`; `/usr/share/xgreeters/lab-greeter.desktop`: `Exec=/usr/local/bin/lab-greeter-wrapper.sh` (bản ghi tệp đếm crash ở `/var/lib/lightdm`) |
 | 2 | PAM | `pam_nfc.so` trong chuỗi `lightdm`, trước `pam_unix` |
-| 3 | Agent | Gói cài `nfc-agent` (systemd service với hardening của ADR-006, có `CAP_CHOWN`); `pcscd` bật |
+| 3 | Agent | Gói cài `nfc-agent` (systemd service với hardening của ADR-006, có `CAP_CHOWN`); `pcscd`, `libccid` bật |
+| 3b | Đầu đọc | Chặn driver kernel `pn533_usb`, `pn533`, `nfc` (`/etc/modprobe.d/blacklist-nfc-pn533.conf`); nếu không, kernel chiếm ACR122U và `pcscd` không thấy đầu đọc (S1) |
 | 4 | Neo tin cậy | `/etc/nfc-agent/ca.pem` + địa chỉ server trong `/etc/nfc-agent/agent.conf` |
 | 5 | Profile dùng chung | Tạo `student` (và profile khác nếu cần) thuộc nhóm `labstudent`, `passwd -l`, không sudo |
 | 6 | Chặn đường vòng | `sshd`: `DenyGroups labstudent`; tắt linger cho `labstudent` |

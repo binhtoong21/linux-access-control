@@ -53,9 +53,23 @@ Khi giải mã các byte lịch sử (Historical Bytes) theo ASCII:
 - **UID (4-byte):** Là mã định danh tần số vô tuyến ở tầng vật lý (ISO 14443 Layer 2/3 Anti-collision). Tuyệt đối **không** chứa số thẻ ngân hàng (16 số PAN), ngày hết hạn, mã bảo mật CVV hay số dư tài khoản; đối với CCCD, mã này là số ngẫu nhiên tạm thời (RID) không chứa số định danh cá nhân hay dữ liệu sinh trắc học.
 - **ATR:** Chỉ là thông số cấu hình phần cứng giao tiếp của chip (clock rate, protocol T=0/T=1), không mang tính bảo mật cá nhân. Dữ liệu quét được hoàn toàn an toàn khi lưu trữ log kiểm toán vận hành phòng lab.
 
+## Lần Đo Bổ Sung (2026-11-11): Thẻ Static UID & `SCardGetStatusChange`
+- **Môi trường:** Ubuntu 22.04.5 (VM VirtualBox, USB passthrough), ACR122U `072f:2200`, `pcscd` + `libccid`, `python3-pyscard`. Phải chặn `pn533_usb`/`pn533`/`nfc` trước (kernel chiếm đầu đọc, `pcscd` không thấy), đã đưa vào checklist Master Image (`deployment.md` mục 3b).
+- **Cách đọc:** chờ sự kiện bằng `SCardGetStatusChange` (không polling), khi trạng thái chuyển sang `PRESENT` thì kết nối và gửi APDU `FF CA 00 00 00`.
+- **Thẻ:** 1 thẻ static UID, ATR `3B8880010073C8400000900062` (ISO 14443-4 type A).
+
+| Chỉ số | Kết quả |
+|---|---|
+| Lần đặt thẻ | 8 |
+| Đọc thành công | 5/8, UID `1F0820CF` (4 byte, `SW=9000`) **giống nhau cả 5 lần** |
+| Sự kiện đặt / nhấc thẻ | 8/8 lần đặt và 8/8 lần nhấc đều được phát hiện, không có sự kiện trùng |
+| Lỗi kết nối ngay khi vừa đặt thẻ | 3/8: `Unable to connect with protocol: T0 or T1. Card is unresponsive.` |
+
+**Phát hiện:** khi thẻ mới chạm mép trường RF hoặc chạm quá nhanh, `pcscd` đã báo `PRESENT` nhưng kết nối thất bại. Nếu Agent coi đó là một lần quẹt lỗi thì sinh viên thấy báo lỗi và nhật ký có thêm bản ghi `error(reader_error)` cho một cú chạm vội. **Hiệu chỉnh (M1):** khi thẻ còn `PRESENT`, Agent thử kết nối lại trong một khoảng ngắn (ví dụ tối đa 3 lần cách nhau 100 ms) rồi mới ghi `reader_error`; nếu thẻ rời đi trước khi đọc được UID thì không tính là một lần quẹt (BR-007c: lần quẹt gắn với UID đã đọc được).
+
 ## Giới hạn của Bằng chứng (Limitations of Evidence)
 - **Quy mô mẫu thử:** Thực nghiệm tập trung phân tích bản chất cơ chế trên 2 mẫu thẻ đại diện (1 thẻ contactless ngân hàng và 1 thẻ CCCD gắn chip), chưa chạy bài đo kiểm 100 lần quẹt liên tục với phôi thẻ sinh viên trường.
-- **Cơ chế đọc:** Script thử nghiệm sử dụng vòng lặp kiểm tra định kỳ (polling loop), chưa triển khai mô hình bắt sự kiện trạng thái PC/SC (`SCardGetStatusChange`) và chưa kiểm chứng xử lý sự kiện rút/cắm nóng đầu đọc USB (hotplug) khi daemon đang chạy.
+- **Cơ chế đọc:** Lần đo đầu dùng polling; lần đo bổ sung 2026-11-11 đã dùng `SCardGetStatusChange` (đạt). Còn thiếu: rút/cắm nóng đầu đọc USB (hotplug) khi daemon đang chạy, và 100 lần quẹt liên tục.
 - **Môi trường:** Thiết bị được chuyển tiếp qua USB Passthrough vào máy ảo KVM, chưa thử nghiệm trên môi trường bare-metal phần cứng máy trạm.
 
 ## Kết luận

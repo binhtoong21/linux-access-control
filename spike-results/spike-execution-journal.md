@@ -982,3 +982,11 @@ Trạng thái service ngầm:
   - **Thêm `CAP_CHOWN`:** `3/3` chu kỳ đạt (`Login->GNOME` 4704–5167 ms, teardown 2101.1–2246.6 ms, `started > decided_at` 3/3, 0/3 vượt 3.0s), đúng 1 tiến trình greeter sau đó.
   - Ghi chú: `stress-ng` của harness cần `WorkingDirectory=/tmp` dưới `ProtectSystem=strict` (yêu cầu của công cụ tạo tải, không phải của Agent).
 - **Hệ quả Kiến trúc:** Bổ sung `CAP_CHOWN` vào `CapabilityBoundingSet` của ADR-006. Giới hạn: chưa thử đọc PC/SC dưới hardening (chờ thẻ thật, S1). Chi tiết: [s11-agent-systemd-hardening.md](s11-agent-systemd-hardening.md).
+
+---
+
+### 8.23. Thực nghiệm Bổ sung S1: Đọc Thẻ Static UID Bằng `SCardGetStatusChange` Trên VM Phát Triển
+- **Mục tiêu:** Đóng một phần khoảng trống của S1 trước khi code M1: đọc UID bằng sự kiện PC/SC thay cho polling, với thẻ static UID thật.
+- **Thiết lập & sự cố:** ACR122U nhận qua USB passthrough (`lsusb`: `072f:2200`) nhưng `pcscd` chưa cài và kernel đã nạp `pn533_usb`/`pn533`/`nfc`. Cài `pcscd libccid pcsc-tools python3-pyscard`, chặn ba module trong `/etc/modprobe.d/blacklist-nfc-pn533.conf`, gỡ module, khởi động lại `pcscd` → `readers: ['ACS ACR122U PICC Interface 00 00']`.
+- **Kết quả (8 lần đặt thẻ):** 5 lần đọc UID `1F0820CF` (4 byte, `SW=9000`, ATR `3B8880010073C8400000900062`), giống nhau mọi lần; 8/8 sự kiện đặt và 8/8 sự kiện nhấc được phát hiện, không trùng; 3 lần `Card is unresponsive` ngay lúc vừa đặt thẻ.
+- **Hệ quả:** Bổ sung bước chặn `pn533` vào checklist Master Image (`deployment.md` mục 3b). M1 cài đặt thử kết nối lại khi thẻ còn `PRESENT` trước khi ghi `reader_error`. S1 vẫn "đạt một phần": còn 100 lần quẹt, hotplug, thẻ 7 byte.

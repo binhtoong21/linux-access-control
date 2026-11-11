@@ -44,6 +44,8 @@ Cần thử:
 
 **Đạt khi:** 100 lần quẹt, 0 lần lỡ, 0 sự kiện trùng khi để thẻ nằm yên; phục hồi sau rút/cắm trong vài giây; UID cùng một thẻ giống nhau giữa các lần.
 
+**Kết quả bổ sung (2026-11-11):** Thẻ static UID 4 byte đọc ổn định (`1F0820CF` 5/5), `SCardGetStatusChange` phát hiện đúng 8/8 lần đặt và nhấc thẻ, nhưng 3/8 lần kết nối thất bại khi thẻ vừa chạm → Agent phải thử kết nối lại trước khi ghi `reader_error`. Còn mở: 100 lần quẹt, hotplug, thẻ 7 byte. Xem [s1-reader-pcsc.md](s1-reader-pcsc.md).
+
 **Ảnh hưởng:** FR-001, EF-2 trong swipe-login, ADR-007 (VR-007).
 
 ## S2: PAM và Agent
