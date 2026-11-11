@@ -206,9 +206,14 @@ Dựa trên phát hiện kỹ thuật đắt giá của Spike S6 và S7:
          exec /usr/sbin/lightdm-gtk-greeter
      fi
 
-     # Chạy trực tiếp để bắt exit code; lab_greeter.py xử lý SIGTERM và thoát mã 0 khi bàn giao phiên
-     python3 /usr/local/bin/lab_greeter.py
-     EXIT_CODE=$?
+     # Chạy nền để bắt exit code. LightDM gửi SIGTERM cho chính wrapper (PID nó khởi chạy),
+     # nên wrapper phải chuyển tiếp tín hiệu cho greeter, nếu không greeter thành tiến trình mồ côi.
+     python3 /usr/local/bin/lab_greeter.py &
+     CHILD=$!
+     trap 'kill -TERM "$CHILD" 2>/dev/null' TERM INT
+     wait "$CHILD"; EXIT_CODE=$?
+     # wait bị ngắt bởi tín hiệu (mã > 128) thì chờ greeter thoát hẳn để lấy mã thật
+     if [ "$EXIT_CODE" -gt 128 ]; then wait "$CHILD"; EXIT_CODE=$?; fi
      if [ "$EXIT_CODE" -eq 0 ]; then
          rm -f "$CRASH_LOG"
          exit 0
@@ -218,6 +223,7 @@ Dựa trên phát hiện kỹ thuật đắt giá của Spike S6 và S7:
      exit "$EXIT_CODE"
      ```
    - *Lợi ích vận hành:* Nếu Custom Greeter bị lỗi cú pháp, thiếu thư viện hoặc crash lặp (`EXIT_CODE != 0`), sau 3 lần crash liên tiếp trong 60s, hệ thống tự động rơi về `lightdm-gtk-greeter` chuẩn để kỹ thuật viên vẫn có giao diện đồ họa đăng nhập bảo trì mà không bị đen màn hình. Ngược lại, khi sinh viên đăng nhập bình thường (LightDM gửi `SIGTERM` để đóng Greeter và chuyển sang GNOME, `lab_greeter.py` thoát với mã `0`), wrapper xóa tệp `/run/lab-greeter-crashes` để các lần đăng nhập liên tiếp không bị đếm nhầm thành crash.
+   - *Giới hạn bằng chứng:* S7b chạy `lab_greeter.py` trực tiếp, chưa qua wrapper. Bản wrapper này (chuyển tiếp SIGTERM, đếm theo mã thoát) cần smoke-test trong vòng boot LightDM thật: 3 lần đăng nhập bình thường liên tiếp không kích hoạt fallback, 3 lần crash liên tiếp thì kích hoạt. ADR-005 giữ `Proposed` cho tới khi có kết quả này.
 3. **Quy trình Cứu hộ Thủ công Qua Virtual Terminal (TTY2):**
    - Trong trường hợp xấu nhất, kỹ thuật viên nhấn tổ hợp phím **`Ctrl + Alt + F2`** (TTY2) hoặc SSH từ xa, đăng nhập bằng `labadmin` và chuyển đổi hẳn sang GTK Greeter bằng lệnh:
      ```bash

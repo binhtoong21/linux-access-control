@@ -26,11 +26,9 @@ erDiagram
     groups ||--o{ group_members : contains
     zones ||--o{ workstations : houses
     workstations ||--o{ workstation_profiles : exposes
-    admin_accounts ||--o{ enrollment_tokens : creates
-    enrollment_tokens ||--o{ enrollment_requests : references
-    enrollment_tokens ||--o{ enrollment_token_uses : tracks
-    workstations ||--o{ enrollment_token_uses : consumed_by
     workstations ||--o{ enrollment_requests : linked_to
+    admin_accounts ||--o{ enrollment_requests : reviews
+    workstations ||--o{ revoked_certificates : revokes
     users ||--o{ schedules : subject_user
     groups ||--o{ schedules : subject_group
     workstations ||--o{ schedules : target_ws
@@ -41,6 +39,7 @@ erDiagram
     users ||--o{ sessions : runs
     workstations ||--o{ sessions : hosts
     workstations ||--o{ audit_logs : logs
+    workstations ||--o{ ingest_rejects : rejects
 ```
 
 ---
@@ -107,7 +106,7 @@ erDiagram
 
 ---
 
-### 2.3. Phân Vùng Device (`zones`, `workstations`, `workstation_profiles`, `enrollment_tokens`, `enrollment_requests`, `enrollment_token_uses`)
+### 2.3. Phân Vùng Device (`zones`, `workstations`, `workstation_profiles`, `enrollment_requests`, `revoked_certificates`)
 
 #### `zones`
 | Column | Type | Nullable | Default | Mô tả & Ràng buộc |
@@ -140,6 +139,7 @@ erDiagram
 
 - **Constraints & Indexes:** `UNIQUE (mqtt_identity)`, `UNIQUE (machine_id)`, `UNIQUE (mac_address)`, `CREATE INDEX idx_ws_zone ON workstations (zone_id);`
 - *Re-enrollment (`INV-010`, `P1-4`):* Khi Admin duyệt yêu cầu cài lại máy trùng MAC, Server cập nhật **tại chỗ** dòng `workstations` tương ứng (`machine_id`, `public_key`, `cert_serial`, `cert_expires_at`, `key_version = key_version + 1`), bảo toàn nguyên vẹn `workstation_id` lịch sử của `sessions`, `audit_logs` và `schedules`.
+- *Vô hiệu hóa (`status = 'disabled'`):* cùng giao dịch, serial hiện hành được thêm vào `revoked_certificates` để broker từ chối máy (D-014).
 - *Lưu ý bảo mật ([ADR-007](../06-architecture/decisions/ADR-007-khoa-so-khop-uid.md)):* Server **không lưu khóa riêng `K_m`** trong CSDL; khóa `K_m = HKDF-SHA256(master_key, mqtt_identity || ":" || key_version)` được dẫn xuất động từ `master_key` khi cấp chứng chỉ và khi dựng snapshot.
 
 #### `workstation_profiles` ([ADR-004](../06-architecture/decisions/ADR-004-mo-hinh-profile-os-dung-chung.md), `INV-018`)
@@ -160,43 +160,36 @@ erDiagram
   - `UNIQUE (workstation_id, os_username)`
   - `CREATE UNIQUE INDEX uq_ws_default_profile ON workstation_profiles (workstation_id) WHERE is_default = true;` — Bảo đảm tối đa **1 profile mặc định** trên mỗi máy trạm.
 
-#### `enrollment_tokens`, `enrollment_requests` & `enrollment_token_uses` (`INV-010`, `XINV-009`, `P1-4`)
-- **`enrollment_tokens`:**
-  - `id UUID PRIMARY KEY DEFAULT gen_random_uuid()`
-  - `token_hash CHAR(64) NOT NULL UNIQUE` (SHA-256 của pre-shared token)
-  - `note TEXT NULL`
-  - `max_uses INTEGER NOT NULL DEFAULT 1 CHECK (max_uses >= 1)`
-  - `used_count INTEGER NOT NULL DEFAULT 0 CHECK (used_count >= 0 AND used_count <= max_uses)`
-  - `default_zone_id UUID NULL REFERENCES zones(id) ON DELETE SET NULL`
-  - `expires_at TIMESTAMPTZ NOT NULL`
-  - `status VARCHAR(16) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'revoked'))`
-  - `created_by UUID NOT NULL REFERENCES admin_accounts(id)`
-  - `created_at TIMESTAMPTZ NOT NULL DEFAULT now()`
+#### `enrollment_requests` (`INV-010`, `XINV-009`, `P1-4`, `D-014`)
+*Không có bảng token: mọi yêu cầu đều do Admin duyệt (D-014).*
 - **`enrollment_requests`:**
-  - `id UUID PRIMARY KEY DEFAULT gen_random_uuid()` (`enrollment_request_id`)
-  - `bearer_token_hash CHAR(64) NOT NULL` (Hash của One-Time Bearer Token để tải cert & `K_m`, ADR-002 Mục 7)
-  - `token_consumed_at TIMESTAMPTZ NULL` (Đặt giá trị ngay sau 1 lần fetch thành công -> hủy quyền tải lại)
+  - `id UUID PRIMARY KEY DEFAULT gen_random_uuid()` (`request_id`, không phải bí mật)
+  - `fetch_code_hash CHAR(64) NOT NULL` (SHA-256 của mã tải một lần `fetch_code`, ADR-002 Mục 7)
+  - `fetch_code_invalidated_at TIMESTAMPTZ NULL` (Đặt khi máy kết nối broker bằng chứng chỉ mới lần đầu thành công; trước đó máy được tải lại nếu mất gói trả lời)
   - `machine_id VARCHAR(64) NOT NULL`
   - `mac_address MACADDR NOT NULL`
   - `hostname VARCHAR(255) NOT NULL`
   - `csr_pem TEXT NOT NULL` (Ed25519 PKCS#10 CSR)
   - `public_key TEXT NOT NULL`
-  - `enrollment_token_id UUID NULL REFERENCES enrollment_tokens(id) ON DELETE RESTRICT`
-  - `duplicate_mac_detected BOOLEAN NOT NULL DEFAULT false` (`P1-4`: chặn tự duyệt khi trùng MAC)
-  - `workstation_id UUID NULL REFERENCES workstations(id) ON DELETE SET NULL`
+  - `duplicate_mac_detected BOOLEAN NOT NULL DEFAULT false` (`P1-4`: trùng MAC/`machine_id` với máy đã có hoặc với yêu cầu khác đang `pending`)
+  - `duplicate_of_workstation_id UUID NULL REFERENCES workstations(id) ON DELETE SET NULL` (máy đã có bị trùng; khi khác NULL, yêu cầu chỉ được duyệt thành cài lại máy này hoặc từ chối)
+  - `workstation_id UUID NULL REFERENCES workstations(id) ON DELETE SET NULL` (máy được tạo hoặc cài lại khi duyệt)
   - `assigned_zone_id UUID NULL REFERENCES zones(id) ON DELETE SET NULL`
   - `issued_cert_pem TEXT NULL` *(public cert tạm phục vụ response tải 1 lần; KHÔNG lưu `K_m`)*
   - `status VARCHAR(16) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected'))`
   - `submitted_at TIMESTAMPTZ NOT NULL DEFAULT now()`
   - `reviewed_at TIMESTAMPTZ NULL`, `reviewed_by UUID NULL REFERENCES admin_accounts(id)`
   - `CHECK ((status = 'pending' AND reviewed_at IS NULL) OR (status IN ('approved', 'rejected') AND reviewed_at IS NOT NULL))`
+  - `CHECK (status <> 'approved' OR duplicate_of_workstation_id IS NULL OR workstation_id = duplicate_of_workstation_id)` — yêu cầu trùng chỉ được duyệt thành cài lại chính máy bị trùng (INV-009, D-014)
   - `CREATE INDEX idx_enroll_req_status_mac ON enrollment_requests (status, mac_address);`
-- **`enrollment_token_uses`:**
-  - `id UUID PRIMARY KEY DEFAULT gen_random_uuid()`
-  - `token_id UUID NOT NULL REFERENCES enrollment_tokens(id) ON DELETE CASCADE`
-  - `workstation_id UUID NOT NULL REFERENCES workstations(id) ON DELETE CASCADE`
-  - `enrollment_request_id UUID NOT NULL UNIQUE REFERENCES enrollment_requests(id)`
-  - `used_at TIMESTAMPTZ NOT NULL DEFAULT now()`
+  - `CREATE INDEX idx_enroll_req_status_machine ON enrollment_requests (status, machine_id);` (phát hiện trùng giữa các yêu cầu đang chờ)
+
+#### `revoked_certificates` (`D-014`)
+- `cert_serial VARCHAR(64) PRIMARY KEY`
+- `workstation_id UUID NOT NULL REFERENCES workstations(id)`
+- `reason VARCHAR(16) NOT NULL CHECK (reason IN ('reinstalled', 'disabled'))`
+- `revoked_at TIMESTAMPTZ NOT NULL DEFAULT now()`
+- Nguồn để sinh tệp CRL cho Mosquitto (`crlfile`). Ghi cùng giao dịch với việc duyệt cài lại hoặc vô hiệu hóa máy; sau `COMMIT` server sinh lại CRL và nạp lại broker. Bật lại máy `disabled` cần đăng ký lại (`nfc-agent reenroll` trên máy, Admin duyệt cài lại; ADR-002 §7.6), không gỡ serial khỏi danh sách.
 
 ---
 
@@ -254,7 +247,7 @@ erDiagram
 |---|---|---|---|---|
 | `workstation_id` | `UUID` | No | — | Primary Key & FK → `workstations(id) ON DELETE CASCADE` |
 | `desired_version` | `BIGINT` | No | `0` | Phiên bản mới nhất Server muốn máy đạt tới |
-| `acked_version` | `BIGINT` | No | `0` | Phiên bản cao nhất Edge đã báo qua Heartbeat/Applied (`CHECK (acked_version >= 0 AND acked_version <= desired_version)`) |
+| `acked_version` | `BIGINT` | No | `0` | Phiên bản Edge báo qua Hello/Heartbeat (`CHECK (acked_version >= 0)`). **Không** ràng buộc `acked_version <= desired_version`: sau khi khôi phục CSDL từ bản sao lưu, máy có thể báo version lớn hơn; khi đó server đặt `desired_version = max(desired_version, acked_version) + 1` và dựng lại snapshot (D-016) |
 | `desired_updated_at` | `TIMESTAMPTZ` | No | `now()` | Thời điểm `desired_version` cập nhật (để tính trạng thái suy diễn `InSync` / `PendingSync` / `Stuck`) |
 | `acked_at` | `TIMESTAMPTZ` | Yes | `NULL` | Lần gần nhất `acked_version` tăng |
 
@@ -312,7 +305,7 @@ erDiagram
   - `CONSTRAINT chk_sessions_lifecycle CHECK ((status = 'active' AND ended_at IS NULL AND end_reason IS NULL AND end_source IS NULL) OR (status <> 'active' AND ended_at IS NOT NULL AND ended_at >= started_at AND end_reason IS NOT NULL AND end_source IS NOT NULL))`
   - `CREATE UNIQUE INDEX uq_sessions_active_ws ON sessions (workstation_id) WHERE status = 'active';`
   - `CREATE INDEX idx_sessions_ws_started ON sessions (workstation_id, started_at DESC);`
-  - Trigger `trg_sessions_immutable_terminal`: chặn `UPDATE` hoặc `DELETE` nếu bản ghi đã ở trạng thái kết thúc (`OLD.status <> 'active'`).
+  - Trigger `trg_sessions_immutable_terminal`: chặn `DELETE`; chặn `UPDATE` khi bản ghi đã kết thúc (`OLD.status <> 'active'`), **trừ đúng một trường hợp**: `OLD.end_source = 'inferred' AND NEW.end_source = 'reported'` (báo cáo thật đến muộn thay kết quả suy luận, INV-007, D-015). Bản ghi `reported` không đổi được nữa.
 
 #### `audit_logs` (`INV-008`, `XINV-006`, `ADR-007`)
 | Column | Type | Nullable | Default | Mô tả & Ràng buộc |
@@ -345,6 +338,20 @@ erDiagram
   - `CREATE INDEX idx_audit_user_id ON audit_logs ((user_snapshot->>'id'), occurred_at DESC) WHERE user_snapshot IS NOT NULL;`
   - Trigger `trg_audit_logs_append_only`: `BEFORE UPDATE OR DELETE ON audit_logs` luôn raise exception (`INV-008`).
 
+#### `ingest_rejects` (`XINV-006`, `D-015`)
+| Column | Type | Nullable | Default | Mô tả & Ràng buộc |
+|---|---|---|---|---|
+| `id` | `BIGSERIAL` | No | — | Primary Key |
+| `workstation_id` | `UUID` | No | — | FK → `workstations(id)` |
+| `entry_id` | `VARCHAR(64)` | Yes | `NULL` | `entry_id` của mục lỗi (NULL nếu không đọc được) |
+| `outbox_seq` | `BIGINT` | Yes | `NULL` | Số thứ tự của mục trong outbox của máy |
+| `raw_record` | `JSONB` | No | — | Nguyên văn mục outbox nhận được |
+| `error` | `VARCHAR(255)` | No | — | Lý do không áp dụng được |
+| `received_at` | `TIMESTAMPTZ` | No | `now()` | |
+
+- Mỗi bản ghi trong lô được áp dụng trong một savepoint riêng; lỗi thì rollback savepoint đó, ghi một dòng vào đây và tiếp tục. Lô vẫn được ACK đến `to_seq`, nên một mục lỗi không chặn hàng đợi của máy. Dashboard hiển thị số mục lỗi theo máy để Admin xem.
+- Không chứa UID thô: trước khi ghi, server thay `card_uid` trong `raw_record` bằng `card_uid_index`.
+
 ---
 
 ## 3. Edge Workstation Local Schema (`SQLite 3 WAL` — `/var/lib/nfc-agent/edge.db`)
@@ -376,11 +383,11 @@ erDiagram
 ### 3.3. Chi Tiết Bảng Dữ Liệu Edge
 
 #### 1. `agent_meta` & `local_liveness` (Cấu hình khởi động & Liveness cận dưới)
-- **`agent_meta`:**
+- **`agent_meta`:** *(bản sao, nguồn sự thật là `/var/lib/nfc-agent/identity/identity.json`, D-017)*
   - `id INTEGER PRIMARY KEY CHECK (id = 1)`
-  - `workstation_id TEXT NOT NULL` (`mqtt_identity` / `CN`)
+  - `mqtt_identity TEXT NOT NULL` (CN, ví dụ `ws-01`)
   - `boot_id TEXT NOT NULL` (`/proc/sys/kernel/random/boot_id` ghi nhận lần khởi động hiện tại)
-  - `local_key_version INTEGER NOT NULL DEFAULT 1 CHECK (local_key_version >= 1)`
+  - `local_key_version INTEGER NOT NULL CHECK (local_key_version >= 1)` (không có giá trị mặc định: luôn ghi đè từ `identity.json` mỗi lần Agent khởi động)
   - `updated_at REAL NOT NULL`
 - **`local_liveness`:**
   - `id INTEGER PRIMARY KEY CHECK (id = 1)`
@@ -405,7 +412,7 @@ erDiagram
 | `last_apply_error` | `TEXT` | Yes | `NULL` | Lỗi áp snapshot gần nhất (báo lên heartbeat) |
 
 #### 3. Phân vùng Snapshot Cache (`snapshot_users`, `snapshot_user_groups`, `snapshot_cards`, `snapshot_schedules`)
-*Thay thế nguyên tử trong cùng transaction `BEGIN IMMEDIATE ... COMMIT` khi nhận snapshot có `version > snapshot_meta.version` và `key_version == agent_meta.local_key_version`:*
+*Thay thế nguyên tử trong cùng transaction `BEGIN IMMEDIATE ... COMMIT` (cùng với `snapshot_meta` và cờ profile trong `local_workstation_profiles`) khi nhận snapshot có `version > snapshot_meta.version` và `key_version == agent_meta.local_key_version`:*
 - **`snapshot_users`:** `user_id TEXT PRIMARY KEY`, `external_id TEXT NOT NULL`, `full_name TEXT NOT NULL`, `status TEXT NOT NULL CHECK (status IN ('active', 'inactive'))`.
 - **`snapshot_user_groups`:** `user_id TEXT NOT NULL REFERENCES snapshot_users(user_id) ON DELETE CASCADE`, `group_id TEXT NOT NULL`, `PRIMARY KEY (user_id, group_id)`. Index `idx_edge_ug_group ON snapshot_user_groups (group_id);`.
 - **`snapshot_cards`:** `card_match_key TEXT PRIMARY KEY` (64-char hex HMAC theo `K_m`), `card_id TEXT NOT NULL UNIQUE`, `user_id TEXT NULL REFERENCES snapshot_users(user_id) ON DELETE CASCADE`, `status TEXT NOT NULL CHECK (status IN ('unbound', 'active', 'disabled'))`.
@@ -423,10 +430,12 @@ erDiagram
 
 #### 4. `local_workstation_profiles` (`LocalWorkstationProfile`, `ADR-004`, `INV-018`)
 - `os_username TEXT PRIMARY KEY`
-- `is_default INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0, 1))`
-- `status TEXT NOT NULL CHECK (status IN ('enabled', 'disabled'))`
-- `synced_from_snapshot INTEGER NOT NULL DEFAULT 0 CHECK (synced_from_snapshot IN (0, 1))`
+- `present_locally INTEGER NOT NULL DEFAULT 0 CHECK (present_locally IN (0, 1))` — do Auto-Discovery ghi (tài khoản có thật, thuộc nhóm `labstudent`, UID ≥ 1000)
+- `in_snapshot INTEGER NOT NULL DEFAULT 0 CHECK (in_snapshot IN (0, 1))` — do lần nạp snapshot ghi
+- `status TEXT NOT NULL DEFAULT 'disabled' CHECK (status IN ('enabled', 'disabled'))` — từ snapshot
+- `is_default INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0, 1))` — từ snapshot
 - `CREATE UNIQUE INDEX uq_edge_default_profile ON local_workstation_profiles (is_default) WHERE is_default = 1;`
+- **Quy tắc dùng được (CR-001):** `in_snapshot = 1 AND status = 'enabled' AND present_locally = 1`. Profile mới phát hiện mà chưa có trong snapshot thì chưa dùng được (`profile_not_found`) cho tới khi Server ghi nhận và gửi snapshot mới. Hai nguồn ghi vào hai nhóm cột khác nhau nên không ghi đè nhau.
 
 #### 5. `local_sessions` (`INV-014`, `INV-015`, `INV-017`, `ADR-008`)
 | Column | Type | Nullable | Default | Mô tả & Ràng buộc |
@@ -456,10 +465,10 @@ erDiagram
 #### 6. `audit_outbox` (`INV-013`, `ADR-003`)
 | Column | Type | Nullable | Default | Mô tả & Ràng buộc |
 |---|---|---|---|---|
-| `seq` | `INTEGER` | No | `AUTOINCREMENT` | `INTEGER PRIMARY KEY AUTOINCREMENT` (**bắt buộc `AUTOINCREMENT`** để ngăn tái sử dụng `seq` sau khi xóa hết lô, bảo toàn thứ tự lũy tiến Cumulative ACK) |
+| `outbox_seq` | `INTEGER` | No | `AUTOINCREMENT` | `INTEGER PRIMARY KEY AUTOINCREMENT` (**bắt buộc `AUTOINCREMENT`** để ngăn tái sử dụng số sau khi xóa hết lô, bảo toàn thứ tự lũy tiến Cumulative ACK) |
 | `entry_id` | `TEXT` | No | — | UUID v4 `UNIQUE` |
 | `occurred_at` | `REAL` | No | — | UTC epoch seconds |
-| `event_type` | `TEXT` | No | — | `CHECK (event_type IN ('swipe_decision', 'session_started', 'session_ended', 'security_alert'))` |
+| `event_type` | `TEXT` | No | — | `CHECK (event_type IN ('swipe_decision', 'session_started', 'session_ended', 'security_alert'))` (`security_alert` gồm `snapshot_signature_invalid`, `edge_db_recovered`) |
 | `payload_json` | `TEXT` | No | — | JSON chi tiết gửi lên MQTT `.../outbox` |
 | `created_at` | `REAL` | No | — | Thời điểm ghi đĩa |
 
@@ -473,5 +482,6 @@ erDiagram
 | Server `snapshots` | Edge `edge.db` (`snapshot_*`, `snapshot_meta`) | MQTT 5 mTLS (`8883`) `.../snapshot` (QoS 1, Retain) | Khi `version` tăng hoặc Edge tụt version | Kiểm tra `User Property signature` bằng `hmac.compare_digest` + `key_version`, thay thế trong `BEGIN IMMEDIATE` |
 | Edge `LeaseRenewalService` | Edge `snapshot_meta` (`trusted_until`, `last_server_time`) | MQTT 5 `.../lease` (QoS 1, User Property `signature`) | Mỗi Heartbeat 30s (`acked_version == desired_version`) | Cập nhật RAM ngay; chỉ flush SQLite khi tăng >= 300s hoặc kèm transaction khác / `SIGTERM` (`ADR-003`) |
 | Edge Quẹt thẻ (`CR-001`) | Edge `audit_outbox` + `local_sessions (pending)` | SQLite Transaction `BEGIN IMMEDIATE ... COMMIT` | Mỗi lần quẹt thẻ hợp lệ | Atomic Write-Ahead Pairing (`INV-014`, `D-005`) với `synchronous=FULL` |
-| Edge `audit_outbox` | Server `audit_logs` & `sessions` | MQTT 5 `.../outbox` (QoS 1, FIFO Batch <= 50) → `.../command/ack` | Liên tục theo batch khi Online | `ON CONFLICT (entry_id) DO NOTHING` (`XINV-006`) + `DELETE WHERE seq <= acked_seq` (`INV-013`) |
-| Edge `Auto-Discovery` | Server `workstation_profiles` | MQTT 5 `.../hello` / `.../heartbeat` | Khi Agent khởi động / thay đổi allowlist | Chỉ nhận danh sách user nhóm `labstudent` UID >= 1000 (`INV-018`) |
+| Edge `audit_outbox` | Server `audit_logs` & `sessions` (mục lỗi → `ingest_rejects`) | MQTT 5 `.../outbox` (QoS 1, FIFO Batch <= 50) → `.../command/ack` | Liên tục theo batch khi Online | `ON CONFLICT (entry_id) DO NOTHING` (`XINV-006`), savepoint theo từng mục (D-015) + `DELETE WHERE outbox_seq <= acked_seq` (`INV-013`) |
+| Edge `Auto-Discovery` | Edge `local_workstation_profiles.present_locally` & Server `workstation_profiles` | MQTT 5 `.../hello` / `.../heartbeat` | Khi Agent khởi động / thay đổi allowlist | Chỉ nhận danh sách user nhóm `labstudent` UID >= 1000 (`INV-018`) |
+| Server duyệt cài lại / vô hiệu hóa máy | Mosquitto `crlfile` | `revoked_certificates` → sinh lại CRL → nạp lại broker | Khi Admin thao tác | Chứng chỉ cũ bị broker từ chối (D-014) |

@@ -151,22 +151,23 @@ flowchart LR
 **Truy vết:** FR-005, 063; BR-006, 009, 010; INV-015; D-011.
 
 ## UC-007: Đăng ký máy mới
-**Mô tả:** Một PC cài Agent được đăng ký vào hệ thống và nhận cấu hình/snapshot đầu tiên. Hỗ trợ 2 phương thức: Tự động (Zero-Touch via Master Image) và Token (Enrollment Token).
+**Mô tả:** Một PC cài Agent được đăng ký vào hệ thống và nhận cấu hình/snapshot đầu tiên. Phương thức duy nhất: Tự động (Zero-Touch via Master Image), mọi yêu cầu do Admin duyệt (D-014).
 
 **Luồng chính (Phương thức Zero-Touch Auto-Enrollment - D-010):**
 1. Kỹ thuật viên bung Master Image sạch (đã xóa `/etc/machine-id` và file credential của Agent) ra các máy phòng lab.
 2. Bật nguồn máy trạm lần đầu: systemd tự sinh `machine-id` mới; Agent tự sinh Ed25519 Keypair và gửi yêu cầu đăng ký (`hostname`, `mac_address`, `machine_id`, `public_key`) lên Server.
 3. Server lưu bản ghi `EnrollmentRequest` ở trạng thái `pending`.
-4. Admin mở Web Dashboard, thấy danh sách máy trạm chờ duyệt (kèm hostname/MAC để nhận diện), chọn phòng máy (Zone) và bấm **Phê duyệt**.
-5. Server cấp chứng chỉ Client Certificate mTLS chính thức (`CN = workstation_id`) và khóa so khớp `K_m` (ADR-007). Agent lưu bền vững vào `/etc/nfc-agent/agent.conf` (`0600 root:root`), kết nối MQTT và nhận snapshot đầu tiên.
+4. Admin mở Web Dashboard, thấy danh sách máy trạm chờ duyệt (kèm hostname/MAC để nhận diện), chọn phòng máy (Zone) và bấm **Phê duyệt** (từng máy hoặc "Duyệt tất cả" cho Zone; đối chiếu số máy vừa clone).
+5. Server cấp chứng chỉ Client Certificate mTLS chính thức (`CN = workstation_id`) và khóa so khớp `K_m` (ADR-007). Agent lưu bền vững vào `/var/lib/nfc-agent/identity/` (`0600 root:root`), kết nối MQTT và nhận snapshot đầu tiên.
 
 **Nhánh:**
-- AF-1 Đăng ký bằng Enrollment Token: Kỹ thuật viên cấu hình token theo lô (`batch_token`) trong file cấu hình local; server tạo `EnrollmentRequest`, kiểm tra token hợp lệ. Nếu MAC chưa từng tồn tại trên hệ thống, server tự động duyệt cấp credential mTLS và tiêu thụ 1 lượt token mà không cần Admin bấm tay. Nếu MAC đã tồn tại (trùng MAC), yêu cầu vẫn bắt buộc chuyển sang trạng thái `pending` kèm cờ `duplicate_mac_detected` để Admin duyệt thủ công (AF-2), tránh kẻ xấu đánh cắp token để chiếm máy trạm đang chạy.
-- EF-1 Token hết hạn, hết lượt hoặc đã thu hồi: từ chối.
-- AF-2 MAC đã có trong hệ thống (cài lại máy / clone lại): Server tạo `EnrollmentRequest` ở trạng thái `pending` và cảnh báo trùng MAC (`duplicate_mac_detected = true`) trên Dashboard để Admin duyệt thủ công (P1-4, D-010); máy trạm cũ đang chạy vẫn giữ nguyên quyền và snapshot/lease. Chỉ sau khi Admin phê duyệt, hệ thống mới cập nhật máy trạm, vô hiệu hóa credential cũ, tăng `key_version` của máy để quay vòng `K_m` (ADR-007) và cấp Client Certificate mới.
+- EF-1 Admin từ chối yêu cầu: máy giữ trạng thái chưa đăng ký, quẹt thẻ bị `data_stale(no_data)`; kỹ thuật viên kiểm tra máy rồi cho Agent gửi lại yêu cầu.
+- AF-2 MAC hoặc `machine_id` đã có trong hệ thống (cài lại máy / clone lại), hoặc trùng một yêu cầu khác đang chờ: Server tạo `EnrollmentRequest` ở trạng thái `pending` và cảnh báo trùng (`duplicate_mac_detected = true`) trên Dashboard (P1-4, D-010); máy trạm cũ đang chạy vẫn giữ nguyên quyền và snapshot/lease. Admin chỉ chọn **cài lại máy đó** hoặc **từ chối** (D-014). Khi duyệt cài lại, hệ thống cập nhật máy trạm tại chỗ, thu hồi chứng chỉ cũ ở broker, tăng `key_version` của máy để quay vòng `K_m` (ADR-007) và cấp Client Certificate mới.
+- EF-2 Mất gói trả lời khi tải credential: Agent tải lại bằng cùng mã; mã chỉ hết hiệu lực sau khi máy kết nối broker lần đầu thành công (D-014).
 - AF-3 Chưa nhận snapshot đầu: quẹt thẻ bị `data_stale` đến khi nhận.
+- AF-4 Bật lại máy đã bị vô hiệu hóa, hoặc định danh trên máy bị hỏng/mất: kỹ thuật viên chạy `sudo nfc-agent reenroll` trên máy; Agent cất định danh cũ, sinh khóa mới và gửi yêu cầu đăng ký (giữ nguyên nhật ký chưa gửi). Yêu cầu trùng máy cũ nên đi theo AF-2: Admin duyệt cài lại máy đó, máy trở lại `enrolled` với chứng chỉ và `key_version` mới. Chứng chỉ đã thu hồi không bao giờ được dùng lại (D-014).
 
-**Truy vết:** FR-040 đến 043, 053; BR-018; XINV-009; NFR-SEC02, D01; D-010.
+**Truy vết:** FR-040 đến 042, 053; BR-018; INV-010, XINV-009; NFR-SEC02, D01; D-010, D-014.
 
 ## UC-008: Xem trạng thái máy
 **Mô tả:** Admin xem máy nào online/offline, ai đang dùng và máy nào chưa cập nhật dữ liệu.

@@ -21,11 +21,11 @@
 | ID | Yêu cầu |
 |----|---------|
 | NFR-SEC01 | TLS cho MQTT và REST API |
-| NFR-SEC02 | Mỗi máy xác thực hai chiều với server bằng chứng chỉ mTLS riêng (`CN = workstation_id`), cấp qua quy trình Zero-Touch (Admin phê duyệt `EnrollmentRequest`) hoặc `EnrollmentToken` theo lô (BR-018, D-010) |
+| NFR-SEC02 | Mỗi máy xác thực hai chiều với server bằng chứng chỉ mTLS riêng (`CN = workstation_id`), cấp qua quy trình Zero-Touch (Admin phê duyệt `EnrollmentRequest`); chứng chỉ của máy bị cài lại hoặc vô hiệu hóa bị broker từ chối (BR-018, D-010, D-014) |
 | NFR-SEC03 | UID thẻ không lưu dạng rõ trong CSDL server (mã hóa khi lưu, server giải mã để hiển thị cho admin). Snapshot trên PC chứa khóa so khớp theo máy thay vì UID. Bản ghi nhật ký mang UID của lần quẹt, truyền qua TLS. File dữ liệu cục bộ chỉ root đọc được. Chấp nhận rủi ro: root trên một máy lấy được dữ liệu của máy đó, gồm danh sách khóa so khớp (UID ngắn có thể bị dò ngược) và UID của các lần quẹt tiếp theo tại máy |
 | NFR-SEC04 | Phân quyền cho API quản lý |
 | NFR-SEC05 | Nhật ký chỉ ghi thêm, không sửa, không xóa |
-| NFR-SEC06 | Mật khẩu admin, enrollment token, định danh máy lưu dạng băm hoặc được bảo vệ; token chỉ hiển thị một lần |
+| NFR-SEC06 | Mật khẩu admin và mã tải credential một lần của yêu cầu đăng ký lưu dạng băm; định danh máy được bảo vệ |
 | NFR-SEC07 | Tài khoản Linux dùng chung trên máy trạm (`WorkstationProfile`) phải thuộc allowlist của máy trạm (Auto-Discovery đồng bộ với server, nhóm hạn chế `labstudent`), không có quyền sudo không mật khẩu, chỉ thuộc nhóm hạn chế, khóa mật khẩu cục bộ (`passwd -l`) nếu chỉ dùng thẻ. PAM/Agent từ chối xác thực tài khoản ngoài allowlist hoặc UID < 1000. Nhận diện rõ giới hạn: dữ liệu `/home`, lịch sử shell và session web không tự động xóa sau mỗi phiên (BR-020, D-006, D-009) |
 
 ## Maintainability
@@ -47,7 +47,7 @@
 ## Deployability & Usability
 | ID | Yêu cầu |
 |----|---------|
-| NFR-D01 | Agent đóng gói cài bằng một lệnh (cấu hình LightDM greeter wrapper, PAM module, systemd service), nhận enrollment token qua cấu hình |
+| NFR-D01 | Agent đóng gói cài bằng một lệnh (cấu hình LightDM greeter wrapper, PAM module, systemd service); chứng chỉ CA của server nhúng sẵn trong Master Image, không cần cấu hình riêng từng máy |
 | NFR-D02 | Server khởi chạy bằng Docker Compose hoặc script đơn giản |
 | NFR-D03 | Tài khoản quản trị đầu tiên tạo lúc cài server, không có mật khẩu mặc định |
 | NFR-U01 | Người dùng chỉ cần một hành động: quẹt thẻ |

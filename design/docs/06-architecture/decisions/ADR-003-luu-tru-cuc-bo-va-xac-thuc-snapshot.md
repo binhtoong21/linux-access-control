@@ -29,9 +29,9 @@ Máy trạm phòng lab (Workstation) hoạt động theo mô hình biên tự tr
 ## Decision Drivers
 
 - **Tính Bất Biến Giao Dịch (INV-011, INV-014):** Ghi đồng thời Audit Log và Session Pending trong một khối nguyên tử; chỉ xóa Outbox khi Server đã xác nhận (INV-013).
-- **Chống Giả Mạo Tuyệt Đối (Cryptographic Integrity):** Đảm bảo Snapshot chỉ do Server chính danh phát hành cho riêng máy trạm đó; Broker bị chiếm quyền cũng không thể giả mạo dữ liệu.
+- **Chống giả mạo (Cryptographic Integrity):** Đảm bảo Snapshot chỉ do Server chính danh phát hành cho riêng máy trạm đó; Broker bị chiếm quyền cũng không thể giả mạo dữ liệu.
 - **Tối Ưu Hiệu Năng Đọc (Zero-Touch Latency):** Thời gian truy vấn kiểm tra thẻ và đối soát lịch trên đĩa cục bộ phải đạt dưới 5ms để bảo đảm trải nghiệm 0-chạm.
-- **Khả Năng Chống Chịu Mất Điện (Crash-Safe):** Dựa trên bằng chứng thực nghiệm Spike S5 (vượt qua 545 vòng ngắt điện SysRq `b` không hỏng dữ liệu).
+- **Khả Năng Chống Chịu Mất Điện (Crash-Safe):** Dựa trên Spike S5: ghi lặp 545 vòng rồi cắt điện cưỡng chế (SysRq `b`) **một lần** trên máy ảo, sau khởi động `integrity_check = ok`. Giới hạn: N = 1, chạy trên VM (host còn write-cache), chưa chứng minh trên ổ vật lý; vì vậy vẫn giữ quy trình phục hồi khi DB hỏng (D-017, `migrations.md` §3.2).
 
 ---
 
@@ -95,7 +95,9 @@ flowchart TD
 - **Phân quyền nghiêm ngặt Linux (D-013, Threat Boundary):**
   - Thư mục cha `/var/lib/nfc-agent`: Thuộc quyền sở hữu `root:root`, quyền truy cập `0700` (chỉ root được đọc/ghi/duyệt).
   - Tệp cơ sở dữ liệu `edge.db`, tệp WAL `edge.db-wal` và tệp shared-memory `edge.db-shm`: Quyền truy cập `0600 root:root`.
-  - Khóa riêng định danh `K_m` lưu tại: `/var/lib/nfc-agent/identity/k_m.key` với quyền `0600 root:root`.
+  - Thư mục định danh `/var/lib/nfc-agent/identity/` (`0700 root:root`, mọi tệp `0600`) chứa: `client.key` (khóa riêng Ed25519), `client.pem` (chứng chỉ mTLS), `identity.json` (`mqtt_identity`, `key_version`, `K_m` dạng hex). Ba tệp được ghi cùng lúc khi đăng ký/cài lại (ghi thư mục tạm rồi đổi tên, fsync thư mục cha theo phát hiện S5).
+  - **Nguồn sự thật về định danh là `identity/`, không phải `edge.db` (D-017).** `agent_meta` chỉ giữ bản sao `mqtt_identity`/`key_version` và được ghi đè từ `identity/` mỗi lần Agent khởi động; nhờ vậy dựng lại `edge.db` không làm sai `key_version`.
+  - CA của server: `/etc/nfc-agent/ca.pem` (nhúng sẵn trong Master Image, ADR-002 §7).
   - Sinh viên hoặc người dùng không đặc quyền (kể cả tài khoản `student`) không có quyền truy cập vào thư mục này, triệt tiêu nguy cơ đọc trộm snapshot hoặc can thiệp nhật ký.
 
 ---
@@ -120,14 +122,15 @@ flowchart TD
 ### 3. Lược Đồ Cơ Sở Dữ Liệu Cục Bộ (`edge.db` Architecture)
 
 Để đảm bảo tính tự trị của Edge và khả năng thẩm định tức thời không cần Server, cơ sở dữ liệu `edge.db` được tổ chức thành 4 phân vùng bảng logic:
-1. **Phân vùng Cấu hình & Trạng thái Tin cậy (Metadata & Lease):** Bảng `agent_meta` và `snapshot_meta`. Đặc biệt `snapshot_meta` bắt buộc lưu `key_version` để từ chối các snapshot lệch thế hệ khóa mã hóa, cùng cặp mốc thời gian tin cậy (`trusted_until`, `last_server_time`).
+1. **Phân vùng Cấu hình & Trạng thái Tin cậy (Metadata & Lease):** Bảng `agent_meta` (bản sao định danh từ `identity/`, `boot_id`), `local_liveness` và `snapshot_meta`. `snapshot_meta` lưu `key_version` của snapshot đang dùng cùng cặp mốc thời gian tin cậy (`trusted_until`, `last_server_time`); snapshot chỉ được nạp khi `key_version` của nó bằng `key_version` trong `identity/`.
 2. **Phân vùng Thẩm định Thẻ & Phân Lịch (Identity, Cards & Schedules):** Lưu trữ dữ liệu cấu hình đồng bộ từ Server:
    - `snapshot_cards`: Ánh xạ `card_match_key` (HMAC theo máy) sang `user_id`, kèm trạng thái kích hoạt của thẻ.
    - `snapshot_users`: Lưu thông tin sinh viên/giảng viên, trạng thái hoạt động (`active`/`inactive`).
-   - `snapshot_schedules`: Lưu lịch thực hành được gán cho người dùng hoặc nhóm lớp, profile hệ điều hành đích (`target_os_username`), ngày hiệu lực và khung giờ cho phép (`start_time`, `end_time`, `days_of_week`).
-   - `snapshot_profiles`: Danh sách các profile hệ điều hành được phép trên máy trạm (ví dụ: `student`, `exam`).
-3. **Phân vùng Phiên Làm Việc (Session Management):** Bảng `local_sessions` theo dõi trọn vẹn vòng đời phiên [ADR-008](ADR-008-vong-doi-phien-va-teardown-da-pha.md). Bắt buộc lưu trữ: `decided_at` (thời điểm Agent chốt cấp quyền, dùng để phát hiện phiên đua khi recovery), `boottime_limit` (mốc MONOTONIC/BOOTTIME tuyệt đối để cưỡng chế ngắt), `boot_id`, `os_session_id`, `status` (`pending`, `active`, `ended`), `end_reason` (`schedule_expired`, `superseded`, `user_logout`, `os_session_lost`, `workstation_rebooted`).
-4. **Phân vùng Hàng Đợi Kiểm Toán (Audit Outbox):** Bảng `audit_outbox` với khóa đơn điệu tự tăng `seq` phục vụ cơ chế xác nhận lũy tiến (Cumulative ACK) và khóa loại trùng `entry_id` (INV-013, INV-014).
+   - `snapshot_user_groups`: Thành viên nhóm của các user trong snapshot (để khớp lịch gán cho nhóm).
+   - `snapshot_schedules`: Lưu lịch thực hành được gán cho người dùng hoặc nhóm lớp, profile hệ điều hành đích (`target_os_username`), ngày hiệu lực và khung giờ cho phép (`start_minute`, `end_minute`, `days_mask`).
+   - `local_workstation_profiles`: Allowlist profile của máy. Cờ `enabled`/`is_default` đến từ snapshot và được thay **trong cùng giao dịch** với các bảng `snapshot_*`; Auto-Discovery chỉ ghi nhận profile có thật trên máy (`present_locally`). Một profile chỉ dùng được khi **có trong snapshot với `enabled` và có thật trên máy** (INV-018).
+3. **Phân vùng Phiên Làm Việc (Session Management):** Bảng `local_sessions` theo dõi trọn vẹn vòng đời phiên [ADR-008](ADR-008-vong-doi-phien-va-teardown-da-pha.md). Bắt buộc lưu trữ: `decided_at` (thời điểm Agent chốt cấp quyền, dùng để phát hiện phiên đua khi recovery), `boottime_limit` (mốc MONOTONIC/BOOTTIME tuyệt đối để cưỡng chế ngắt), `boot_id`, `os_session_id`, `status` (`pending`, `active`, `completed`, `forced_logout`, `abandoned`, `discarded`), `end_reason` (`schedule_expired`, `superseded`, `user_logout`, `os_session_lost`, `workstation_rebooted`).
+4. **Phân vùng Hàng Đợi Kiểm Toán (Audit Outbox):** Bảng `audit_outbox` với khóa đơn điệu tự tăng `outbox_seq` phục vụ cơ chế xác nhận lũy tiến (Cumulative ACK) và khóa loại trùng `entry_id` (INV-013, INV-014).
 
 > **Lưu ý triển khai:** Định nghĩa chi tiết các trường, kiểu dữ liệu, ràng buộc khóa ngoại và chỉ mục DDL của `edge.db` được đặc tả thống nhất và đầy đủ tại tài liệu tầng dữ liệu: [07-data/data-model.md](../../07-data/data-model.md). ADR-003 chỉ chốt các nguyên tắc kiến trúc lưu trữ, tính nguyên tử và cơ chế kiểm soát toàn vẹn.
 
@@ -139,8 +142,8 @@ flowchart TD
 
 1. **Nguồn gốc khóa K_m (ADR-007, D-010):**
    - Khóa bí mật `K_m` là khóa đối xứng 256-bit riêng biệt của từng máy trạm:
-     `K_m = HKDF-SHA256(master_key, workstation_id || ":" || key_version)`.
-   - Khóa này được Server cấp phát an toàn qua kênh mTLS Bootstrap khi duyệt máy trạm và lưu tại `/var/lib/nfc-agent/identity/k_m.key`.
+     `K_m = HKDF-SHA256(master_key, mqtt_identity || ":" || key_version)` (`mqtt_identity` là tên máy trong CN, ví dụ `ws-01`, mã hóa UTF-8; không dùng UUID nội bộ của server).
+   - Khóa này được Server cấp khi duyệt máy trạm qua HTTPS đã xác thực bằng CA nhúng sẵn (ADR-002 §7) và lưu trong `/var/lib/nfc-agent/identity/identity.json`.
 2. **Quy trình ký tại Server (Raw-Byte Hashing & Domain Separation):**
    - Thay vì nhúng chữ ký vào bên trong nội dung JSON (gây khó khăn cho việc băm chuỗi byte gốc), chữ ký xác thực bắt buộc phải được truyền tải trong **MQTT 5 User Property** `signature`.
    - Ký trên toàn bộ chuỗi byte thô nhận được từ MQTT wire (`raw_mqtt_payload_bytes`), kết hợp với tiền tố định danh miền (Domain Separation Tag) để triệt tiêu nguy cơ hoán đổi ngữ cảnh:
@@ -153,7 +156,8 @@ flowchart TD
    - Lấy chuỗi byte thô nhận được từ tầng mạng MQTT (`message.payload`), tuyệt đối không giải mã JSON rồi mã hóa lại (không round-trip parse/serialize), loại trừ 100% rủi ro sai lệch định dạng khoảng trắng hay thứ tự key giữa Node.js và Python.
    - Tính toán: `expected_sig = HexEncode(HMAC-SHA256(K_m, "snapshot-v1:" || message.payload))`.
    - So khớp bằng thuật toán an toàn hằng số thời gian (`hmac.compare_digest`) với giá trị trong MQTT 5 User Property `signature`.
-   - **Xử lý vi phạm:** Nếu chữ ký không khớp hoặc `version` nhỏ hơn `version` hiện hành, Agent **từ chối nạp snapshot ngay lập tức**, ghi nhật ký sự kiện `snapshot_signature_invalid` vào `audit_outbox` và duy trì cấu hình tin cậy cũ.
+   - **Xử lý vi phạm:** Nếu chữ ký không khớp, Agent **từ chối nạp snapshot**, ghi sự kiện `security_alert` (`snapshot_signature_invalid`) vào `audit_outbox` và giữ cấu hình tin cậy cũ. Nếu chữ ký đúng nhưng `version` **bằng** bản hiện hành (snapshot retained giao lại khi reconnect) thì bỏ qua lặng lẽ; nhỏ hơn thì bỏ qua và ghi `last_apply_error`; `key_version` khác `identity/` thì bỏ qua và ghi `last_apply_error = key_version_mismatch`.
+   - **Lease và ACK:** áp dụng các quy tắc nhận ở ADR-002 §4 (lease chỉ tiến, `server_time` phải lớn hơn `last_server_time`, `desired_version` phải bằng version cục bộ).
 
 ---
 
@@ -168,7 +172,7 @@ Trong điều kiện mạng bình thường, Agent nhận bản tin gia hạn Le
      - Khi có một giao dịch ghi khác đang diễn ra (ví dụ: vừa nạp Snapshot mới, hoặc vừa ghi nhận một sự kiện quẹt thẻ / mở phiên).
   3. Khi tắt máy trạm an toàn (`SIGTERM` tới Agent daemon), Agent thực hiện flush mốc lease hiện hành xuống SQLite trước khi thoát.
 
-Chính sách này giảm tần suất ghi đĩa của lease từ 120 lần/giờ xuống còn tối đa 12 lần/giờ mà vẫn bảo toàn tính an toàn khi máy trạm sập nguồn.
+Chính sách này giảm tần suất ghi đĩa của lease từ 120 lần/giờ xuống còn tối đa 12 lần/giờ. `trusted_until` và `last_server_time` luôn được ghi cùng nhau. Khi sập nguồn, giá trị trên đĩa cũ hơn tối đa 5 phút: lease ngắn đi và mốc sàn đồng hồ thấp hơn một chút, cả hai đều lệch về phía an toàn (ADR-001, D-012).
 
 ---
 
@@ -182,15 +186,17 @@ with db_connection:
     cursor.execute("BEGIN IMMEDIATE;")
     # 1. Ghi nhật ký quyết định quẹt thẻ
     cursor.execute("""
-        INSERT INTO audit_outbox (entry_id, timestamp, event_type, payload)
-        VALUES (?, ?, 'swipe_decision', ?);
-    """, (entry_id, now, payload_json))
-    
+        INSERT INTO audit_outbox (entry_id, occurred_at, event_type, payload_json, created_at)
+        VALUES (?, ?, 'swipe_decision', ?, ?);
+    """, (entry_id, now, payload_json, now))
+
     # 2. Tạo phiên pending chờ Display Manager bắt đầu
     cursor.execute("""
-        INSERT INTO local_sessions (session_id, entry_id, user_id, os_username, status, decided_at, expires_at)
-        VALUES (?, ?, ?, ?, 'pending', ?, ?);
-    """, (session_id, entry_id, user_id, target_os_user, now, expires_at))
+        INSERT INTO local_sessions (session_id, entry_id, user_id, card_id, os_username,
+                                    boot_id, decided_at, expires_at, boottime_limit, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending');
+    """, (session_id, entry_id, user_id, card_id, target_os_user,
+          boot_id, now, expires_at, boottime_limit))
     cursor.execute("COMMIT;")
 ```
 
@@ -205,20 +211,20 @@ Nếu máy tính mất điện đúng thời điểm này:
 Khi nhận bản tin `ack_outbox` mang số thứ tự `acked_seq` từ Server qua MQTT (ADR-002):
 ```sql
 -- Xóa toàn bộ các bản ghi đã được server tiếp nhận an toàn
-DELETE FROM audit_outbox WHERE seq <= :acked_seq;
+DELETE FROM audit_outbox WHERE outbox_seq <= :acked_seq;
 ```
-Thao tác xóa dựa trên chỉ mục `idx_outbox_seq` diễn ra trong < 1ms, giữ cho kích thước tệp `edge.db` luôn tinh gọn (thường dưới 10MB trong suốt kỳ học).
+`outbox_seq` là khóa chính nên thao tác xóa đi theo khóa chính, không cần chỉ mục riêng; giữ cho kích thước tệp `edge.db` luôn tinh gọn (thường dưới 10MB trong suốt kỳ học).
 
 ---
 
 ## Consequences
 
 ### Positive
-- **Tính Bất Biến ACID Hoàn Hảo:** Loại bỏ triệt để hiện tượng bất đồng bộ giữa log kiểm toán và phiên làm việc; bảo toàn 100% dữ liệu trước các cú ngắt điện đột ngột.
+- **Tính nguyên tử ACID:** Nhật ký kiểm toán và phiên `pending` luôn được ghi cùng nhau hoặc không ghi gì; dữ liệu đã `COMMIT` sống sót qua mất điện trong phạm vi bằng chứng S5.
 - **Bảo Vệ Độc Lập Khỏi Broker:** Ngay cả khi Broker MQTT bị hacker kiểm soát, kẻ tấn công không thể tiêm snapshot giả mạo vào máy trạm do không nắm giữ khóa đối xứng `K_m`.
 - **Hiệu Năng Cực Cao:** Cơ chế SQLite WAL cho phép PAM kiểm tra thẻ tức thì (< 2ms) mà không bị xung đột khóa (lock contention) với các tiến trình nền.
 - **Dung Lượng Gọn Nhẹ:** Một tệp duy nhất dễ sao lưu, kiểm tra toàn vẹn bằng lệnh `PRAGMA integrity_check`.
 
 ### Negative & Operational Trade-offs
 - **Kích Thước WAL Khi Ghi Dồn Dập:** Nếu Agent mất mạng dài ngày và sinh viên quẹt thẻ liên tục, tệp `edge.db-wal` có thể tăng kích thước; cần cấu hình checkpoint tự động định kỳ (`PRAGMA wal_autocheckpoint = 1000`).
-- **Phụ Thuộc Khóa Cục Bộ:** Nếu tệp `/var/lib/nfc-agent/identity/k_m.key` bị hỏng hoặc mất, Agent sẽ không thể nạp snapshot mới; kỹ thuật viên phải thực hiện quy trình Re-enrollment để Server cấp lại khóa.
+- **Phụ Thuộc Khóa Cục Bộ:** Nếu thư mục `/var/lib/nfc-agent/identity/` bị hỏng hoặc mất, Agent không thể nạp snapshot mới; kỹ thuật viên thực hiện Re-enrollment để Server cấp lại khóa. Ngược lại, `edge.db` hỏng thì Agent tự dựng lại từ `identity/` mà không cần Re-enrollment (D-017).

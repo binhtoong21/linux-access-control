@@ -43,10 +43,10 @@
 ## Module 04: Máy và Zone
 | ID | Yêu cầu | Priority | Scope | Notes |
 |----|---------|----------|-------|-------|
-| FR-040 | Đăng ký máy: hỗ trợ Tự động (Zero-Touch Auto-Enrollment, máy gửi yêu cầu PendingApproval khi boot từ Master Image, Admin duyệt trên Dashboard) hoặc qua enrollment token | Must | MVP | Cấp credential riêng biệt cho máy, không dùng MAC/Hostname làm credential (D-010, BR-018) |
+| FR-040 | Đăng ký máy theo Zero-Touch Auto-Enrollment: máy gửi yêu cầu PendingApproval khi boot từ Master Image, Admin duyệt trên Dashboard (từng máy hoặc hàng loạt theo Zone) | Must | MVP | Cấp credential riêng biệt cho máy, không dùng MAC/Hostname làm credential (D-010, BR-018) |
 | FR-041 | CRUD Zone (phòng), gán/gỡ máy vào zone | Must | MVP | Mỗi máy tối đa một zone (BR-015) |
 | FR-042 | Xem danh sách máy, lọc theo zone và trạng thái | Must | MVP | |
-| FR-043 | Quản lý enrollment token | Must | MVP | Số lần dùng và hạn dùng, thu hồi được |
+| FR-043 | ~~Quản lý enrollment token~~ (bỏ theo D-014: mọi yêu cầu đăng ký đều do Admin duyệt) | — | Đã bỏ | Thay bằng duyệt hàng loạt theo Zone trong FR-040 |
 
 ## Module 05: Sync (đồng bộ server → PC)
 | ID | Yêu cầu | Priority | Scope | Notes |

@@ -51,7 +51,7 @@ Tài liệu này ghi nhận các quyết định kiến trúc chuẩn hóa kênh
 ### Option 3: MQTT 5 qua TLS với mTLS X.509 Certificate và Mosquitto Pattern ACL (Được chọn)
 - **Ưu điểm:**
   - Xác thực 2 chiều (Mutual TLS): Máy trạm xác thực đúng Broker máy chủ; Broker xác thực máy trạm qua chứng chỉ Client Certificate Ed25519 được ký bởi CA nội bộ.
-  - Định danh máy gắn chặt với Common Name (`CN = workstation_id`), ánh xạ tự động vào biến `%u` của Mosquitto ACL.
+  - Định danh máy gắn chặt với Common Name (`CN = mqtt_identity`, ví dụ `ws-01`; trong tài liệu này `workstation_id` ở topic/payload chính là `mqtt_identity`), ánh xạ tự động vào biến `%u` của Mosquitto ACL.
   - Phân tách đọc/ghi tuyệt đối, loại trừ hoàn toàn nguy cơ nghe lén hay can thiệp chéo giữa các máy trạm.
   - Tận dụng LWT và User Properties của MQTT 5.
 - **Nhược điểm:** Cần xây dựng quy trình Đăng ký tự động (Auto-Enrollment CSR) để cấp phát chứng chỉ lần đầu.
@@ -104,6 +104,10 @@ Hệ thống phân tách tuyệt đối giữa luồng ĐỌC (Subscribe) và lu
 | **Máy trạm gửi kiểm toán** | **Write-Only** (PUBLISH) | `pattern write lab/workstation/%u/outbox` | Gửi các lô bản ghi AuditLog và sự kiện phiên |
 | **Máy trạm báo trạng thái** | **Write-Only** (PUBLISH) | `pattern write lab/workstation/%u/status` | Kênh xuất bản trạng thái online và Last Will (LWT) |
 
+> **Client của Server:** Server dùng một chứng chỉ riêng (`CN = nfc-server`) với quyền `read` trên `lab/workstation/+/hello|heartbeat|outbox|status` và `write` trên `lab/workstation/+/snapshot|lease|command/#`.
+>
+> **Thu hồi chứng chỉ (D-014):** Mosquitto bật `crlfile`. Khi Admin duyệt cài lại máy hoặc vô hiệu hóa máy, Server thêm serial cũ vào danh sách thu hồi, sinh lại CRL và nạp lại broker (`SIGHUP`). Chứng chỉ cũ (ví dụ còn trên ổ đĩa cũ) không kết nối được nữa, nên không có hai client cùng CN đá nhau hay gửi heartbeat/outbox giả.
+>
 > **Bảo vệ an ninh & Hành vi thực tế Mosquitto `acl_file` (kiểm chứng tại Spike S5 & S8):**
 > - Mọi nỗ lực `PUBLISH` trái phép của máy trạm (như tự ghi vào `/snapshot` hay ghi trộm topic máy khác) đều bị Mosquitto Broker từ chối ngay lập tức ở tầng giao thức với mã lỗi MQTT 5: **`0x87 / 135 (Not Authorized)`** (S5, S8).
 > - Đối với `SUBSCRIBE` trái phép sang máy trạm khác: khi dùng `acl_file` truyền thống (`pattern read ...`), Mosquitto chấp nhận gói `SUBACK` (`qos: 1`) nhưng **kiểm soát quyền `read` lúc chuyển phát (egress)** và âm thầm loại bỏ bản tin, bảo đảm máy trạm nhận **0 byte rò rỉ** (đã kiểm chứng thực tế bằng cert Ed25519 `CN=ws-test-01` tại Spike S8). Nếu muốn broker từ chối ngay cả gói `SUBACK` bằng mã `0x87`, có thể chuyển sang plugin `dynamic-security` của Mosquitto 2.x khi triển khai nâng cao.
@@ -157,6 +161,9 @@ sequenceDiagram
         S->>B: PUBLISH QoS 1 (Retained): snapshot [User Property signature] {version, created_at, ...}
         B->>A: Nhận snapshot mới -> Thẩm định signature -> Nạp atomic vào edge.db
         A->>B: PUBLISH QoS 0: heartbeat (Báo snapshot_version mới ngay lập tức)
+    else snapshot_version > desired_version (Server vừa khôi phục từ bản sao lưu - D-016)
+        S->>S: desired_version = max(desired, snapshot_version) + 1, dựng lại snapshot
+        S->>B: PUBLISH QoS 1 (Retained): snapshot mới
     end
     Note over A,S: Bắt đầu tiến trình đẩy Outbox nền (xem Mục 5)
     loop Định kỳ mỗi 30 giây
@@ -172,6 +179,10 @@ sequenceDiagram
     * Lease: `signature = HMAC-SHA256(K_m, "lease-v1:" || raw_mqtt_payload_bytes)`
     * ACK: `signature = HMAC-SHA256(K_m, "ack-v1:" || raw_mqtt_payload_bytes)`
   - Agent thẩm định chữ ký trực tiếp trên chuỗi byte nhận được từ MQTT wire trước khi xử lý logic hoặc parse JSON. Nếu chữ ký sai, từ chối ngay lập tức.
+- **Quy tắc nhận sau khi chữ ký hợp lệ:**
+  * *Snapshot:* `version` lớn hơn bản đang dùng thì nạp; **bằng** bản đang dùng (snapshot retained được giao lại mỗi lần reconnect) thì bỏ qua lặng lẽ, không ghi lỗi; nhỏ hơn thì bỏ qua và ghi `last_apply_error`.
+  * *Lease:* chỉ nhận khi `desired_version` bằng version cục bộ và `server_time` lớn hơn `last_server_time` đã có (chặn phát lại bản lease cũ); `trusted_until` mới chỉ được tiến, không lùi.
+  * *ACK:* `acked_seq` nhỏ hơn hoặc bằng mức đã xóa thì bỏ qua (phát lại vô hại).
 - **Payload Hello (`.../hello`):**
   ```json
   {
@@ -198,7 +209,7 @@ sequenceDiagram
     "workstation_id": "ws-01",
     "boot_id": "9f2c8d14-...",
     "snapshot_version": 12,
-    "trust_state": "trusted",
+    "trust_state": "Fresh",
     "local_time": 1793049263.81,
     "clock_skew_detected": false,
     "last_apply_error": null
@@ -231,9 +242,12 @@ sequenceDiagram
            "payload": {
              "card_uid": "1F0820CF",
              "outcome": "granted",
-             "user_id": "SV001",
+             "reason": "granted",
+             "user": {"id": "6f1c…(UUID)", "external_id": "SV001", "full_name": "Nguyễn Văn A"},
+             "card_id": "0b7e…(UUID)",
              "target_os_username": "student",
-             "matched_schedule_id": "SCH_01"
+             "matched_schedule_id": "3a9d…(UUID)",
+             "data_version": 12
            }
          }
        ]
@@ -241,6 +255,8 @@ sequenceDiagram
      ```
 2. **Xử lý phía Server (Idempotency):**
    - Server bóc tách từng bản ghi, dùng `entry_id` để loại trùng (Dedup) bằng ràng buộc `ON CONFLICT (entry_id) DO NOTHING` trong cơ sở dữ liệu PostgreSQL.
+   - `user` (ảnh chụp danh tính) do Edge lấy từ `snapshot_users` tại thời điểm quẹt; Server ghi nguyên vào `audit_logs.user_snapshot`, không tra lại dữ liệu hiện hành.
+   - **Mục lỗi không chặn lô (D-015):** mỗi bản ghi được áp dụng riêng (savepoint). Bản ghi không áp dụng được (sai định dạng, xung đột trạng thái) được lưu nguyên văn vào `ingest_rejects` kèm lý do; các bản ghi khác vẫn áp dụng và Server vẫn ACK `to_seq`. `SessionEnded` đến sau khi Server đã suy luận `abandoned` thì thay kết quả suy luận đúng một lần (INV-007).
 3. **Xác nhận Lũy tiến (Cumulative ACK):**
    - Server gửi bản tin xác nhận về topic `lab/workstation/%u/command/ack`:
      ```json
@@ -282,62 +298,75 @@ sequenceDiagram
     participant DB as Central Database
     participant Admin as Web Dashboard (Admin)
     participant CA as Internal CA / Vault
+    participant B as Mosquitto Broker
 
-    Note over W: Khởi động lần đầu (First Boot)<br>systemd tự sinh machine-id mới duy nhất
+    Note over W: Khởi động lần đầu (First Boot)<br>systemd tự sinh machine-id mới duy nhất<br>CA server đã nhúng sẵn trong Master Image
     W->>W: Agent phát hiện chưa có mTLS Identity<br>Tự sinh Ed25519 Keypair & CSR (CN=ws-temp)
-    W->>S: POST /api/v1/workstations/enroll<br>{machine_id, hostname, mac_address, csr}
-    S->>DB: Ghi EnrollmentRequest (status='pending', token=UUIDv4)
-    alt Phát hiện trùng MAC hoặc machine-id cũ (P1-4)
-        S->>DB: Đánh dấu duplicate_mac_detected = true<br>(Giữ pending, KHÔNG tước quyền máy cũ)
+    W->>S: POST /api/v1/workstations/enroll (HTTPS, xác thực server bằng CA nhúng sẵn)<br>{machine_id, hostname, mac_address, csr}
+    S->>DB: Ghi EnrollmentRequest (status='pending', fetch_code_hash)
+    alt Trùng MAC/machine-id với máy đã có HOẶC với yêu cầu khác đang chờ (P1-4)
+        S->>DB: duplicate_mac_detected = true, duplicate_of = máy trùng<br>(Giữ pending, KHÔNG tước quyền máy cũ)
     end
-    S-->>W: 201 Created {enrollment_request_id, poll_interval_sec: 5}
-    Note over W: Lưu enrollment_request_id làm One-Time Bearer Token
+    S-->>W: 201 Created {request_id, fetch_code, poll_interval_sec: 5}
+    Note over W: Lưu fetch_code (mã tải một lần, ngẫu nhiên, khác request_id)
     Admin->>S: Mở Dashboard xem danh sách chờ duyệt
-    Admin->>S: Bấm "Phê duyệt" (Approve) máy ws-01
+    Admin->>S: "Duyệt tất cả" theo Zone (bỏ qua yêu cầu có cờ trùng)<br>hoặc duyệt từng yêu cầu: máy mới / cài lại máy duplicate_of / từ chối
     S->>CA: Ký Certificate (CN="ws-01", TTL=3 năm)
-    S->>S: Sinh khóa bí mật K_m = HKDF(master_key, "ws-01:1")
+    S->>S: Dẫn xuất K_m = HKDF(master_key, "ws-01:" || key_version)
+    opt Cài lại máy đã có
+        S->>S: key_version + 1, thu hồi serial cũ, sinh lại CRL, nạp lại Mosquitto
+    end
     S->>DB: Chuyển EnrollmentRequest -> 'approved'
-    loop Polling (kèm Bearer Token)
-        W->>S: GET /api/v1/workstations/enroll/{id}/status<br>Authorization: Bearer <enrollment_request_id>
+    loop Polling
+        W->>S: GET /api/v1/workstations/enroll/{request_id}/status<br>Authorization: Bearer <fetch_code>
         alt Chưa duyệt
             S-->>W: 200 OK {status: "pending"}
         else Đã duyệt
-            S-->>W: 200 OK {status: "approved", client_cert, K_m, ca_cert}
-            S->>DB: Thu hồi/Hủy Bearer Token (One-time download)
+            S-->>W: 200 OK {status: "approved", mqtt_identity, key_version, client_cert, K_m}
+        else Bị từ chối
+            S-->>W: 200 OK {status: "rejected"}
         end
     end
-    W->>W: Lưu bền vững vào /var/lib/nfc-agent/identity/<br>Quyền file 0600 root:root
-    Note over W: Kết nối Mosquitto Broker qua mTLS Port 8883
+    W->>W: Ghi cùng lúc vào /var/lib/nfc-agent/identity/<br>(cert, K_m, key_version, mqtt_identity), 0600 root:root
+    W->>B: Kết nối Mosquitto Broker qua mTLS Port 8883 lần đầu thành công
+    S->>DB: Vô hiệu hóa fetch_code (chỉ sau kết nối đầu tiên)
 ```
 
 1. **Chuẩn hóa Master Image (Sysprep sạch):**
    - Đĩa mẫu trước khi clone qua Clonezilla/PXE phải được xóa trắng `/etc/machine-id` (hoặc đặt uninitialized) và xóa toàn bộ thư mục `/var/lib/nfc-agent/identity/`.
+   - Đĩa mẫu **giữ** chứng chỉ CA của server (`/etc/nfc-agent/ca.pem`, không phải bí mật). Đây là neo tin cậy duy nhất của Agent khi đăng ký: Agent chỉ nói chuyện với server/broker có chứng chỉ do CA này ký, nên kẻ giả mạo trên LAN không lấy được `K_m` hay đưa CA giả cho máy (D-014).
 2. **Khởi động lần đầu (First Boot):**
    - Systemd tự động sinh `machine-id` duy nhất cho phần cứng mới.
-   - Agent khởi động, nhận thấy thiếu chứng chỉ số sẽ tự động sinh cặp khóa riêng Ed25519 và Certificate Signing Request (CSR) lưu tại `/var/lib/nfc-agent/identity.key` với quyền `0600 root:root`.
+   - Agent khởi động, nhận thấy thiếu chứng chỉ số sẽ tự động sinh cặp khóa riêng Ed25519 và Certificate Signing Request (CSR); khóa riêng lưu tại `/var/lib/nfc-agent/identity/client.key` với quyền `0600 root:root`.
 3. **Đăng ký tập trung qua HTTPS REST API:**
    - Agent gửi yêu cầu đăng ký `POST /api/v1/workstations/enroll` chứa: `machine_id`, `hostname`, `mac_address`, và nội dung tệp `csr`.
-   - Server ghi nhận vào bảng `enrollment_requests` ở trạng thái **`pending`**, sinh một `enrollment_request_id` ngẫu nhiên (UUID v4 bí mật) đóng vai trò **One-Time Bearer Token**, và trả về cho Agent trong HTTP response code 201.
-   - *Phòng vệ trùng MAC (P1-4):* Nếu phát hiện MAC hoặc `machine-id` trùng với một máy trạm đang hoạt động, Server **tuyệt đối không ghi đè** hay tước quyền máy cũ, mà chỉ gắn cờ cảnh báo `duplicate_mac_detected = true` và đưa vào danh sách chờ duyệt riêng biệt để chống giả mạo ARP/MAC cướp credential.
+   - Server ghi nhận vào bảng `enrollment_requests` ở trạng thái **`pending`**, trả về `request_id` và một **mã tải một lần** `fetch_code` (ngẫu nhiên 32 byte, khác `request_id`; Server chỉ lưu bản băm) trong HTTP response code 201.
+   - *Phòng vệ trùng (P1-4, D-014):* Nếu MAC hoặc `machine-id` trùng với một máy trạm đã có **hoặc với một yêu cầu khác đang chờ**, Server **không ghi đè** hay tước quyền máy cũ, chỉ gắn cờ `duplicate_mac_detected = true` (kèm `duplicate_of` nếu trùng máy đã có).
 4. **Phê duyệt trên Web Dashboard:**
-   - Quản trị viên đối chiếu danh sách máy mới trong phòng lab và bấm phê duyệt (hỗ trợ duyệt hàng loạt theo Zone).
-   - Server cấp phát `workstation_id` chính thức, ký chứng chỉ số Client Certificate (`CN = workstation_id`) với thời hạn **TTL = 3 năm** (đủ cho trọn vẹn chu kỳ hoạt động đồ án mà không gây gián đoạn do hết hạn chứng chỉ giữa chừng; việc tự động xoay vòng cert trước khi hết hạn được ghi nhận là Future Extension).
-   - Đồng thời trích xuất khóa định danh máy `K_m = HKDF(master_key, workstation_id || ":" || key_version)` theo [ADR-007](ADR-007-khoa-so-khop-uid.md).
+   - Quản trị viên đối chiếu danh sách máy mới trong phòng lab và bấm phê duyệt (hỗ trợ "Duyệt tất cả" theo Zone, tự bỏ qua yêu cầu có cờ trùng). Yêu cầu trùng một máy đã có chỉ có hai lựa chọn: **cài lại máy đó** hoặc **từ chối** (không duyệt thành máy mới, INV-009). Không có đường tự động duyệt (D-014).
+   - Server cấp phát `mqtt_identity` chính thức (máy mới) hoặc giữ nguyên `mqtt_identity` cũ (cài lại), ký chứng chỉ số Client Certificate (`CN = workstation_id`) với thời hạn **TTL = 3 năm** (đủ cho trọn vẹn chu kỳ hoạt động đồ án mà không gây gián đoạn do hết hạn chứng chỉ giữa chừng; việc tự động xoay vòng cert trước khi hết hạn được ghi nhận là Future Extension).
+   - Đồng thời trích xuất khóa định danh máy `K_m = HKDF(master_key, mqtt_identity || ":" || key_version)` theo [ADR-007](ADR-007-khoa-so-khop-uid.md). Cài lại máy: `key_version + 1` và thu hồi chứng chỉ cũ qua CRL (Mục 1).
 5. **Kích hoạt mTLS và Thu hồi Token:**
-   - Agent gửi yêu cầu `GET /api/v1/workstations/enroll/{enrollment_request_id}/status` kèm header `Authorization: Bearer <enrollment_request_id>`. Kẻ tấn công trên mạng LAN dù biết `hostname` hay `mac_address` cũng không thể tải trộm chứng chỉ và `K_m` nếu không sở hữu Bearer Token bí mật này.
-   - Sau khi trả về chứng chỉ và `K_m` thành công 1 lần, Server hủy ngay quyền tải tiếp (One-time fetch) để ngăn rò rỉ.
-   - Agent lưu chứng chỉ và `K_m` vào đĩa an toàn. Kể từ thời điểm này, Agent ngắt kênh HTTP bootstrap và chuyển sang sử dụng 100% kênh mTLS bảo mật cổng 8883 kết nối với Broker Mosquitto.
+   - Agent gửi yêu cầu `GET /api/v1/workstations/enroll/{request_id}/status` kèm header `Authorization: Bearer <fetch_code>`. Kẻ tấn công trên mạng LAN dù biết `hostname`, `mac_address` hay `request_id` cũng không tải được chứng chỉ và `K_m` nếu không có `fetch_code`.
+   - `fetch_code` chỉ hết hiệu lực khi máy kết nối broker bằng chứng chỉ mới lần đầu thành công. Nếu gói trả lời bị mất giữa đường, Agent cứ tải lại; không có trạng thái "đã duyệt nhưng không bao giờ lấy được credential".
+   - Agent ghi chứng chỉ, `K_m`, `key_version` và `mqtt_identity` **cùng lúc** vào `/var/lib/nfc-agent/identity/` (ghi thư mục tạm rồi đổi tên; D-017). Đây là nguồn sự thật về định danh của máy, nằm ngoài `edge.db`. Kể từ thời điểm này, Agent ngắt kênh HTTP bootstrap và chuyển sang sử dụng 100% kênh mTLS bảo mật cổng 8883 kết nối với Broker Mosquitto.
+6. **Đăng ký lại thủ công bằng lệnh `nfc-agent reenroll` (D-014):**
+   - *Khi dùng:* bật lại máy đã bị vô hiệu hóa (chứng chỉ cũ đã nằm trong CRL), thư mục `identity/` bị hỏng/mất, hoặc nghi khóa của máy bị lộ. Agent không tự đăng ký lại khi kết nối broker thất bại, vì không phân biệt chắc chắn được "bị thu hồi" với "mất mạng"; tự đăng ký lại sẽ sinh ra hàng loạt yêu cầu rác mỗi lần mạng chập chờn.
+   - *Thao tác (kỹ thuật viên, quyền root trên máy):* `sudo nfc-agent reenroll`. Agent dừng kết nối MQTT, chuyển `identity/` cũ sang `identity.old.<unix_ts>/`, sinh cặp khóa Ed25519 mới và gửi yêu cầu đăng ký như lần đầu (Mục 3). Lệnh **không** đụng tới `audit_outbox`: nhật ký chưa gửi được gửi tiếp sau khi máy có chứng chỉ mới.
+   - *Phía Server:* yêu cầu mới trùng MAC/`machine_id` với máy cũ nên tự mang cờ `duplicate_mac_detected` và `duplicate_of = ws-01`. Admin duyệt **cài lại máy `ws-01`**: cập nhật tại chỗ, `key_version + 1`, máy `disabled` trở lại `enrolled`. Lịch sử phiên, audit và lịch của `ws-01` giữ nguyên.
+   - *Không có thao tác "gỡ khỏi danh sách thu hồi":* chứng chỉ đã thu hồi không bao giờ dùng lại được, vì máy có thể đã bị vô hiệu hóa do mất ổ cứng.
+   - *Hệ quả đã chấp nhận:* máy vừa bị vô hiệu hóa không kết nối được nữa nhưng vẫn cho quẹt thẻ theo snapshot cục bộ tới khi lease hết (tối đa `D = 24h`, ADR-001). Cần chặn ngay thì kỹ thuật viên tắt máy.
 
 ---
 
 ## Consequences
 
 ### Positive
-- **Bảo mật Đỉnh cao:** mTLS ngăn chặn 100% nghe lén trên mạng LAN phòng lab; Mosquitto ACL tách biệt đọc/ghi triệt tiêu nguy cơ máy trạm can thiệp cấu hình của nhau; Bearer token một lần bảo vệ K_m trong quy trình bootstrap.
+- **Bảo mật phù hợp quy mô:** mTLS chống nghe lén trên mạng LAN phòng lab; Mosquitto ACL tách đọc/ghi ngăn máy trạm can thiệp cấu hình của nhau; CA nhúng sẵn + mã tải một lần bảo vệ `K_m` khi đăng ký; CRL làm cho thu hồi chứng chỉ có hiệu lực thật.
 - **Vận hành Tiện lợi (Zero-Touch):** Kỹ thuật viên clone hàng loạt không cần cấu hình mật khẩu hay token thủ công trên từng máy trạm; quản trị phê duyệt tập trung trên Web Dashboard.
-- **Toàn vẹn Dữ liệu Tuyệt đối:** Kết hợp Outbox batching và Cumulative ACK loại trừ rủi ro mất mát hay gửi trùng lặp bản ghi kiểm toán khi đứt mạng.
+- **Toàn vẹn dữ liệu kiểm toán:** Outbox batching + Cumulative ACK + loại trùng theo `entry_id` chống mất và trùng bản ghi khi đứt mạng; mục lỗi không chặn lô (D-015).
 - **Chống Bão Kết nối:** Cơ chế Exponential Backoff có Jitter bảo vệ hạ tầng máy chủ khi phòng lab 40-100 máy trạm cùng khởi động lại.
 
 ### Negative & Operational Trade-offs
-- **Gánh nặng Hạ tầng PKI:** Server trung tâm phải quản lý CA nội bộ để ký chứng chỉ số X.509. (Giải pháp: Đặt TTL = 3 năm cho MVP để giảm bớt độ phức tạp của auto-renewal cert).
+- **Gánh nặng Hạ tầng PKI:** Server trung tâm phải quản lý CA nội bộ để ký chứng chỉ số X.509 và sinh lại CRL khi thu hồi. (Giải pháp: Đặt TTL = 3 năm cho MVP để giảm bớt độ phức tạp của auto-renewal cert; CRL chỉ đổi khi cài lại hoặc vô hiệu hóa máy, vài lần mỗi học kỳ).
 - **Ràng buộc Thời gian Ban đầu:** Quá trình mTLS yêu cầu đồng hồ máy trạm không được lệch quá thời hạn chứng chỉ X.509; với chứng chỉ 3 năm, rủi ro lệch giờ cản trở mTLS ban đầu là gần như bằng không.

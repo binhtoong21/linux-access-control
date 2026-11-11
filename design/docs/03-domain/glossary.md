@@ -19,7 +19,6 @@
 | **WorkstationProfile** | Profile tài khoản Linux dùng chung được khai báo trong allowlist của máy trạm | `student`, `labuser` |
 | **Zone** | Nhóm máy theo phòng, danh sách phẳng | Phòng Lab 301 |
 | **Agent** | Phần mềm chạy trên mỗi PC: đọc thẻ, giữ dữ liệu cục bộ, quyết định đăng nhập, báo cáo | Service daemon kèm PAM module |
-| **EnrollmentToken** | Mã admin cấp để agent đăng ký; giới hạn số lần dùng và hạn | Token dùng 40 lần cho cả phòng |
 
 ## Lịch (Scheduling)
 | Thuật ngữ | Định nghĩa | Ví dụ |

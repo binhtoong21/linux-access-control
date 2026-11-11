@@ -64,6 +64,7 @@ sequenceDiagram
 | EF-2 | Snapshot hỏng, sai máy hoặc cũ hơn | Agent giữ bản cũ, ghi log cục bộ. Server chỉ thấy máy chưa cập nhật qua SyncState. |
 | EF-3 | Trùng, đến muộn, sai thứ tự | Quy tắc "chỉ nhận version lớn hơn" xử lý. |
 | EF-4 | Server sập giữa commit và publish | Khi khởi động, reconcile mọi máy: dựng lại nội dung từ dữ liệu hiện tại và so với Snapshot gần nhất. Không dựa vào `desired_version` vì nó có thể chưa kịp cập nhật. |
+| EF-4b | Server khôi phục từ bản sao lưu cũ (version server < version máy đang giữ) | Hello/heartbeat báo version lớn hơn `desired_version`: server đặt version kế tiếp `= max(desired_version, version máy) + 1`, dựng và gửi snapshot mới. Nếu không làm vậy, Agent từ chối mọi snapshot "cũ hơn", server không bao giờ gia hạn lease và cả phòng máy bị `data_stale` sau khi lease hết (INV-011, D-016). |
 | EF-5 | Mất ack | Heartbeat kế tiếp báo version nên SyncState tự sửa; ack là idempotent. |
 | EF-6 | Máy đổi zone, máy mới đăng ký | Cùng luồng, kích hoạt bởi `WorkstationZoneChanged`, `AgentEnrolled`. |
 

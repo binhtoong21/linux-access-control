@@ -49,15 +49,13 @@ classDiagram
 **AdminAccount**: id, username (duy nhất), display_name, status (`active`, `disabled`). Tách biệt với User quẹt thẻ.
 
 ### Device
-**EnrollmentRequest**: id, machine_id, mac_address, hostname, public_key, enrollment_token_id (tùy chọn), status (EnrollmentRequestStatus: `pending`, `approved`, `rejected`), submitted_at, reviewed_at, reviewed_by (AdminAccount id).
+**EnrollmentRequest**: id, machine_id, mac_address, hostname, public_key, duplicate_of (Workstation trùng MAC/`machine_id`, nếu có), duplicate_mac_detected, status (EnrollmentRequestStatus: `pending`, `approved`, `rejected`), submitted_at, reviewed_at, reviewed_by (AdminAccount id).
 
 **Workstation**: id, machine_id (duy nhất), mac_address (duy nhất), hostname, public_key, key_version (số nguyên tăng dần từ 1), zone_id (tùy chọn), status (WorkstationStatus: `enrolled`, `disabled`).
 
 **WorkstationProfile**: id, workstation_id, os_username, display_name, profile_type (`shared`), is_default (boolean - nguồn sự thật duy nhất cho profile mặc định của máy), status (WorkstationProfileStatus: `enabled`, `disabled`), description. Danh sách profile tài khoản Linux được phép dùng trên máy trạm (Allowlist). Khi Agent phát hiện (Auto-Discovery), profile mặc định có status = `enabled`; profile đầu tiên được gán `is_default = true` nếu máy chưa có default.
 
 **Zone**: id, name (duy nhất, không rỗng), location (không rỗng), description (tùy chọn). Danh sách phẳng.
-
-**EnrollmentToken**: id, note, max_uses (≥ 1, mặc định 1), uses (danh sách máy và thời điểm đã dùng), expires_at, status (`active`, `revoked`), created_by.
 
 ### Scheduling
 **Schedule**: id, name, subject (Subject), target (Target), recurrence (RecurrenceRule), target_os_username (tùy chọn; nếu rỗng thì nhận default profile của máy), status (`enabled`, `disabled`). Một Schedule là một dòng "ai, ở đâu, khi nào, profile nào".
@@ -79,7 +77,7 @@ classDiagram
 
 **LocalSnapshot**: snapshot đang dùng (version, content gồm key_version, parameters), received_at, trusted_until (UTC), last_server_time (UTC), lease_duration. Thay thế nguyên tử; chỉ nhận bản có version lớn hơn. Nếu snapshot có `key_version` khác với `key_version` cục bộ của máy thì từ chối nạp, giữ bản cũ, không ack (lease dần hết hạn).
 
-**LocalWorkstationProfile**: danh sách profile được phép dùng cục bộ theo allowlist của máy trạm: os_username, is_default, status (`enabled`, `disabled`). Agent và PAM chỉ mở phiên cho profile nằm trong allowlist này và có status `enabled`.
+**LocalWorkstationProfile**: danh sách profile được phép dùng cục bộ theo allowlist của máy trạm: os_username, is_default, status (`enabled`, `disabled`), có trong snapshot hay không, có thật trên máy hay không. `is_default` và `status` đến từ snapshot; "có thật trên máy" do Auto-Discovery ghi nhận. Agent và PAM chỉ mở phiên cho profile **có trong snapshot với status `enabled` và có thật trên máy**; profile mới phát hiện chưa dùng được cho tới khi server ghi nhận và gửi snapshot mới.
 
 **LocalSession**: session_id, decision_id (bắt buộc, khớp entry_id), user_id, card_id, os_username, os_session_id (id logind của GUI session trên seat0), decided_at, started_at, expires_at (UTC), boottime_limit (hạn đo theo `CLOCK_BOOTTIME`), boot_id, status (`pending`, `active`, `discarded`). Tối đa một phiên active và một pending.
 
@@ -110,7 +108,6 @@ classDiagram
 | UserStatus | `active`, `inactive` |
 | CardStatus | `unbound`, `active`, `disabled` |
 | AdminAccountStatus | `active`, `disabled` |
-| EnrollmentTokenStatus | `active`, `revoked` |
 | EnrollmentRequestStatus | `pending`, `approved`, `rejected` |
 | WorkstationStatus | `enrolled`, `disabled` |
 | WorkstationProfileStatus | `enabled`, `disabled` |
@@ -135,7 +132,6 @@ classDiagram
 | Workstation | Device | MVP | INV-009 |
 | WorkstationProfile | Device | MVP | INV-018 |
 | Zone | Device | MVP | INV-003 |
-| EnrollmentToken | Device | MVP | INV-010 |
 | Schedule | Scheduling | MVP | INV-004, INV-005 |
 | Snapshot | Distribution | MVP | INV-011, INV-012 |
 | SyncState | Distribution | MVP | |
@@ -205,13 +201,13 @@ Nhận bản ghi từ Edge; loại trùng theo `entry_id`; lưu `received_at`. X
 Chuẩn hóa UID; chưa có → tạo thẻ `active` với chủ; đã có và `unbound` → gắn lại; đã có chủ → từ chối.
 
 ### AgentEnrollmentService (Device)
-- Tiếp nhận yêu cầu đăng ký từ Agent (gửi kèm `machine_id`, `mac_address`, `hostname`, `public_key`, và `enrollment_token_id` nếu có): tạo bản ghi `EnrollmentRequest` ở trạng thái `pending`.
-- Nếu `mac_address` trùng với một `Workstation` đã có trong hệ thống: đánh dấu cờ cảnh báo `duplicate_mac_detected` trên Dashboard và bắt buộc giữ yêu cầu ở trạng thái `pending` để Admin phê duyệt thủ công (Workstation hiện tại đang chạy vẫn giữ nguyên quyền và snapshot/lease, không bị ảnh hưởng).
-- Nếu có `EnrollmentToken` hợp lệ (còn lượt, chưa hết hạn, `active`) và `mac_address` chưa từng tồn tại: tự động duyệt yêu cầu, tiêu thụ 1 lượt token và chuyển `EnrollmentRequest` sang `approved`.
-- Khi Admin phê duyệt `EnrollmentRequest` trên Dashboard:
-  * Gán Zone cho máy trạm.
-  * Tạo mới `Workstation` hoặc cập nhật `Workstation` hiện có (nếu cài lại: tăng `key_version`, thu hồi Client Certificate cũ).
-  * Ký phát hành Client Certificate mTLS chính thức và tính khóa riêng của máy `K_m = HKDF(master_key, workstation_id || ":" || key_version)`.
+- Tiếp nhận yêu cầu đăng ký từ Agent (gửi kèm `machine_id`, `mac_address`, `hostname`, `public_key`): tạo bản ghi `EnrollmentRequest` ở trạng thái `pending`. Không có đường tự động duyệt (D-014).
+- Nếu `mac_address` hoặc `machine_id` trùng với một `Workstation` đã có (ghi `duplicate_of`) hoặc với một `EnrollmentRequest` khác đang `pending`: đánh dấu cờ cảnh báo `duplicate_mac_detected` trên Dashboard (Workstation hiện tại đang chạy vẫn giữ nguyên quyền và snapshot/lease, không bị ảnh hưởng).
+- Admin xử lý yêu cầu trên Dashboard (từng yêu cầu hoặc hàng loạt theo Zone; duyệt hàng loạt bỏ qua các yêu cầu có cờ trùng):
+  * Yêu cầu không trùng: duyệt thành **máy mới**, gán Zone.
+  * Yêu cầu trùng một `Workstation`: chỉ có hai lựa chọn, **cài lại máy đó** (cập nhật tại chỗ `Workstation` = `duplicate_of`, tăng `key_version`, thu hồi Client Certificate cũ) hoặc **từ chối**. Không duyệt thành máy mới (INV-009).
+- Khi Admin phê duyệt `EnrollmentRequest`:
+  * Ký phát hành Client Certificate mTLS chính thức và tính khóa riêng của máy `K_m = HKDF(master_key, mqtt_identity || ":" || key_version)` (`mqtt_identity` là tên máy trong CN, ví dụ `ws-01`; ADR-007).
   * Chuyển `EnrollmentRequest.status = approved`.
   * Phát `WorkstationEnrollmentApproved` (kích hoạt khởi tạo trạng thái bên Operations và dựng snapshot bên Distribution).
 

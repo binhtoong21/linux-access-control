@@ -34,11 +34,15 @@ sequenceDiagram
         D-->>A: Snapshot mới nhất (đầy đủ)
         A->>K: Kiểm tra, chuyển nguyên tử, làm mới thời hạn tin cậy
         A-->>D: SnapshotApplied
+    else Máy báo version lớn hơn desired_version (server vừa khôi phục từ bản sao lưu)
+        D->>D: desired_version = max(desired, version máy) + 1, dựng lại snapshot (D-016)
+        D-->>A: Snapshot mới (version lớn hơn bản máy đang có)
+        A->>K: Kiểm tra, chuyển nguyên tử, làm mới thời hạn tin cậy
     end
     loop Đến khi outbox rỗng
         A->>Ops: Lô mục outbox (bản ghi nhật ký, sự kiện phiên), theo thứ tự thời gian
-        Ops->>Ops: Loại trùng theo entry_id, lưu received_at
-        Ops-->>A: Xác nhận đến mục cuối của lô
+        Ops->>Ops: Loại trùng theo entry_id, lưu received_at; mục không áp dụng được thì giữ nguyên văn để Admin xem (D-015)
+        Ops-->>A: Xác nhận đến mục cuối của lô (kể cả khi có mục lỗi)
         A->>K: Xóa các mục đã xác nhận khỏi outbox
     end
     Ops->>Ops: Outbox hết (hoặc quá thời gian chờ): nếu boot_id khác lần trước thì phiên active còn lại của máy chuyển abandoned
@@ -62,13 +66,16 @@ sequenceDiagram
 | EF-4 | Máy khởi động lại trong lúc mất kết nối | Agent đối chiếu LocalSession (bảng recovery trong swipe-login), outbox còn nguyên (NFR-A04), `boot_id` mới; nhật ký và `SessionEnded(workstation_rebooted)` do Agent báo đến trước suy luận của server. |
 | EF-5 | Outbox rất lớn (mất mạng lâu) | Đẩy theo lô có tốc độ giới hạn; nếu outbox đầy thì quẹt thẻ bị chặn (swipe-login EF-3). |
 | EF-6 | Mất kết nối giữa lúc đẩy lô | Lô chưa xác nhận giữ nguyên, gửi lại sau; server loại trùng. |
+| EF-7 | Một mục trong lô không áp dụng được (dữ liệu sai, xung đột trạng thái) | Server không từ chối cả lô: mục lỗi được giữ nguyên văn kèm lý do để Admin xem, phần còn lại áp dụng bình thường, lô vẫn được xác nhận. Hàng đợi của máy không bao giờ kẹt vì một mục (XINV-006, D-015). |
+| EF-8 | Báo cáo kết thúc phiên đến sau khi server đã suy luận (quá thời gian chờ Draining) | Báo cáo thật thay kết quả suy luận đúng một lần (`end_source: inferred → reported`); kết quả do Agent báo thì không đổi nữa (INV-007, D-015). |
+| EF-9 | Server khôi phục từ bản sao lưu cũ, máy đang giữ version lớn hơn | Xem nhánh thứ ba của sơ đồ: server nhảy version lên trên version máy rồi gửi snapshot mới. Không có máy nào bị kẹt ở "từ chối mọi snapshot" (INV-011, D-016). |
 
 ## Phát hiện: XINV-008 và INV-007 va nhau
 Khi nối lại, server thấy `boot_id` đổi và (theo XINV-008 cũ) chuyển mọi Session `active` sang `abandoned`. Nhưng outbox của Agent có thể chứa `SessionEnded(schedule_expired)` hoặc `workstation_rebooted` đã xảy ra từ trước. Nếu suy luận đến trước, server ghi thời điểm kết thúc là lúc nối lại với lý do mơ hồ, rồi báo cáo thật đến sau và bị INV-007 ("trạng thái kết thúc không đảo ngược") chặn. Mất thông tin chính xác về giờ và lý do kết thúc.
 
 **Đã sửa:**
 - **XINV-008:** suy luận `abandoned` chỉ áp dụng cho phiên `active` còn lại **sau khi outbox của máy đã hết** (hoặc quá thời gian chờ cấu hình). Phiên Agent đã báo kết thúc giữ nguyên báo cáo.
-- **INV-007** giữ nguyên.
+- **INV-007** bổ sung (D-015): nếu báo cáo thật vẫn đến sau suy luận (quá thời gian chờ), báo cáo thật thay suy luận đúng một lần; kết quả do Agent báo thì không đổi nữa.
 - Phiên có `ended_at` nên được gắn nhãn nguồn gốc (`end_source: reported | reconstructed | inferred`), để UC-008 và Operations phân biệt (khớp domain-model và reboot.md).
 
 ## Câu hỏi cho 06

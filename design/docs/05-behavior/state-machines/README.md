@@ -20,20 +20,21 @@ stateDiagram-v2
 - Vô hiệu hóa **user** không đổi trạng thái thẻ (XINV-001); việc chặn do bước 3 của CR-001.
 - Mọi chuyển trạng thái phát event cho Distribution (XINV-005); hiệu lực ở PC sau khi nhận snapshot mới (BR-010).
 
-## 2. EnrollmentToken (INV-010, BR-018)
+## 2. EnrollmentRequest (INV-010, BR-018, D-014)
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Active: Admin tạo token
-    Active --> Revoked: Admin thu hồi
-    Revoked --> [*]
+    [*] --> Pending: Agent nộp yêu cầu (gắn cờ nếu trùng MAC/machine_id)
+    Pending --> Approved: Admin duyệt máy mới (chỉ khi không trùng)
+    Pending --> Approved: Admin duyệt cài lại máy duplicate_of
+    Pending --> Rejected: Admin từ chối
+    Approved --> [*]
+    Rejected --> [*]
 ```
 
-Trạng thái lưu chỉ có `active` và `revoked`. **Dùng được** là hàm tính ra tại thời điểm dùng:
-
-`usable = (status = active) ∧ (chưa quá expires_at) ∧ (số lượt dùng < max_uses)`
-
-Dashboard hiển thị: `Dùng được`, `Hết hạn`, `Hết lượt`, `Đã thu hồi` (tính ra, FR-043). Một lần đăng ký thành công tiêu thụ đúng một lượt trong cùng thao tác phê duyệt cấp định danh (XINV-009). Nếu yêu cầu đăng ký bị trùng MAC, token được giữ nguyên chưa tiêu thụ cho đến khi Admin phê duyệt. `revoked` là trạng thái cuối, không bật lại.
+- Không có đường tự động duyệt (EnrollmentToken đã bỏ theo D-014).
+- Yêu cầu có cờ trùng không được duyệt thành máy mới; duyệt hàng loạt theo Zone bỏ qua các yêu cầu này.
+- Sau `Approved`, máy tải credential bằng mã tải một lần; mã chỉ hết hiệu lực khi máy kết nối broker lần đầu thành công, nên mất gói trả lời giữa chừng thì máy tải lại được (D-014).
 
 ## 3. WorkstationStatus: kết nối (BR-019)
 
@@ -58,7 +59,7 @@ stateDiagram-v2
     Draining --> Idle: Outbox hết hoặc quá thời gian chờ
 ```
 
-Khi `Draining → Idle`, các Session `active` còn lại của boot cũ chuyển `abandoned` (`workstation_rebooted`, `end_source = inferred`, `ended_at = max(started_at, lần cuối nghe từ máy ở boot cũ)`). Phiên Agent đã báo kết thúc giữ nguyên báo cáo (XINV-008 đã sửa).
+Khi `Draining → Idle`, các Session `active` còn lại của boot cũ chuyển `abandoned` (`workstation_rebooted`, `end_source = inferred`, `ended_at = max(started_at, lần cuối nghe từ máy ở boot cũ)`). Phiên Agent đã báo kết thúc giữ nguyên báo cáo (XINV-008 đã sửa). Nếu báo cáo thật của một phiên đã bị suy luận đến muộn (quá thời gian chờ), báo cáo thật thay kết quả suy luận đúng một lần (INV-007, D-015).
 
 ## 4. SyncState (FR-054)
 
@@ -73,6 +74,7 @@ stateDiagram-v2
 - `InSync` và `PendingSync` là **hàm của hai số** (`acked_version` so với `desired_version`), không phải cờ lưu riêng, nên không có chuyện lệch cờ.
 - **`Stuck` (suy ra):** `PendingSync` kéo dài quá ngưỡng trong khi máy `Online`. Dấu hiệu snapshot bị từ chối; dashboard hiển thị `last_apply_error` từ heartbeat.
 - Nhãn "đã đồng bộ" chỉ đáng tin khi không còn sự kiện thay đổi nào chưa được xử lý (cửa sổ giữa commit và reconcile).
+- Máy báo phiên bản **lớn hơn** `desired_version` (chỉ xảy ra khi server khôi phục từ bản sao lưu cũ): server nâng phiên bản kế tiếp lên `max(desired_version, phiên bản máy báo) + 1`, dựng lại snapshot và gửi đi; không coi đó là lỗi (INV-011, D-016).
 - Tham số chốt sau: ngưỡng `Stuck`.
 
 ## Các thực thể còn lại (không cần sơ đồ)
@@ -80,8 +82,8 @@ stateDiagram-v2
 |---|---|---|
 | User | `active` ⇄ `inactive` | Không xóa cứng (XINV-001, BR-014) |
 | EnrollmentRequest | `pending` → `approved` / `rejected` | Tạo khi Agent nộp yêu cầu; trùng MAC giữ pending chờ Admin duyệt |
-| Workstation | `enrolled` ⇄ `disabled` | Tạo/kích hoạt sau khi EnrollmentRequest được duyệt |
+| Workstation | `enrolled` → `disabled` → `enrolled` | Tạo/kích hoạt sau khi EnrollmentRequest được duyệt. `disabled` thu hồi chứng chỉ ở broker; chỉ trở lại `enrolled` qua đăng ký lại (`nfc-agent reenroll` + Admin duyệt cài lại), không bật lại chứng chỉ cũ (D-014) |
 | WorkstationProfile | `enabled` ⇄ `disabled` | Tự phát hiện mặc định `enabled`; profile đầu tiên nhận `is_default = true` |
 | Schedule | `enabled` ⇄ `disabled`, xóa được | Tắt thì bị bỏ qua khi đánh giá (BR-016) |
 | AdminAccount | `active` ⇄ `disabled` | `disabled` không đăng nhập được (INV-016) |
-| Session (server) | `active` → `completed` / `forced_logout` / `abandoned` | Nhận từ báo cáo của Edge; trạng thái cuối không đảo ngược (INV-007); xem LocalSession ở `session-expiry` |
+| Session (server) | `active` → `completed` / `forced_logout` / `abandoned` | Nhận từ báo cáo của Edge; trạng thái cuối không quay về `active`; kết thúc suy luận được báo cáo thật thay đúng một lần (INV-007); xem LocalSession ở `session-expiry` |

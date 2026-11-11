@@ -34,6 +34,18 @@ $RECYCLE.BIN/
 .idea/
 *.sublime-project
 *.sublime-workspace
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+.mcp.json
+AGENTS.md
+.codex/
+.cursor/
+.cursorrules
+.aider*
+.gemini/
+GEMINI.md
+.windsurf/
 
 # --- Python Environment & Bytecode ---
 __pycache__/
@@ -82,3 +94,4 @@ credentials.json
 temp_*
 temp_*.*
 scratch/
+
