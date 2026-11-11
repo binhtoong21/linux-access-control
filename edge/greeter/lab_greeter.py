@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# PyGObject (gi) is a Linux system package (python3-gi, gir1.2-lightdm-1) and its modules are generated at runtime,
+# so a dev venv on Windows cannot resolve them. The greeter only runs on the workstation.
+# pyright: reportMissingImports=false, reportMissingModuleSource=false, reportAttributeAccessIssue=false
 """Lab Custom Greeter (ADR-005 §3–5): waits for the agent's push events and logs the shared profile in.
 
 Runs as user `lightdm` under LightDM, started through lab-greeter-wrapper.sh. Holds no business logic: the agent
