@@ -104,7 +104,7 @@ flowchart TD
 
 ### 2. Cấu Hình Động Cơ SQLite Chống Chịu Sự Cố (Engine Tuning & S5 fsync)
 
-Để đảm bảo an toàn tuyệt đối trước sự cố cắt điện đột ngột:
+Để chống chịu sự cố cắt điện đột ngột (trong phạm vi bằng chứng S5):
 1. **Thiết lập PRAGMA Bắt Buộc:**
    ```sql
    PRAGMA journal_mode = WAL;
@@ -157,7 +157,7 @@ flowchart TD
    - Tính toán: `expected_sig = HexEncode(HMAC-SHA256(K_m, "snapshot-v1:" || message.payload))`.
    - So khớp bằng thuật toán an toàn hằng số thời gian (`hmac.compare_digest`) với giá trị trong MQTT 5 User Property `signature`.
    - **Xử lý vi phạm:** Nếu chữ ký không khớp, Agent **từ chối nạp snapshot**, ghi sự kiện `security_alert` (`snapshot_signature_invalid`) vào `audit_outbox` và giữ cấu hình tin cậy cũ. Nếu chữ ký đúng nhưng `version` **bằng** bản hiện hành (snapshot retained giao lại khi reconnect) thì bỏ qua lặng lẽ; nhỏ hơn thì bỏ qua và ghi `last_apply_error`; `key_version` khác `identity/` thì bỏ qua và ghi `last_apply_error = key_version_mismatch`.
-   - **Lease và ACK:** áp dụng các quy tắc nhận ở ADR-002 §4 (lease chỉ tiến, `server_time` phải lớn hơn `last_server_time`, `desired_version` phải bằng version cục bộ).
+   - **Lease và ACK:** áp dụng các quy tắc nhận ở ADR-002 §4 (`desired_version` phải bằng version cục bộ; `trusted_until` và `last_server_time` chỉ tiến, không lùi).
 
 ---
 

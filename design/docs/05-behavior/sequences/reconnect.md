@@ -69,6 +69,7 @@ sequenceDiagram
 | EF-7 | Một mục trong lô không áp dụng được (dữ liệu sai, xung đột trạng thái) | Server không từ chối cả lô: mục lỗi được giữ nguyên văn kèm lý do để Admin xem, phần còn lại áp dụng bình thường, lô vẫn được xác nhận. Hàng đợi của máy không bao giờ kẹt vì một mục (XINV-006, D-015). |
 | EF-8 | Báo cáo kết thúc phiên đến sau khi server đã suy luận (quá thời gian chờ Draining) | Báo cáo thật thay kết quả suy luận đúng một lần (`end_source: inferred → reported`); kết quả do Agent báo thì không đổi nữa (INV-007, D-015). |
 | EF-9 | Server khôi phục từ bản sao lưu cũ, máy đang giữ version lớn hơn | Xem nhánh thứ ba của sơ đồ: server nhảy version lên trên version máy rồi gửi snapshot mới. Không có máy nào bị kẹt ở "từ chối mọi snapshot" (INV-011, D-016). |
+| EF-10 | Server còn giữ phiên `active` cũ của máy (Agent dựng lại `edge.db` mà máy không reboot nên `boot_id` không đổi) | `SessionStarted` mới đến thì server suy luận phiên cũ kết thúc (`abandoned`, `inferred`) rồi ghi phiên mới; báo cáo thật nếu có đến sau vẫn thay được (D-015). |
 
 ## Phát hiện: XINV-008 và INV-007 va nhau
 Khi nối lại, server thấy `boot_id` đổi và (theo XINV-008 cũ) chuyển mọi Session `active` sang `abandoned`. Nhưng outbox của Agent có thể chứa `SessionEnded(schedule_expired)` hoặc `workstation_rebooted` đã xảy ra từ trước. Nếu suy luận đến trước, server ghi thời điểm kết thúc là lúc nối lại với lý do mơ hồ, rồi báo cáo thật đến sau và bị INV-007 ("trạng thái kết thúc không đảo ngược") chặn. Mất thông tin chính xác về giờ và lý do kết thúc.

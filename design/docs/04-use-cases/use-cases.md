@@ -154,14 +154,14 @@ flowchart LR
 **Mô tả:** Một PC cài Agent được đăng ký vào hệ thống và nhận cấu hình/snapshot đầu tiên. Phương thức duy nhất: Tự động (Zero-Touch via Master Image), mọi yêu cầu do Admin duyệt (D-014).
 
 **Luồng chính (Phương thức Zero-Touch Auto-Enrollment - D-010):**
-1. Kỹ thuật viên bung Master Image sạch (đã xóa `/etc/machine-id` và file credential của Agent) ra các máy phòng lab.
+1. Kỹ thuật viên bung Master Image sạch (đã xóa `/etc/machine-id` và định danh của Agent, giữ chứng chỉ CA của server) ra các máy phòng lab.
 2. Bật nguồn máy trạm lần đầu: systemd tự sinh `machine-id` mới; Agent tự sinh Ed25519 Keypair và gửi yêu cầu đăng ký (`hostname`, `mac_address`, `machine_id`, `public_key`) lên Server.
 3. Server lưu bản ghi `EnrollmentRequest` ở trạng thái `pending`.
 4. Admin mở Web Dashboard, thấy danh sách máy trạm chờ duyệt (kèm hostname/MAC để nhận diện), chọn phòng máy (Zone) và bấm **Phê duyệt** (từng máy hoặc "Duyệt tất cả" cho Zone; đối chiếu số máy vừa clone).
 5. Server cấp chứng chỉ Client Certificate mTLS chính thức (`CN = workstation_id`) và khóa so khớp `K_m` (ADR-007). Agent lưu bền vững vào `/var/lib/nfc-agent/identity/` (`0600 root:root`), kết nối MQTT và nhận snapshot đầu tiên.
 
 **Nhánh:**
-- EF-1 Admin từ chối yêu cầu: máy giữ trạng thái chưa đăng ký, quẹt thẻ bị `data_stale(no_data)`; kỹ thuật viên kiểm tra máy rồi cho Agent gửi lại yêu cầu.
+- EF-1 Admin từ chối yêu cầu: máy giữ trạng thái chưa đăng ký, quẹt thẻ bị `data_stale(no_data)`; kỹ thuật viên kiểm tra máy rồi chạy `sudo nfc-agent reenroll` để gửi lại yêu cầu (AF-4).
 - AF-2 MAC hoặc `machine_id` đã có trong hệ thống (cài lại máy / clone lại), hoặc trùng một yêu cầu khác đang chờ: Server tạo `EnrollmentRequest` ở trạng thái `pending` và cảnh báo trùng (`duplicate_mac_detected = true`) trên Dashboard (P1-4, D-010); máy trạm cũ đang chạy vẫn giữ nguyên quyền và snapshot/lease. Admin chỉ chọn **cài lại máy đó** hoặc **từ chối** (D-014). Khi duyệt cài lại, hệ thống cập nhật máy trạm tại chỗ, thu hồi chứng chỉ cũ ở broker, tăng `key_version` của máy để quay vòng `K_m` (ADR-007) và cấp Client Certificate mới.
 - EF-2 Mất gói trả lời khi tải credential: Agent tải lại bằng cùng mã; mã chỉ hết hiệu lực sau khi máy kết nối broker lần đầu thành công (D-014).
 - AF-3 Chưa nhận snapshot đầu: quẹt thẻ bị `data_stale` đến khi nhận.

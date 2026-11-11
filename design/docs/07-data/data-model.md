@@ -138,7 +138,7 @@ erDiagram
 | `updated_at` | `TIMESTAMPTZ` | No | `now()` | |
 
 - **Constraints & Indexes:** `UNIQUE (mqtt_identity)`, `UNIQUE (machine_id)`, `UNIQUE (mac_address)`, `CREATE INDEX idx_ws_zone ON workstations (zone_id);`
-- *Re-enrollment (`INV-010`, `P1-4`):* Khi Admin duyệt yêu cầu cài lại máy trùng MAC, Server cập nhật **tại chỗ** dòng `workstations` tương ứng (`machine_id`, `public_key`, `cert_serial`, `cert_expires_at`, `key_version = key_version + 1`), bảo toàn nguyên vẹn `workstation_id` lịch sử của `sessions`, `audit_logs` và `schedules`.
+- *Re-enrollment (`INV-010`, `P1-4`):* Khi Admin duyệt yêu cầu cài lại máy trùng MAC, Server cập nhật **tại chỗ** dòng `workstations` tương ứng (`machine_id`, `public_key`, `cert_serial`, `cert_expires_at`, `key_version = key_version + 1`, `status = 'enrolled'` nếu máy đang `disabled`), serial cũ vào `revoked_certificates`; bảo toàn nguyên vẹn `workstation_id` lịch sử của `sessions`, `audit_logs` và `schedules`.
 - *Vô hiệu hóa (`status = 'disabled'`):* cùng giao dịch, serial hiện hành được thêm vào `revoked_certificates` để broker từ chối máy (D-014).
 - *Lưu ý bảo mật ([ADR-007](../06-architecture/decisions/ADR-007-khoa-so-khop-uid.md)):* Server **không lưu khóa riêng `K_m`** trong CSDL; khóa `K_m = HKDF-SHA256(master_key, mqtt_identity || ":" || key_version)` được dẫn xuất động từ `master_key` khi cấp chứng chỉ và khi dựng snapshot.
 
@@ -165,7 +165,7 @@ erDiagram
 - **`enrollment_requests`:**
   - `id UUID PRIMARY KEY DEFAULT gen_random_uuid()` (`request_id`, không phải bí mật)
   - `fetch_code_hash CHAR(64) NOT NULL` (SHA-256 của mã tải một lần `fetch_code`, ADR-002 Mục 7)
-  - `fetch_code_invalidated_at TIMESTAMPTZ NULL` (Đặt khi máy kết nối broker bằng chứng chỉ mới lần đầu thành công; trước đó máy được tải lại nếu mất gói trả lời)
+  - `fetch_code_invalidated_at TIMESTAMPTZ NULL` (Đặt khi Server nhận Hello đầu tiên của máy sau khi duyệt; trước đó máy được tải lại nếu mất gói trả lời)
   - `machine_id VARCHAR(64) NOT NULL`
   - `mac_address MACADDR NOT NULL`
   - `hostname VARCHAR(255) NOT NULL`
@@ -303,7 +303,7 @@ erDiagram
 
 - **Constraints, Partial Index & Trigger (`INV-007`):**
   - `CONSTRAINT chk_sessions_lifecycle CHECK ((status = 'active' AND ended_at IS NULL AND end_reason IS NULL AND end_source IS NULL) OR (status <> 'active' AND ended_at IS NOT NULL AND ended_at >= started_at AND end_reason IS NOT NULL AND end_source IS NOT NULL))`
-  - `CREATE UNIQUE INDEX uq_sessions_active_ws ON sessions (workstation_id) WHERE status = 'active';`
+  - `CREATE UNIQUE INDEX uq_sessions_active_ws ON sessions (workstation_id) WHERE status = 'active';` — Khi ingest `SessionStarted` mà máy còn phiên `active` khác, cùng savepoint server đóng phiên cũ (`abandoned`, `end_source = 'inferred'`, `ended_at = GREATEST(cũ.started_at, mới.started_at)`) rồi mới chèn phiên mới (D-015), nên chỉ mục này không bao giờ làm mất phiên mới.
   - `CREATE INDEX idx_sessions_ws_started ON sessions (workstation_id, started_at DESC);`
   - Trigger `trg_sessions_immutable_terminal`: chặn `DELETE`; chặn `UPDATE` khi bản ghi đã kết thúc (`OLD.status <> 'active'`), **trừ đúng một trường hợp**: `OLD.end_source = 'inferred' AND NEW.end_source = 'reported'` (báo cáo thật đến muộn thay kết quả suy luận, INV-007, D-015). Bản ghi `reported` không đổi được nữa.
 

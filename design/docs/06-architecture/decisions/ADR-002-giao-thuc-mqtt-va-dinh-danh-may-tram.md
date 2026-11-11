@@ -181,7 +181,7 @@ sequenceDiagram
   - Agent thẩm định chữ ký trực tiếp trên chuỗi byte nhận được từ MQTT wire trước khi xử lý logic hoặc parse JSON. Nếu chữ ký sai, từ chối ngay lập tức.
 - **Quy tắc nhận sau khi chữ ký hợp lệ:**
   * *Snapshot:* `version` lớn hơn bản đang dùng thì nạp; **bằng** bản đang dùng (snapshot retained được giao lại mỗi lần reconnect) thì bỏ qua lặng lẽ, không ghi lỗi; nhỏ hơn thì bỏ qua và ghi `last_apply_error`.
-  * *Lease:* chỉ nhận khi `desired_version` bằng version cục bộ và `server_time` lớn hơn `last_server_time` đã có (chặn phát lại bản lease cũ); `trusted_until` mới chỉ được tiến, không lùi.
+  * *Lease:* chỉ nhận khi `desired_version` bằng version cục bộ. `trusted_until` và `last_server_time` chỉ được tiến (`max(cũ, mới)`), không lùi. Nhờ vậy phát lại một bản lease cũ không có tác dụng gì, mà không cần so `server_time` với giá trị trước (so như vậy sẽ làm máy từ chối mọi lease nếu đồng hồ server từng chạy nhanh rồi được chỉnh lại).
   * *ACK:* `acked_seq` nhỏ hơn hoặc bằng mức đã xóa thì bỏ qua (phát lại vô hại).
 - **Payload Hello (`.../hello`):**
   ```json
@@ -311,11 +311,11 @@ sequenceDiagram
     Note over W: Lưu fetch_code (mã tải một lần, ngẫu nhiên, khác request_id)
     Admin->>S: Mở Dashboard xem danh sách chờ duyệt
     Admin->>S: "Duyệt tất cả" theo Zone (bỏ qua yêu cầu có cờ trùng)<br>hoặc duyệt từng yêu cầu: máy mới / cài lại máy duplicate_of / từ chối
-    S->>CA: Ký Certificate (CN="ws-01", TTL=3 năm)
-    S->>S: Dẫn xuất K_m = HKDF(master_key, "ws-01:" || key_version)
-    opt Cài lại máy đã có
+    opt Cài lại máy đã có (trước khi cấp khóa mới)
         S->>S: key_version + 1, thu hồi serial cũ, sinh lại CRL, nạp lại Mosquitto
     end
+    S->>CA: Ký Certificate (CN="ws-01", TTL=3 năm)
+    S->>S: Dẫn xuất K_m = HKDF(master_key, "ws-01:" || key_version)
     S->>DB: Chuyển EnrollmentRequest -> 'approved'
     loop Polling
         W->>S: GET /api/v1/workstations/enroll/{request_id}/status<br>Authorization: Bearer <fetch_code>
@@ -328,8 +328,9 @@ sequenceDiagram
         end
     end
     W->>W: Ghi cùng lúc vào /var/lib/nfc-agent/identity/<br>(cert, K_m, key_version, mqtt_identity), 0600 root:root
-    W->>B: Kết nối Mosquitto Broker qua mTLS Port 8883 lần đầu thành công
-    S->>DB: Vô hiệu hóa fetch_code (chỉ sau kết nối đầu tiên)
+    W->>B: Kết nối Mosquitto Broker qua mTLS Port 8883, gửi Hello
+    B->>S: Hello đầu tiên của ws-01 sau khi duyệt
+    S->>DB: Vô hiệu hóa fetch_code
 ```
 
 1. **Chuẩn hóa Master Image (Sysprep sạch):**
@@ -346,9 +347,9 @@ sequenceDiagram
    - Quản trị viên đối chiếu danh sách máy mới trong phòng lab và bấm phê duyệt (hỗ trợ "Duyệt tất cả" theo Zone, tự bỏ qua yêu cầu có cờ trùng). Yêu cầu trùng một máy đã có chỉ có hai lựa chọn: **cài lại máy đó** hoặc **từ chối** (không duyệt thành máy mới, INV-009). Không có đường tự động duyệt (D-014).
    - Server cấp phát `mqtt_identity` chính thức (máy mới) hoặc giữ nguyên `mqtt_identity` cũ (cài lại), ký chứng chỉ số Client Certificate (`CN = workstation_id`) với thời hạn **TTL = 3 năm** (đủ cho trọn vẹn chu kỳ hoạt động đồ án mà không gây gián đoạn do hết hạn chứng chỉ giữa chừng; việc tự động xoay vòng cert trước khi hết hạn được ghi nhận là Future Extension).
    - Đồng thời trích xuất khóa định danh máy `K_m = HKDF(master_key, mqtt_identity || ":" || key_version)` theo [ADR-007](ADR-007-khoa-so-khop-uid.md). Cài lại máy: `key_version + 1` và thu hồi chứng chỉ cũ qua CRL (Mục 1).
-5. **Kích hoạt mTLS và Thu hồi Token:**
+5. **Tải credential và kích hoạt mTLS:**
    - Agent gửi yêu cầu `GET /api/v1/workstations/enroll/{request_id}/status` kèm header `Authorization: Bearer <fetch_code>`. Kẻ tấn công trên mạng LAN dù biết `hostname`, `mac_address` hay `request_id` cũng không tải được chứng chỉ và `K_m` nếu không có `fetch_code`.
-   - `fetch_code` chỉ hết hiệu lực khi máy kết nối broker bằng chứng chỉ mới lần đầu thành công. Nếu gói trả lời bị mất giữa đường, Agent cứ tải lại; không có trạng thái "đã duyệt nhưng không bao giờ lấy được credential".
+   - `fetch_code` chỉ hết hiệu lực khi Server nhận Hello đầu tiên của máy sau khi duyệt (chứng chỉ cũ đã nằm trong CRL nên Hello đó chắc chắn đến từ chứng chỉ mới). Nếu gói trả lời bị mất giữa đường, Agent cứ tải lại; không có trạng thái "đã duyệt nhưng không bao giờ lấy được credential".
    - Agent ghi chứng chỉ, `K_m`, `key_version` và `mqtt_identity` **cùng lúc** vào `/var/lib/nfc-agent/identity/` (ghi thư mục tạm rồi đổi tên; D-017). Đây là nguồn sự thật về định danh của máy, nằm ngoài `edge.db`. Kể từ thời điểm này, Agent ngắt kênh HTTP bootstrap và chuyển sang sử dụng 100% kênh mTLS bảo mật cổng 8883 kết nối với Broker Mosquitto.
 6. **Đăng ký lại thủ công bằng lệnh `nfc-agent reenroll` (D-014):**
    - *Khi dùng:* bật lại máy đã bị vô hiệu hóa (chứng chỉ cũ đã nằm trong CRL), thư mục `identity/` bị hỏng/mất, hoặc nghi khóa của máy bị lộ. Agent không tự đăng ký lại khi kết nối broker thất bại, vì không phân biệt chắc chắn được "bị thu hồi" với "mất mạng"; tự đăng ký lại sẽ sinh ra hàng loạt yêu cầu rác mỗi lần mạng chập chờn.
