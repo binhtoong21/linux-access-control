@@ -120,17 +120,22 @@ class Logind:
 
     # ------------------------------------------------------------ desktop notification (ADR-005 / FR-012)
     def notify(self, username: str, title: str, body: str) -> None:
-        """Send a desktop notification into the user's session bus (root -> user via runuser)."""
+        """Send a desktop notification into the user's session bus.
+
+        setpriv switches UID/GID without opening a PAM session (runuser did, and pam_limits then complained under
+        the systemd hardening on every notification; seen in the live expiry test)."""
         import pwd  # Linux only
 
-        uid = pwd.getpwnam(username).pw_uid
+        pw = pwd.getpwnam(username)
+        uid = pw.pw_uid
         self._run(
             [
-                "runuser",
-                "-u",
-                username,
-                "--",
+                "setpriv",
+                f"--reuid={uid}",
+                f"--regid={pw.pw_gid}",
+                "--init-groups",
                 "env",
+                f"HOME={pw.pw_dir}",
                 f"DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{uid}/bus",
                 "notify-send",
                 "-u",
