@@ -1,0 +1,22 @@
+[Unit]
+Description=NFC Edge Agent (card login for shared lab workstations)
+After=pcscd.service systemd-logind.service
+Wants=pcscd.service
+Before=display-manager.service
+
+[Service]
+Type=simple
+ExecStart=/opt/nfc-agent/venv/bin/python -m nfc_agent.cli run
+Restart=always
+RestartSec=1
+# Hardening verified in Spike S11 (ADR-006); CAP_CHOWN hands the greeter socket to group lightdm.
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ReadWritePaths=/var/lib/nfc-agent /run
+CapabilityBoundingSet=CAP_KILL CAP_DAC_OVERRIDE CAP_SETUID CAP_SETGID CAP_CHOWN
+StateDirectory=nfc-agent
+StateDirectoryMode=0700
+
+[Install]
+WantedBy=multi-user.target
