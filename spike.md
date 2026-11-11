@@ -17,10 +17,10 @@
 | S3 | Greeter và màn hình khóa | 4 ngày | **Cao nhất** |
 | S4 | Ánh xạ tài khoản OS và kết thúc phiên | 3 ngày | Cao |
 | S5 | Agent, MQTT, lưu trữ nguyên tử | 3 ngày | Trung bình |
-| S6 | Walking skeleton | 3 ngày | Tích hợp |
-| S7 | Teardown liên tiếp cùng UID & Linger (Đạt một phần cgroup) | 1 ngày | Cao (chốt chặn ADR-004) |
-| S7b | Teardown thật qua GNOME/LightDM & SIGTERM Trap | 1 ngày | Cao (xác nhận ADR-004/008) |
-| S8 | Kiểm chứng Mật mã, mTLS & Giao dịch Node.js | 0,5 ngày | Trung bình (xác nhận ADR-006) |
+| S6 | Walking skeleton | 3 ngày | Tích hợp | ✅ Đạt |
+| S7 | Teardown liên tiếp cùng UID & Linger (Đạt một phần cgroup) | 1 ngày | Cao (chốt chặn ADR-004) | ⚠️ Đạt một phần |
+| S7b | Teardown thật qua GNOME/LightDM & SIGTERM Trap | 1 ngày | Cao (xác nhận ADR-004/008) | ✅ Đạt (20/20) |
+| S8 | Kiểm chứng Mật mã, mTLS & Giao dịch Node.js | 0,5 ngày | Trung bình (xác nhận ADR-006) | ⏳ Chưa chạy |
 
 Nên đặt mua hoặc mượn đầu đọc ngay hôm nay vì có thời gian chờ, S1 chạy song song với S0. Trình tự S2 → S3 → S4 vì chúng phụ thuộc nhau. S5 có thể làm xen.
 
@@ -126,7 +126,8 @@ Kiểm chứng tốc độ giải phóng cgroup `user-<UID>.slice` và `/run/use
 
 **Câu hỏi:** Khi đăng nhập thật qua Custom Greeter vào Desktop GNOME trên cùng UID `student`, có tiến trình bẫy `SIGTERM` để ép kích hoạt `kill-user -s SIGKILL`, tổng thời gian từ lúc quẹt thẻ đến khi Desktop mới nạp xong là bao nhiêu dưới tải CPU 100%?
 **Đạt khi:** 20 chu kỳ lặp lại thành công 100%, không dính lỗi treo D-Bus ~110s, đo đạc phân vị P95 độ trễ teardown thật.
-**Ảnh hưởng:** Xác nhận chính thức ADR-004 và ADR-008 lên trạng thái Accepted.
+**Kết quả (2026-11-11):** **✅ Đạt 20/20** trên Ubuntu 22.04 GNOME + LightDM + `pam_nfc.so` + `lab_greeter.py` (1.2s Handshake), ép chạy Pha 2 `SIGKILL` **20/20** (`113.2`–`262.2 ms`), tổng teardown Min `2142.4 ms` | Mean `2210.8 ms` | P95/Max `2314.8 ms` (`0/20` vượt trần `3.0s`), Login -> GNOME Mean `5793 ms` (P95 `7133 ms`), Linger **5/5 (`N=5`)**, `started > decided_at` **20/20**. Phát hiện thêm nghẽn CPU của `snapd-desktop-integration` (Lần chạy 1) và sửa lỗi logic đếm crash trong `lab-greeter-wrapper.sh` (ADR-005). Xem [spike-results/s7b-teardown-gnome-e2e.md](spike-results/s7b-teardown-gnome-e2e.md).
+**Ảnh hưởng:** Xác nhận chính thức **ADR-004** và **ADR-008** lên trạng thái `Accepted`.
 
 ## S8: Kiểm chứng Mật mã, mTLS & Giao dịch Node.js (Server Spike)
 

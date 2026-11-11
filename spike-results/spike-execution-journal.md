@@ -912,3 +912,24 @@ Trạng thái service ngầm:
    - Cảnh báo *"⚠️ Phiên chưa kịp kích hoạt, thử lại..."* xuất hiện ở 0.3s đầu phản ánh chính xác độ trễ cấp phát tài nguyên của nhân Linux dưới tải nặng (cần 0.4s - 0.7s để nạp xong session scope). Điều này bảo vệ quyết định đệm **1.2s Startup Handshake** của Greeter trong ADR-005.
 3. **Quy trình Diệt Linger Bắt buộc:**
    - Xác nhận quy trình dọn phiên chuẩn hóa trong ADR-008: Bắt buộc gọi `loginctl disable-linger <user>` trước khi `terminate-user`, bảo đảm triệt tiêu 100% tiến trình chạy ngầm trái phép.
+
+
+---
+
+### 8.18. Thực nghiệm Spike S7b: Teardown Phiên GNOME Thật Qua LightDM/PAM & Bẫy SIGTERM (`student` / UID 1001)
+- **Mục tiêu:** Giải quyết dứt điểm khoảng trống của S7 (`systemd-run --scope` không có Xorg/D-Bus GNOME thật và `0/20` SIGKILL) bằng bài đo End-to-End đầy đủ qua **LightDM -> `pam_nfc.so` -> `lab_greeter.py` (handshake 1.2s) -> Desktop GNOME thật**, kèm tiến trình autostart bẫy `SIGTERM` (`stubborn_worker.sh`) để ép đi qua Pha 2 (`kill-user -s SIGKILL`) trong cả **20 chu kỳ**, kèm **Linger N=5** và đo thời gian `Login -> GNOME Desktop`.
+- **Sự cố thực nghiệm Lần 1 & RCA (`8/20`, treo ở chu kỳ 09 - `c24`):**
+  - Với tải nền `stress-ng --cpu 2` ở `nice 0` trên máy ảo 2 vCPU VirtualBox, chu kỳ 1–8 chạy trơn tru (`Tot TD` `2200.4`–`2429.2 ms`, `SIGKILL` `8/8`), nhưng chu kỳ 09 treo `Desktop GNOME không lên sau 45.0s!`.
+  - Đối chiếu `journalctl` (`08:32:25 -> 08:36:20`) và `/home/student/.xsession-errors`: **0 lỗi D-Bus**; nguyên nhân là `watchdog: BUG: soft lockup - CPU#1 stuck for 198s! [snap:17323]` và `rcu_preempt self-detected stall` do `snapd-desktop-integration.service` tranh chấp CPU spinlock với `stress-ng` `nice 0`.
+  - Đã hạ `stress-ng` xuống `nice -n 10` (giữ nguyên GNOME + Snap mặc định, `Load1m` đạt `2.30`–`8.58`) và chạy lại toàn bộ Lần 2.
+- **Kết quả đo Lần 2 (`20/20` chu kỳ đạt chuẩn):**
+  - **Hoàn thành E2E:** **20 / 20** (0 lỗi treo D-Bus ~110s).
+  - **Tỷ lệ ép Pha 2 (`kill-user -s SIGKILL`):** **20 / 20** (độ trễ diệt SIGKILL: Min `113.2 ms`, Mean `163.8 ms`, Max `262.2 ms`).
+  - **Tổng thời gian Teardown (`GRACE_TIMEOUT 2.0s + SIGKILL`):** Min `2142.4 ms`, Mean `2210.8 ms`, **P95 `2314.8 ms`**, Max `2314.8 ms`; **0 / 20** vượt trần `TOTAL_TEARDOWN_TIMEOUT = 3.0s`.
+  - **Thời gian Login -> Desktop GNOME:** Min `4825 ms`, Mean `5793 ms`, **P95 `7133 ms`**, Max `7133 ms`.
+  - **Khớp chuẩn `started > decided_at`:** **20 / 20**; **Diệt Linger & Rogue Unit:** **5 / 5 (`N=5`)**.
+- **Hệ quả Kiến trúc:**
+  - Chính thức nâng cấp **ADR-004** và **ADR-008** từ `Proposed` lên `Accepted`.
+  - Ghi nhận khuyến nghị gỡ/tắt `snapd-desktop-integration` trong Master Image phòng lab (ADR-004).
+  - Sửa lỗi logic đếm crash trong `lab-greeter-wrapper.sh` của **ADR-005** (chỉ ghi nhận crash khi exit code khác `0`, xóa log khi thoát sạch `0` để tránh kích hoạt fallback nhầm sau 3 lần đăng nhập bình thường trong 60 giây).
+  - **Chi tiết báo cáo:** Xem [s7b-teardown-gnome-e2e.md](s7b-teardown-gnome-e2e.md).

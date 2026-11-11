@@ -4,8 +4,8 @@
 
 | Field | Value |
 |---|---|
-| **Status** | Proposed |
-| **Date** | 2026-11-10 |
+| **Status** | Accepted |
+| **Date** | 2026-11-11 |
 | **Deciders** | Nhóm tác giả ĐATN & Giảng viên hướng dẫn |
 | **Supersedes** | Tách một phần nội dung kết thúc phiên khỏi [ADR-004](ADR-004-mo-hinh-profile-os-dung-chung.md) |
 
@@ -33,7 +33,7 @@ Cần một quyết định kiến trúc chuẩn hóa toàn bộ máy trạng th
 - **Bảo vệ Tính Toàn vẹn Phiên (A4):** Ngăn chặn người ngoài quẹt đè cướp phiên khi sinh viên đang làm việc dở dang trên Desktop (`workstation_busy`).
 - **Dọn sạch 100% Tiến trình Ngầm (BR-009, A6):** Tiêu diệt triệt để mọi tiến trình thuộc user slice của phiên trước, bảo đảm phiên sau nhận môi trường sạch sẽ.
 - **Bảo toàn Dữ liệu Học tập (BR-009):** Tuyệt đối **không xóa thư mục `/home/<user>`** hay tệp tin bài tập của sinh viên.
-- **Loại bỏ Hoàn toàn Lỗi Treo Màn hình Đen (P1-2):** Đồng bộ hóa giữa việc dọn dẹp phiên cũ và khởi tạo phiên mới, dựa trên bằng chứng thực nghiệm của Spike S6 và S7.
+- **Loại bỏ Hoàn toàn Lỗi Treo Màn hình Đen (P1-2):** Đồng bộ hóa giữa việc dọn dẹp phiên cũ và khởi tạo phiên mới, dựa trên bằng chứng thực nghiệm của Spike S6, S7 và S7b.
 
 ---
 
@@ -51,7 +51,7 @@ Cần một quyết định kiến trúc chuẩn hóa toàn bộ máy trạng th
 - **Ưu điểm:**
   - Tiêu diệt 100% tiến trình bằng cách hủy user manager và cgroup slice.
   - Có cơ chế bắt tay 2 chiều giữa Agent và Greeter để loại trừ race condition.
-  - Đã được chứng minh bằng thực nghiệm tại Spike S6 và S7.
+  - Đã được chứng minh bằng thực nghiệm tại Spike S6, S7 và S7b.
 - **Nhược điểm:** Đòi hỏi Agent phải chạy quyền `root` để điều khiển `loginctl` và giám sát cgroup.
 
 ---
@@ -103,10 +103,16 @@ flowchart TD
      * Agent chính thức hủy bỏ yêu cầu quẹt thẻ (`staged_auth = null`).
      * Ghi nhật ký sự cố nghiêm trọng `teardown_failed_stuck_resource` vào `audit_outbox`.
      * Greeter hiển thị cảnh báo đỏ: *"Máy trạm gặp sự cố giải phóng tài nguyên. Vui lòng liên hệ Kỹ thuật viên!"*.
-5. **Cơ sở Thực nghiệm & Giới hạn Bằng chứng (Spike S7 & S7b):**
-   - Thực nghiệm Spike S7 (20 chu kỳ đo teardown cgroup kernel qua `systemd-run --scope` dưới tải CPU 100% trên UID `student`) ghi nhận thời gian dọn dẹp trung bình **105.8 ms**, tối đa **165.0 ms**, 0/20 trường hợp phải dùng SIGKILL.
-   - *Giới hạn của bằng chứng S7:* Thử nghiệm S7 mới chỉ kiểm chứng ở tầng scope cgroup kernel, chưa đo đạc thời gian giải phóng Display Server (Xorg), VT switch và D-Bus của phiên GNOME thật khi sinh viên quẹt thẻ qua Greeter, và chưa có tiến trình bẫy `SIGTERM` để ép đi vào Pha 2.
-   - *Kế hoạch kiểm chứng hoàn tất (S7b):* Chạy bài thử nghiệm S7b với phiên GNOME đầy đủ qua Greeter, 20 chu kỳ tải CPU 100%, có tiến trình cứng đầu bẫy SIGTERM, đo từ lúc quẹt thẻ đến khi Desktop lên lại. ADR-008 được duy trì ở trạng thái `Proposed` cho đến khi có dữ liệu thực nghiệm hoàn chỉnh từ S7b.
+5. **Cơ sở Thực nghiệm & Bằng chứng Hoàn chỉnh (Spike S7 & S7b):**
+   - *Kết quả tầng kernel (Spike S7):* 20 chu kỳ `systemd-run --scope` dưới tải CPU 100% ghi nhận dọn cgroup trung bình **105.8 ms** (tối đa **165.0 ms**), nhưng chưa kích hoạt GNOME/Xorg thật và `0/20` đi qua Pha 2 (`SIGKILL`).
+   - *Kết quả End-to-End GNOME thật (Spike S7b, 2026-11-11):* Kiểm chứng toàn chuỗi **LightDM -> `pam_nfc.so` -> `lab_greeter.py` (1.2s Handshake) -> GNOME Desktop** trên UID dùng chung `student` (1001) với tiến trình autostart bẫy `SIGTERM` (`stubborn_worker.sh`) qua 20 chu kỳ liên tiếp:
+     - **20/20 chu kỳ thành công**, không xuất hiện lỗi treo D-Bus ~110s, **20/20** thỏa `started > decided_at`.
+     - **20/20 buộc đi qua Pha 2 (`kill-user -s SIGKILL`):** độ trễ diệt `SIGKILL` đạt Min **113.2 ms**, Mean **163.8 ms**, Max **262.2 ms**.
+     - **Tổng thời gian Two-Phase Teardown (`GRACE_TIMEOUT 2.0s + SIGKILL`):** Min **2142.4 ms**, Mean **2210.8 ms**, P95/Max **2314.8 ms** (**0/20** vượt trần `TOTAL_TEARDOWN_TIMEOUT = 3.0s`, biên dự phòng ~685 ms).
+     - **Diệt Linger & Rogue Unit (`N=5`):** **5/5** sạch hoàn toàn.
+     - **Thời gian từ Login -> GNOME Desktop sẵn sàng:** Min **4825 ms**, Mean **5793 ms**, P95/Max **7133 ms**.
+     - *Lưu ý hạ tầng & giới hạn bằng chứng:* Ở Lần chạy 1 với `stress-ng` mức ưu tiên `nice 0` trên VM 2 vCPU, xung đột CPU với `snapd-desktop-integration.service` gây soft lockup nhân (198s ở chu kỳ 09; 0 lỗi D-Bus) -> đã hạ `stress-ng` xuống `nice -n 10` ở Lần chạy 2 (`Load1m` `2.30`–`8.58`) và ghi nhận khuyến nghị gỡ `snapd-desktop-integration` ở Master Image (ADR-004). Kích hoạt đăng nhập trong S7b mô phỏng qua socket cục bộ (thay vì quẹt thẻ ACR122U vật lý 20 lần) và chạy trực tiếp `lab_greeter.py` chưa bọc `lab-greeter-wrapper.sh`.
+   - Chi tiết xem tại [Spike S7b Result](../../../../spike-results/s7b-teardown-gnome-e2e.md). Với bằng chứng S7b hoàn chỉnh, **ADR-008** chính thức chuyển sang trạng thái **Accepted**.
 6. **Bảo tồn Dữ liệu Bài tập (BR-009):** Tuyệt đối **không can thiệp, không xóa tệp tin trong `/home/<username>`**. Việc dọn dẹp file do giảng viên hoặc kỹ thuật viên thực hiện định kỳ.
 
 ---
@@ -137,7 +143,7 @@ flowchart TD
 - **Triệt tiêu hoàn toàn race condition:** Không bao giờ xảy ra lỗi treo đen màn hình ~110s trên LightDM.
 - **Bảo đảm an toàn bảo mật phòng lab:** Ngăn chặn triệt để nguy cơ sinh viên chiếm dụng máy trạm bằng tiến trình đào coin hay bot ngầm chạy bằng linger.
 - **Chính xác tuyệt đối về hạn giờ:** Tuân thủ nghiêm ngặt nguyên tắc hạn giờ cố định BR-001.
-- **Có đầy đủ bằng chứng thực nghiệm định lượng:** Dựa trên kết quả đo đạc thực tế của Spike S6 và S7 (20 chu kỳ tải CPU 100%).
+- **Có đầy đủ bằng chứng thực nghiệm định lượng:** Dựa trên kết quả đo đạc thực tế của Spike S6, S7 và S7b (20/20 chu kỳ GNOME thật qua LightDM/PAM + SIGKILL dưới tải CPU 100%).
 
 ### Negative & Operational Trade-offs
 - Không hỗ trợ đá phiên tức thì khi Desktop đang active (chấp nhận rủi ro `workstation_busy` theo A4 khi sinh viên quên đăng xuất).

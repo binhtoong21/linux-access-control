@@ -100,9 +100,9 @@ Chuẩn hóa giao thức MQTT 5 qua mTLS cổng 8883. Phân tách Mosquitto ACL 
 Hợp nhất toàn bộ Snapshot, Lease, Session và AuditOutbox vào một CSDL SQLite duy nhất `/var/lib/nfc-agent/edge.db` (chế độ WAL, `synchronous=FULL`). Khắc phục mâu thuẫn S5 vs D-006.4: chuyển giao việc fsync cho động cơ SQLite WAL. Bảo đảm tính nguyên tử ghi trước (Atomic Write-Ahead: ghi đồng thời Outbox và LocalSession pending trước khi trả quyền cho PAM). Xác thực toàn vẹn Snapshot bằng chữ ký HMAC-SHA256 tính từ khóa riêng `K_m`, chống broker bị chiếm hoặc replay snapshot giữa các máy.
 **Nguồn:** [ADR-003](06-architecture/decisions/ADR-003-luu-tru-cuc-bo-va-xac-thuc-snapshot.md), S5, D-006.4, INV-011, INV-013, INV-014.
 
-### ADR-004 (Proposed): Mô hình Profile OS dùng chung và phân tách danh tính xác thực
-Phân tách danh tính sinh viên (User/Card) dùng cho kiểm soát truy cập và ghi AuditLog với Profile Linux dùng chung (`WorkstationProfile`, ví dụ `student`) để mở Desktop phục vụ học tập. Vô hiệu hóa Lock Screen và User Switching qua cấu hình dconf bắt buộc (`dconf update`) để triệt tiêu trạng thái lửng lơ. Cơ chế Teardown đa pha được tách sang ADR-008 dựa trên kết quả Spike S7 (chờ S7b để chuyển sang Accepted).
-**Nguồn:** [ADR-004](06-architecture/decisions/ADR-004-mo-hinh-profile-os-dung-chung.md), D-006; giải quyết P1-2, P1-3, P2-1.
+### ADR-004 (Accepted): Mô hình Profile OS dùng chung và phân tách danh tính xác thực
+Phân tách danh tính sinh viên (User/Card) dùng cho kiểm soát truy cập và ghi AuditLog với Profile Linux dùng chung (`WorkstationProfile`, ví dụ `student`) để mở Desktop phục vụ học tập. Vô hiệu hóa Lock Screen và User Switching qua cấu hình dconf bắt buộc (`dconf update`) để triệt tiêu trạng thái lửng lơ; khuyến nghị gỡ/tắt `snapd-desktop-integration` khi dựng Master Image. Đã xác nhận End-to-End qua Spike S7b (20/20 chu kỳ GNOME thật trên UID `student` + SIGKILL, không treo D-Bus). Cơ chế Teardown đa pha được đặc tả tại ADR-008.
+**Nguồn:** [ADR-004](06-architecture/decisions/ADR-004-mo-hinh-profile-os-dung-chung.md), D-006, S7b; giải quyết P1-2, P1-3, P2-1.
 
 ### ADR-005 (Proposed): Kiến trúc PAM module C, Lab Custom Greeter và cơ chế khôi phục
 Chốt chuyển sang Display Manager LightDM. Module PAM viết bằng C thuần (`pam_nfc.so`), giao tiếp IPC không khóa qua Unix socket `/run/nfc-agent.sock` với fallback tức thì 22ms về mật khẩu cục bộ khi Agent treo/chết (BR-004, NFR-M01), bảo vệ cấp nhân bằng `SO_PEERCRED`. Xây dựng Lab Custom Greeter bằng Python GTK3 nhận tín hiệu đẩy qua `/run/nfc/greeter-push.sock` để đăng nhập 0-chạm (< 1.0s), loại trừ lỗi bấm login 2 lần. Áp dụng Startup Handshake 1.2s, bộ mã DenyReason đồng bộ và launcher wrapper script tự động fallback về GTK greeter sau 3 crash liên tiếp.
@@ -116,9 +116,9 @@ Chuẩn hóa 3 phân vùng độc lập nhằm tối thiểu hóa độ dốc h�
 Server lưu UID mã hóa (AES-256-GCM) kèm chỉ mục mù (HMAC-SHA256). Snapshot chứa `CardMatchKey` = HMAC theo khóa riêng của máy (`K_m = HKDF(master_key, workstation_id || ":" || key_version)`), không chứa UID gốc. Nhật ký mang UID của lần quẹt qua TLS. Admin giải mã khi xem dashboard. Phạm vi bảo vệ: chiếm root một máy không làm lộ thẻ của người không liên quan tới máy đó.
 **Nguồn:** [ADR-007](06-architecture/decisions/ADR-007-khoa-so-khop-uid.md); giải quyết PD-002.
 
-### ADR-008 (Proposed): Quản lý vòng đời phiên và cơ chế teardown đa pha
-Quy định máy trạng thái vòng đời phiên (`LocalSession`), chính sách từ chối `workstation_busy` khi Desktop đang active (A4) và quy trình Two-Phase Teardown khi thay phiên/hết hạn: tắt linger (`disable-linger`), `terminate-user` (2s), cưỡng chế `kill-user -s SIGKILL` (1s), tổng thời gian tiêu chuẩn `TOTAL_TEARDOWN_TIMEOUT = 3.0s`. Xử lý nhánh kẹt quá 3.0s: hiển thị banner vàng và retry tối đa 5.0s trước khi hủy staged_auth. Kết hợp Startup Handshake 1.2s với Lab Custom Greeter để triệt tiêu lỗi treo D-Bus ~110s (chờ S7b để chuyển sang Accepted).
-**Nguồn:** [ADR-008](06-architecture/decisions/ADR-008-vong-doi-phien-va-teardown-da-pha.md), S6, S7; giải quyết BR-001, BR-008, BR-009, A6, P1-2.
+### ADR-008 (Accepted): Quản lý vòng đời phiên và cơ chế teardown đa pha
+Quy định máy trạng thái vòng đời phiên (`LocalSession`), chính sách từ chối `workstation_busy` khi Desktop đang active (A4) và quy trình Two-Phase Teardown khi thay phiên/hết hạn: tắt linger (`disable-linger`), `terminate-user` (2s), cưỡng chế `kill-user -s SIGKILL` (1s), tổng thời gian tiêu chuẩn `TOTAL_TEARDOWN_TIMEOUT = 3.0s`. Xử lý nhánh kẹt quá 3.0s: hiển thị banner vàng và retry tối đa 5.0s trước khi hủy `staged_auth`. Kết hợp Startup Handshake 1.2s với Lab Custom Greeter để triệt tiêu lỗi treo D-Bus ~110s. Đã xác nhận End-to-End qua Spike S7b (20/20 GNOME thật, 20/20 SIGKILL, tổng teardown P95/Max 2314.8 ms <= 3.0s, Linger 5/5).
+**Nguồn:** [ADR-008](06-architecture/decisions/ADR-008-vong-doi-phien-va-teardown-da-pha.md), S6, S7, S7b; giải quyết BR-001, BR-008, BR-009, A6, P1-2.
 
 ## Điểm chuyển sang 06
 

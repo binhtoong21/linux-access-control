@@ -206,10 +206,18 @@ Dựa trên phát hiện kỹ thuật đắt giá của Spike S6 và S7:
          exec /usr/sbin/lightdm-gtk-greeter
      fi
 
+     # Chạy trực tiếp để bắt exit code; lab_greeter.py xử lý SIGTERM và thoát mã 0 khi bàn giao phiên
+     python3 /usr/local/bin/lab_greeter.py
+     EXIT_CODE=$?
+     if [ "$EXIT_CODE" -eq 0 ]; then
+         rm -f "$CRASH_LOG"
+         exit 0
+     fi
+
      echo "$NOW" >> "$CRASH_LOG"
-     exec python3 /usr/local/bin/lab_greeter.py
+     exit "$EXIT_CODE"
      ```
-   - *Lợi ích vận hành:* Nếu Custom Greeter bị lỗi cú pháp, thiếu thư viện hoặc crash lặp, sau 3 lần crash (< 2 giây), hệ thống tự động rơi về `lightdm-gtk-greeter` chuẩn. Màn hình vẫn hiển thị giao diện đăng nhập đồ họa cho kỹ thuật viên nhập mật khẩu bảo trì mà không bị đen màn hình hay đòi hỏi phải gõ lệnh qua TTY.
+   - *Lợi ích vận hành:* Nếu Custom Greeter bị lỗi cú pháp, thiếu thư viện hoặc crash lặp (`EXIT_CODE != 0`), sau 3 lần crash liên tiếp trong 60s, hệ thống tự động rơi về `lightdm-gtk-greeter` chuẩn để kỹ thuật viên vẫn có giao diện đồ họa đăng nhập bảo trì mà không bị đen màn hình. Ngược lại, khi sinh viên đăng nhập bình thường (LightDM gửi `SIGTERM` để đóng Greeter và chuyển sang GNOME, `lab_greeter.py` thoát với mã `0`), wrapper xóa tệp `/run/lab-greeter-crashes` để các lần đăng nhập liên tiếp không bị đếm nhầm thành crash.
 3. **Quy trình Cứu hộ Thủ công Qua Virtual Terminal (TTY2):**
    - Trong trường hợp xấu nhất, kỹ thuật viên nhấn tổ hợp phím **`Ctrl + Alt + F2`** (TTY2) hoặc SSH từ xa, đăng nhập bằng `labadmin` và chuyển đổi hẳn sang GTK Greeter bằng lệnh:
      ```bash

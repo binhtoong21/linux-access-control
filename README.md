@@ -38,7 +38,8 @@ Hệ thống quản lý và kiểm soát truy cập phòng máy thực hành th�
 │   ├── s5-mqtt-storage.md  # Thử nghiệm SQLite WAL và độ bền trước sự cố mất điện đột ngột
 │   ├── s6-walking-skeleton.md# Tích hợp toàn diện End-to-End và giải quyết Race Condition
 │   ├── s7-teardown-same-uid.md# Đo đạc Teardown trên cùng UID student & triệt tiêu Linger
-│   └── spike-execution-journal.md # Nhật ký chi tiết toàn bộ chuỗi thực nghiệm S1-S7
+│   ├── s7b-teardown-gnome-e2e.md# Kiểm chứng E2E 20/20 GNOME thật qua LightDM/PAM & SIGKILL
+│   └── spike-execution-journal.md # Nhật ký chi tiết toàn bộ chuỗi thực nghiệm S1-S7b
 ├── spike.md                # Kế hoạch và phương pháp luận thực hiện các spike (S0 - S8)
 ├── .gitignore              # Cấu hình bỏ qua các file tạm thời, cache và nhạy cảm
 └── README.md               # Tài liệu tổng quan dự án
@@ -50,6 +51,6 @@ Hệ thống quản lý và kiểm soát truy cập phòng máy thực hành th�
 
 - **Nhật ký quyết định kiến trúc:** Xem [design/docs/decisions.md](design/docs/decisions.md)
 - **Mục lục ADR kiến trúc:** Xem [design/docs/06-architecture/decisions/README.md](design/docs/06-architecture/decisions/README.md)
-- **Nhật ký thực nghiệm chi tiết (S1-S7):** Xem [spike-results/spike-execution-journal.md](spike-results/spike-execution-journal.md)
+- **Nhật ký thực nghiệm chi tiết (S1-S7b):** Xem [spike-results/spike-execution-journal.md](spike-results/spike-execution-journal.md)
 - **Quy tắc nghiệp vụ cốt lõi:** Xem [design/docs/02-requirements/business-rules.md](design/docs/02-requirements/business-rules.md)
 - **Kiến trúc hệ thống (C4):** Xem [design/docs/06-architecture/](design/docs/06-architecture/)
