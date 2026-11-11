@@ -4,7 +4,7 @@
 
 | Field | Value |
 |---|---|
-| **Status** | Proposed |
+| **Status** | Accepted (2026-11-11, sau Spike S10) |
 | **Date** | 2026-11-10 |
 | **Deciders** | Nhóm tác giả ĐATN & Giảng viên hướng dẫn |
 | **Supersedes** | Không |
@@ -187,12 +187,12 @@ Dựa trên phát hiện kỹ thuật đắt giá của Spike S6 và S7:
    - Màn hình Custom Greeter cung cấp khung nhập mật khẩu dự phòng gồm 2 ô: **Username** và **Password**.
    - Khung này **chỉ dành riêng cho Kỹ thuật viên / Quản trị viên IT** sử dụng tài khoản bảo trì độc lập (ví dụ `labadmin`, `binhtong` có mật khẩu). Sinh viên không có mật khẩu đăng nhập tài khoản dùng chung `student`.
 2. **Kịch Bản Tự Động Hồi Phục Qua Launcher Wrapper Script (`lab-greeter-wrapper.sh`):**
-   - Thay vì LightDM trực tiếp gọi `lab_greeter.py`, cấu hình `/etc/lightdm/lightdm.conf.d/99-lab-greeter.conf` chỉ định greeter program là script bọc bảo vệ:
-     `greeter-session = lab-greeter-wrapper`
+   - Thay vì LightDM trực tiếp gọi `lab_greeter.py`, `/etc/lightdm/lightdm.conf.d/99-lab-greeter.conf` đặt `greeter-session=lab-greeter`, và tệp `/usr/share/xgreeters/lab-greeter.desktop` trỏ `Exec=/usr/local/bin/lab-greeter-wrapper.sh` (LightDM chọn greeter theo tên tệp `.desktop`, không theo tên script).
    - Kịch bản `/usr/local/bin/lab-greeter-wrapper.sh`:
      ```bash
      #!/bin/bash
-     CRASH_LOG="/run/lab-greeter-crashes"
+     # Greeter chạy dưới user lightdm: /run thuộc root (0755) nên KHÔNG ghi được (S10).
+     CRASH_LOG="/var/lib/lightdm/lab-greeter-crashes"
      NOW=$(date +%s)
      # Đếm số lần crash trong vòng 60 giây gần nhất
      if [ -f "$CRASH_LOG" ]; then
@@ -222,8 +222,9 @@ Dựa trên phát hiện kỹ thuật đắt giá của Spike S6 và S7:
      echo "$NOW" >> "$CRASH_LOG"
      exit "$EXIT_CODE"
      ```
-   - *Lợi ích vận hành:* Nếu Custom Greeter bị lỗi cú pháp, thiếu thư viện hoặc crash lặp (`EXIT_CODE != 0`), sau 3 lần crash liên tiếp trong 60s, hệ thống tự động rơi về `lightdm-gtk-greeter` chuẩn để kỹ thuật viên vẫn có giao diện đồ họa đăng nhập bảo trì mà không bị đen màn hình. Ngược lại, khi sinh viên đăng nhập bình thường (LightDM gửi `SIGTERM` để đóng Greeter và chuyển sang GNOME, `lab_greeter.py` thoát với mã `0`), wrapper xóa tệp `/run/lab-greeter-crashes` để các lần đăng nhập liên tiếp không bị đếm nhầm thành crash.
-   - *Giới hạn bằng chứng:* S7b chạy `lab_greeter.py` trực tiếp, chưa qua wrapper. Bản wrapper này (chuyển tiếp SIGTERM, đếm theo mã thoát) cần smoke-test trong vòng boot LightDM thật: 3 lần đăng nhập bình thường liên tiếp không kích hoạt fallback, 3 lần crash liên tiếp thì kích hoạt. ADR-005 giữ `Proposed` cho tới khi có kết quả này.
+   - *Lợi ích vận hành:* Nếu Custom Greeter bị lỗi cú pháp, thiếu thư viện hoặc crash lặp (`EXIT_CODE != 0`), sau 3 lần crash liên tiếp trong 60s, hệ thống tự động rơi về `lightdm-gtk-greeter` chuẩn để kỹ thuật viên vẫn có giao diện đồ họa đăng nhập bảo trì mà không bị đen màn hình. Ngược lại, khi sinh viên đăng nhập bình thường (LightDM gửi `SIGTERM` để đóng Greeter và chuyển sang GNOME, `lab_greeter.py` thoát với mã `0`), wrapper xóa tệp `/var/lib/lightdm/lab-greeter-crashes` để các lần đăng nhập liên tiếp không bị đếm nhầm thành crash. Sau khi rơi về `lightdm-gtk-greeter`, các mốc crash cũ quá 60s tự hết hiệu lực nên lần khởi động greeter kế tiếp lại thử Custom Greeter (tự lành khi lỗi đã được sửa).
+   - *Ràng buộc với systemd:* `lightdm.service` dùng `Restart=always` với giới hạn mặc định 5 lần khởi động trong 10s. Ngưỡng fallback (3 crash) phải luôn nhỏ hơn giới hạn này; nếu không, systemd dừng hẳn LightDM trước khi wrapper kịp rơi về greeter chuẩn (S10 phần A).
+   - *Bằng chứng ([Spike S10](../../../../spike-results/s10-greeter-wrapper.md)):* với tệp đếm ở `/run`, wrapper không ghi được (`Permission denied`), LightDM crash lặp tới khi systemd dừng hẳn (`Start request repeated too quickly`), màn hình đen, **không có fallback**. Với tệp đếm ở `/var/lib/lightdm`: 3 crash thì rơi về `lightdm-gtk-greeter`, LightDM vẫn `active`; 3 lần đăng nhập GNOME thật liên tiếp qua wrapper không tạo mốc crash nào, không kích hoạt fallback, và chỉ còn đúng 1 tiến trình `lab_greeter.py` (SIGTERM được chuyển tiếp, không có tiến trình mồ côi). Giới hạn: N = 1 cho mỗi kịch bản, trên VM.
 3. **Quy trình Cứu hộ Thủ công Qua Virtual Terminal (TTY2):**
    - Trong trường hợp xấu nhất, kỹ thuật viên nhấn tổ hợp phím **`Ctrl + Alt + F2`** (TTY2) hoặc SSH từ xa, đăng nhập bằng `labadmin` và chuyển đổi hẳn sang GTK Greeter bằng lệnh:
      ```bash

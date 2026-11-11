@@ -22,6 +22,7 @@
 | S7b | Teardown thật qua GNOME/LightDM & SIGTERM Trap | 1 ngày | Cao (xác nhận ADR-004/008) | ✅ Đạt (20/20) |
 | S8 | Kiểm chứng Mật mã, mTLS & Giao dịch Node.js | 0,5 ngày | Trung bình (xác nhận ADR-006) | ✅ Đạt (3/3) |
 | S9 | Thu hồi chứng chỉ máy trạm bằng `crlfile` của Mosquitto | 0,5 giờ | Trung bình (xác nhận D-014, ADR-002) | ✅ Đạt (3 phát hiện) |
+| S10 | Smoke-test wrapper greeter trong vòng boot LightDM | 1 giờ | Cao (BR-004, xác nhận ADR-005) | ✅ Đạt (sau khi sửa lỗi tự khóa) |
 
 Nên đặt mua hoặc mượn đầu đọc ngay hôm nay vì có thời gian chờ, S1 chạy song song với S0. Trình tự S2 → S3 → S4 vì chúng phụ thuộc nhau. S5 có thể làm xen.
 
@@ -147,6 +148,12 @@ Kiểm chứng tốc độ giải phóng cgroup `user-<UID>.slice` và `/run/use
 **Kết quả (2026-11-11):** **✅ Đạt** trên Mosquitto `2.0.11` + OpenSSL `3.0.2`: thu hồi theo serial, chứng chỉ mới cùng CN `ws-01` vẫn vào được; `SIGHUP` nạp lại CRL nhưng **không ngắt** kết nối đang mở của chứng chỉ đã thu hồi (phải khởi động lại broker); CRL **hết hạn** làm broker từ chối mọi client; **thiếu tệp** CRL thì broker không khởi động. Xem [spike-results/s9-mosquitto-crl.md](spike-results/s9-mosquitto-crl.md).
 **Ảnh hưởng:** Hiệu chỉnh ADR-002 §1 và D-014 điểm 5 (khởi động lại broker, CRL hạn dài + làm mới định kỳ, tệp luôn tồn tại và ghi nguyên tử).
 
+## S10: Smoke-test wrapper greeter (ADR-005)
+
+**Câu hỏi:** `lab-greeter-wrapper.sh` có rơi về `lightdm-gtk-greeter` sau 3 crash, không đếm nhầm đăng nhập bình thường, và chuyển tiếp SIGTERM không để lại tiến trình mồ côi không?
+**Kết quả (2026-11-11):** **✅ Đạt sau khi sửa**: bản trong ADR ghi tệp đếm ở `/run` mà user `lightdm` không ghi được, nên LightDM crash lặp tới khi systemd dừng hẳn (màn hình đen, không fallback). Chuyển sang `/var/lib/lightdm`: 3 crash thì rơi về greeter chuẩn; 3 lần đăng nhập GNOME thật qua harness S7b không kích hoạt fallback, chỉ còn 1 tiến trình greeter. Xem [spike-results/s10-greeter-wrapper.md](spike-results/s10-greeter-wrapper.md).
+**Ảnh hưởng:** Sửa ADR-005 (đường dẫn tệp đếm, cách gắn wrapper qua `.desktop`, ràng buộc với giới hạn khởi động lại systemd); nâng ADR-005 lên `Accepted`.
+
 ## Từ kết quả spike đến ADR
 
 | Kết quả | ADR được viết |
@@ -158,6 +165,7 @@ Kiểm chứng tốc độ giải phóng cgroup `user-<UID>.slice` và `/run/use
 | S7, S7b | ADR-004 (Mô hình profile dùng chung) & ADR-008 (Vòng đời phiên & Teardown đa pha) |
 | S8 | ADR-006 (Lựa chọn techstack Server NestJS / Node.js) |
 | S9 | ADR-002 (thu hồi chứng chỉ qua CRL), D-014 |
+| S10 | ADR-005 (wrapper greeter và fallback) |
 
 ## Quy tắc quyết định
 
