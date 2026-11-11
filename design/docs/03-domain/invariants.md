@@ -23,7 +23,7 @@
 | INV-013 | Mỗi lần quẹt thẻ ở Edge tạo đúng một bản ghi trong AuditOutbox với `entry_id` duy nhất; bản ghi chỉ bị loại khỏi hàng đợi sau khi server xác nhận | AuditOutbox | BR-007 |
 | INV-014 | Tối đa một LocalSession `active` và một LocalSession `pending` trên một máy; quẹt đè khi desktop đang active và phiên còn hạn bị từ chối `workstation_busy`; chỉ thay thế phiên (`superseded`) khi đã về greeter hoặc phiên cũ hết hạn; khởi động lại thì đối chiếu với phiên OS thực tế | LocalSession | BR-008 |
 | INV-015 | LocalSession tự kết thúc khi chạm hạn sớm hơn của hai hạn: UTC tuyệt đối (`expires_at`) và hạn theo đồng hồ đo `CLOCK_BOOTTIME`, không phụ thuộc kết nối với server. Dọn sạch toàn bộ tiến trình của phiên OS (`loginctl terminate-user`, cưỡng chế `SIGKILL` theo user slice), tuyệt đối không xóa thư mục home hay file dữ liệu cục bộ | LocalSession | BR-009, FR-005 |
-| INV-016 | `AdminAccount.username` duy nhất; tài khoản `disabled` không đăng nhập được | AdminAccount | VR-010 |
+| INV-016 | `AdminAccount.username` duy nhất; tài khoản `disabled` không đăng nhập được; luôn còn ít nhất một tài khoản `active` (không vô hiệu hóa được admin hoạt động cuối cùng) | AdminAccount | VR-010, D-019 |
 | INV-017 | LocalSession chỉ chuyển sang trạng thái kết thúc khi phiên OS tương ứng đã thật sự kết thúc hoặc không còn | LocalSession | Thiết kế |
 | INV-018 | WorkstationProfile: `os_username` hợp lệ theo allowlist của máy trạm (tài khoản thuộc nhóm hạn chế `labstudent` được Auto-Discovery phát hiện và đồng bộ với Server); không cấp quyền sudo không mật khẩu; khóa mật khẩu cục bộ (`passwd -l`) nếu chỉ xác thực qua thẻ. PAM và Agent từ chối phục vụ profile ngoài allowlist hoặc UID < 1000 | WorkstationProfile, LocalWorkstationProfile | BR-020, NFR-SEC07, D-009 |
 

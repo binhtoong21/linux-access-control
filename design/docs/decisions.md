@@ -1,6 +1,6 @@
 # 📌 decisions.md
 
-> Các quyết định về phân tích và thiết kế hệ thống, chốt trong quá trình xây dựng tài liệu 01–04. Quyết định kiến trúc và triển khai nằm ở [06-architecture/decisions](06-architecture/decisions/).
+> Các quyết định về phân tích và thiết kế hệ thống, chốt trong quá trình xây dựng tài liệu 01–08 (D-014 trở đi phát sinh khi review 06–08). Quyết định kiến trúc và triển khai nằm ở [06-architecture/decisions](06-architecture/decisions/).
 
 ## Quyết định đã chốt
 
@@ -118,6 +118,16 @@ Khi máy báo `snapshot_version` lớn hơn `desired_version` (chỉ xảy ra kh
 3. **Lease tính theo giờ máy, khớp BR-006.** Server gửi thời lượng `lease_duration_sec` (không gửi mốc `trusted_until` theo giờ server); Agent đặt `trusted_until = max(cũ, giờ máy lúc nhận + D)`.
 4. **Chống phát lại lease.** Vì hạn tính từ lúc nhận, broker bị chiếm có thể phát lại một bản lease cũ để gia hạn mãi. Mỗi Hello/heartbeat mang một `lease_nonce` ngẫu nhiên mới; bản lease phải nhắc lại đúng một trong vài nonce gần nhất Agent đã gửi (nằm trong phần được ký HMAC) thì mới được nhận. Không phụ thuộc đồng hồ, không cần bộ đếm. Snapshot chỉ làm mới thời hạn khi có `version` mới, nên phát lại snapshot retained cũng không gia hạn được.
 **Nguồn:** BR-006, BR-012, FR-056, XINV-007, D-012, ADR-001, ADR-002, lease-expiration.md; review 01–05.
+
+### D-019: Các quy tắc quản trị chốt khi đặc tả API (08-api)
+1. **Admin đặt tên máy khi duyệt.** `mqtt_identity` (ví dụ `ws-07`) do Admin nhập khi duyệt máy mới, không lấy từ hostname vì hostname trong image clone có thể trùng. "Duyệt tất cả" theo Zone sinh tên tuần tự theo tiền tố (`lab-a-01`, `lab-a-02`…) và bỏ qua yêu cầu có cờ trùng (D-014). Cài lại máy giữ nguyên tên cũ.
+2. **Không vô hiệu hóa admin đang hoạt động cuối cùng**, để hệ thống không rơi vào trạng thái không còn ai quản trị (INV-016).
+3. **Chỉ xóa được máy đã `disabled`** và không còn Schedule tham chiếu (BR-017). Vô hiệu hóa trước để chứng chỉ bị thu hồi; máy vẫn cho quẹt theo snapshot cục bộ tới khi lease hết (D-014.6).
+4. **Kiểm tra lịch khi lưu chỉ cảnh báo, không chặn** các cấu hình có thể dẫn tới `ambiguous_profile` hoặc máy thiếu profile: chúng hợp lệ về dữ liệu, chỉ bị từ chối tại máy khi hai lịch cùng khớp một lúc (BR-016, D-009).
+5. **UID thẻ không hiện trong danh sách**, chỉ hiện ở chi tiết thẻ và chi tiết nhật ký; tra cứu theo UID đi qua blind index (NFR-SEC03, ADR-007). Đăng ký thẻ được từ một bản ghi `unknown_card` mà không cần gõ lại UID (FR-073).
+6. **Hai admin sửa cùng lúc thì bản lưu sau thắng**, không khóa bản ghi. Đủ cho MVP một vai trò với vài admin; mọi thay đổi đều sinh event dựng lại snapshot nên trạng thái cuối luôn được phân phối đúng (XINV-005).
+7. **Cảnh báo an ninh từ máy** (`snapshot_signature_invalid`, `edge_db_recovered`, `key_version_mismatch`) lưu ở `workstation_alerts`, tách khỏi `audit_logs`, để giữ BR-007 "mỗi lần quẹt đúng một bản ghi".
+**Nguồn:** [08-api/api.md](08-api/api.md), [08-api/events.md](08-api/events.md), INV-016, BR-016, BR-017, D-014.
 
 ### ADR-001 (Accepted): Xác thực ở edge, dữ liệu cục bộ có thời hạn tin cậy (lease)
 Quy định ở Agent theo CR-001 từ snapshot cục bộ, không hỏi server khi quẹt thẻ. Dữ liệu cục bộ có thời hạn tin cậy (lease) được gia hạn qua phản hồi heartbeat khi `acked_version == desired_version`. Kiểm tra đồng hồ kết hợp hai hạn (UTC tuyệt đối bền vững và `CLOCK_BOOTTIME` cho phiên) kèm mốc sàn cải tiến `floor = last_sync_local_time - CLOCK_FLOOR_TOLERANCE`. Cần thầy xác nhận: giá trị lease `D` và việc tin RTC sau khi khởi động lại lúc offline.

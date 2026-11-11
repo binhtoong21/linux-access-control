@@ -947,3 +947,38 @@ Trạng thái service ngầm:
   - **Test 2:** `mqtt.js` MQTT 5 mTLS dùng cert Ed25519 kết nối thành công cổng `8883`; `ws-test-01` nhận đủ tin `ws-test-01/snapshot` kèm `userProperties.signature = 'sig-ok-42'` và **nhận 0 bản tin rò rỉ** từ `ws-other-99/snapshot`; mọi `PUBLISH` trái phép vào `ws-test-01/snapshot` và `ws-other-99/hello` đều bị chặn ngay với mã lỗi MQTT 5 **`135` (`0x87 Not Authorized`)**. Đồng thời phát hiện thực tế: Mosquitto `acl_file` (`pattern read ...`) chấp nhận `SUBACK (qos: 1)` và lọc chặn ở khâu chuyển phát (egress), không trả `0x87` tại `SUBACK` như tài liệu ADR-002 ghi nhận trước đó -> đã cập nhật làm rõ tại **ADR-002**.
   - **Test 3:** Giao dịch `pg` (`BEGIN ... COMMIT` + lỗi giả lập `ROLLBACK`) cho kết quả sạch `schedules=1, outbox_events=1`.
 - **Hệ quả Kiến trúc:** Chính thức nâng cấp **ADR-006** từ `Proposed` lên `Accepted`. Chi tiết xem [s8-server-crypto-mtls-pg.md](s8-server-crypto-mtls-pg.md).
+
+---
+
+### 8.20. Thực nghiệm Spike S9: Thu hồi Chứng chỉ Máy trạm bằng `crlfile` của Mosquitto
+- **Mục tiêu:** Kiểm chứng cơ chế thu hồi credential của D-014: khi Admin duyệt cài lại hoặc vô hiệu hóa máy, chứng chỉ cũ phải bị broker từ chối mà chứng chỉ mới **cùng CN** vẫn vào được; đồng thời tìm tình huống CRL có thể làm tự khóa toàn hệ thống.
+- **Cách chạy:** Claude Code chạy qua SSH (`vm2`, key-based) bằng user thường, **không đụng broker S8**: CA thử nghiệm ECDSA P-256 quản lý bằng `openssl ca`, broker Mosquitto `2.0.11` riêng ở `127.0.0.1:18883`, client `mosquitto_pub/sub` MQTT v5. Script `~/spike/s9_crl.sh`.
+- **Kết quả đo:**
+  - Trước thu hồi: `ws01_old` (serial `1001`) và `ws01_new` (serial `1002`, cùng `CN=ws-01`) đều `rc=0`.
+  - Thu hồi `1001` + `SIGHUP`: kết nối mới bằng `ws01_old` bị từ chối (`certificate verify failed`); `ws01_new`, `nfc-server` vẫn `rc=0`.
+  - **Kết nối đang mở** bằng `ws01_old` **vẫn sống sau `SIGHUP`** và vẫn nhận snapshot retained publish sau thu hồi; chỉ bị ngắt khi **khởi động lại** broker.
+  - CRL hết hạn (`-crlsec 5`): broker từ chối **mọi** client kể cả chứng chỉ hợp lệ và client của Server.
+  - Thiếu tệp CRL: broker **không khởi động** (`Unable to load certificate revocation file`).
+- **Hệ quả Kiến trúc:** ADR-002 §1 và D-014.5 chuyển sang khởi động lại broker sau khi sinh lại CRL; CRL ký hạn 3650 ngày, sinh lại khi Server khởi động và hằng ngày, cảnh báo khi còn dưới 30 ngày; tệp CRL luôn tồn tại và ghi tệp tạm rồi đổi tên. ADR-002 nâng lên `Accepted`. Chi tiết: [s9-mosquitto-crl.md](s9-mosquitto-crl.md).
+
+---
+
+### 8.21. Thực nghiệm Spike S10: Smoke-test `lab-greeter-wrapper.sh` Trong Vòng Boot LightDM Thật
+- **Mục tiêu:** Đóng giới hạn còn lại của S7b (chạy `lab_greeter.py` trực tiếp, chưa qua wrapper): 3 crash liên tiếp phải rơi về `lightdm-gtk-greeter`; 3 lần đăng nhập bình thường không được đếm nhầm; wrapper phải chuyển tiếp `SIGTERM` để không có greeter mồ côi.
+- **Cách chạy:** Claude Code chạy qua SSH với sudo trên VM S7b. Gắn wrapper qua `Exec=` của `/usr/share/xgreeters/lab-greeter.desktop`; kịch bản crash thay tạm `lab_greeter.py` bằng `sys.exit(1)`; kịch bản đăng nhập dùng harness S7b rút còn 3 chu kỳ. Script `~/spike/s10/s10_wrapper.sh`.
+- **Kết quả đo:**
+  - **Phần A, wrapper đúng như ADR-005 cũ** (`CRASH_LOG=/run/lab-greeter-crashes`): log greeter `Permission denied` (greeter chạy dưới user `lightdm`, `/run` là `root 0755`), không mốc crash nào được ghi, LightDM thoát lặp tới khi systemd `Start request repeated too quickly` → `lightdm=failed` suốt 60s, **màn hình đen, không có fallback**.
+  - **Phần B** (`CRASH_LOG=/var/lib/lightdm/lab-greeter-crashes`): sau 3 crash chạy `lightdm-gtk-greeter`, `lightdm=active` ổn định; systemd dừng ở `restart counter is at 3` (dưới giới hạn 5/10s).
+  - **Phần C** (bản B + greeter thật): harness `3/3` (`Login->GNOME` 5498–10137 ms, teardown 2087–2246 ms); sau đó không có mốc crash, không fallback, đúng 1 tiến trình `lab_greeter.py`.
+- **Hệ quả Kiến trúc:** Sửa ADR-005 (đường dẫn tệp đếm crash, cách gắn wrapper qua `.desktop`, ràng buộc ngưỡng 3 crash < giới hạn khởi động lại của systemd); ADR-005 nâng lên `Accepted`. Bản sửa logic đếm crash ở 8.18 là đúng nhưng chưa đủ: lỗi quyền ghi chỉ lộ ra khi chạy thật dưới user `lightdm`. Trạng thái VM sau spike: greeter chạy qua wrapper đã sửa, bản gốc lưu `*.orig`. Chi tiết: [s10-greeter-wrapper.md](s10-greeter-wrapper.md).
+
+---
+
+### 8.22. Thực nghiệm Spike S11: Agent Chạy Dưới Systemd Hardening Của ADR-006
+- **Mục tiêu:** S6 và S7b chạy Agent không có hardening; cần chứng minh với `ProtectSystem=strict`, `ProtectHome=read-only`, `PrivateTmp=true`, `ReadWritePaths=/var/lib/nfc-agent /run`, `CapabilityBoundingSet=CAP_KILL CAP_DAC_OVERRIDE CAP_SETUID CAP_SETGID`, Agent vẫn mở được socket cho greeter/PAM, ghi `edge.db` và gọi logind dọn phiên.
+- **Cách chạy:** Claude Code chạy qua SSH; harness S7b (đóng vai Agent, 3 chu kỳ GNOME thật) đặt trong unit tạm `systemd-run` mang đúng các thuộc tính trên; probe từng thao tác bằng `~/spike/s10/s11_probe.py`.
+- **Kết quả đo:**
+  - **Đúng như ADR-006:** `[01/3] ❌ LỖI: Quá thời gian chờ greeter_ready!`. Probe: `chown` socket `/run/nfc/greeter-push.sock` cho nhóm `lightdm` bị `PermissionError: [Errno 1] Operation not permitted`; mọi thao tác khác (socket PAM, SQLite WAL, thư mục định danh, đọc `/etc`, `loginctl list-sessions/kill-user/disable-linger`, đổi UID sang `student`) đều đạt.
+  - **Thêm `CAP_CHOWN`:** `3/3` chu kỳ đạt (`Login->GNOME` 4704–5167 ms, teardown 2101.1–2246.6 ms, `started > decided_at` 3/3, 0/3 vượt 3.0s), đúng 1 tiến trình greeter sau đó.
+  - Ghi chú: `stress-ng` của harness cần `WorkingDirectory=/tmp` dưới `ProtectSystem=strict` (yêu cầu của công cụ tạo tải, không phải của Agent).
+- **Hệ quả Kiến trúc:** Bổ sung `CAP_CHOWN` vào `CapabilityBoundingSet` của ADR-006. Giới hạn: chưa thử đọc PC/SC dưới hardening (chờ thẻ thật, S1). Chi tiết: [s11-agent-systemd-hardening.md](s11-agent-systemd-hardening.md).
