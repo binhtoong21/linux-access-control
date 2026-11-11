@@ -121,6 +121,10 @@ Hệ thống phân tách ranh giới an ninh thành 3 kênh Unix Domain Socket �
 1. **Kênh Xác Thực PAM (`/run/nfc-agent.sock`):**
    - Phân quyền `0660 root:root`.
    - Dành riêng cho `pam_nfc.so` gọi sang Agent để thẩm định token quẹt thẻ đã staged.
+   - **Giao thức dòng** (để module C không phải phân tích JSON): gửi `AUTH <PAM_USER>
+`, nhận `GRANTED <os_username>
+` hoặc `DENIED <lý do>
+`. Agent chỉ cấp khi có lượt cho phép một lần còn hạn (30 s) và `PAM_USER` đúng profile đã chọn; sai user thì không đốt lượt. Kiểm chứng bằng `pamtester` (5/5 kịch bản, fallback khi Agent không chạy ~10 ms).
    - **Bảo vệ cấp nhân qua `SO_PEERCRED`:** Khi nhận kết nối `connect()`, Agent gọi syscall `getsockopt(..., SOL_SOCKET, SO_PEERCRED, ...)` để trích xuất cấu trúc `ucred`. Agent **từ chối tuyệt đối mọi tiến trình không có UID = 0 (root)**. Ngăn chặn triệt để người dùng thường can thiệp vào IPC xác thực.
    - **Đặc tính Fallback Tức Thì (NFR-M01, BR-004):** Module C hoàn toàn stateless. Khi Agent không phản hồi trong **`TIMEOUT = 3000ms`** (hàm `poll()`) hoặc file socket không tồn tại, `pam_nfc.so` lập tức trả về mã **`PAM_IGNORE`**. Chuỗi PAM rơi xuống `pam_unix.so` mở nhắc lệnh hỏi mật khẩu dự phòng trong < 25ms.
    - **Cập nhật danh tính đích (`PAM_USER`):** Module gọi chuẩn `pam_set_item(pamh, PAM_USER, target_username)` để cập nhật tài khoản đích (ví dụ `student`), cho phép tài khoản bị khóa mật khẩu (`passwd -l`) đăng nhập thành công 100% vào Desktop (Spike S3 Ca 8).
