@@ -95,3 +95,12 @@ temp_*
 temp_*.*
 scratch/
 
+
+# --- Node.js / TypeScript ---
+node_modules/
+coverage/
+*.tsbuildinfo
+
+# --- Dev environment (generated CA, certs, data) ---
+deploy/dev/certs/
+deploy/dev/data/

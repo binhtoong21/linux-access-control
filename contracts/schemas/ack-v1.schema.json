@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ack-v1",
+  "title": "Outbox ACK (Server → Edge, signed ack-v1)",
+  "type": "object",
+  "required": [
+    "schema",
+    "command",
+    "workstation_id",
+    "acked_seq"
+  ],
+  "properties": {
+    "schema": {
+      "const": "ack-v1"
+    },
+    "command": {
+      "const": "ack_outbox"
+    },
+    "workstation_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{3,64}$"
+    },
+    "acked_seq": {
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}

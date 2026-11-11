@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "hello-v1",
+  "title": "Hello (Edge → Server)",
+  "type": "object",
+  "required": [
+    "schema",
+    "workstation_id",
+    "boot_id",
+    "agent_version",
+    "snapshot_version",
+    "key_version",
+    "lease_nonce",
+    "pending_outbox_count",
+    "profiles",
+    "local_time"
+  ],
+  "properties": {
+    "schema": {
+      "const": "hello-v1"
+    },
+    "workstation_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{3,64}$"
+    },
+    "boot_id": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    },
+    "agent_version": {
+      "type": "string"
+    },
+    "snapshot_version": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "key_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "lease_nonce": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "pending_outbox_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "profiles": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z_][a-z0-9_-]{0,31}$"
+      }
+    },
+    "local_time": {
+      "type": "number",
+      "minimum": 0
+    }
+  }
+}

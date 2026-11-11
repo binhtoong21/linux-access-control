@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "lease-v1",
+  "title": "Lease (Server → Edge, signed lease-v1)",
+  "type": "object",
+  "required": [
+    "schema",
+    "workstation_id",
+    "desired_version",
+    "server_time",
+    "lease_duration_sec",
+    "nonce"
+  ],
+  "properties": {
+    "schema": {
+      "const": "lease-v1"
+    },
+    "workstation_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{3,64}$"
+    },
+    "desired_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "server_time": {
+      "type": "number",
+      "minimum": 0
+    },
+    "lease_duration_sec": {
+      "type": "integer",
+      "minimum": 60
+    },
+    "nonce": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    }
+  }
+}

@@ -1,0 +1,235 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "snapshot-v1",
+  "title": "Snapshot (Server → Edge, signed snapshot-v1)",
+  "type": "object",
+  "required": [
+    "schema",
+    "workstation_id",
+    "version",
+    "key_version",
+    "uid_scheme",
+    "created_at",
+    "parameters",
+    "users",
+    "cards",
+    "schedules",
+    "profiles"
+  ],
+  "properties": {
+    "schema": {
+      "const": "snapshot-v1"
+    },
+    "workstation_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{3,64}$"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "key_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "uid_scheme": {
+      "const": "hmac-sha256-v1"
+    },
+    "created_at": {
+      "type": "number",
+      "minimum": 0
+    },
+    "parameters": {
+      "type": "object",
+      "required": [
+        "lease_duration_sec",
+        "warning_before_sec",
+        "max_session_duration_sec"
+      ],
+      "properties": {
+        "lease_duration_sec": {
+          "type": "integer",
+          "minimum": 60
+        },
+        "warning_before_sec": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_session_duration_sec": {
+          "type": "integer",
+          "minimum": 60
+        }
+      }
+    },
+    "users": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "external_id",
+          "full_name",
+          "status",
+          "group_ids"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+          },
+          "external_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "full_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "enum": [
+              "active",
+              "inactive"
+            ]
+          },
+          "group_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+            }
+          }
+        }
+      }
+    },
+    "cards": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "match_key",
+          "card_id",
+          "user_id",
+          "status"
+        ],
+        "properties": {
+          "match_key": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "card_id": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+          },
+          "user_id": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "disabled"
+            ]
+          }
+        }
+      }
+    },
+    "schedules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "subject_type",
+          "subject_id",
+          "valid_from",
+          "valid_to",
+          "days_mask",
+          "start_minute",
+          "end_minute",
+          "target_os_username"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+          },
+          "subject_type": {
+            "enum": [
+              "user",
+              "group"
+            ]
+          },
+          "subject_id": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+          },
+          "valid_from": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "valid_to": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "days_mask": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 127
+          },
+          "start_minute": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1439
+          },
+          "end_minute": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1440
+          },
+          "target_os_username": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "profiles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "os_username",
+          "status",
+          "is_default"
+        ],
+        "properties": {
+          "os_username": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "enabled",
+              "disabled"
+            ]
+          },
+          "is_default": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}

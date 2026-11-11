@@ -1,0 +1,78 @@
+{
+  "schema": "outbox-v1",
+  "workstation_id": "ws-01",
+  "batch_id": "b-68192a",
+  "from_seq": 101,
+  "to_seq": 104,
+  "records": [
+    {
+      "entry_id": "d84f9a10-3c2b-4e6f-8a1d-5b7c9e0f2a34",
+      "outbox_seq": 101,
+      "occurred_at": 1793048324.61,
+      "event_type": "swipe_decision",
+      "payload": {
+        "outcome": "granted",
+        "reason": "granted",
+        "detail": null,
+        "card_uid": "1F0820CF",
+        "reader_raw": null,
+        "user": {
+          "id": "6f1c2a3b-4d5e-4f60-8a1b-2c3d4e5f6a7b",
+          "external_id": "SV001",
+          "full_name": "Nguyễn Văn A"
+        },
+        "card": {
+          "id": "0b7e4d21-3c4b-4a5d-9e6f-7a8b9c0d1e2f",
+          "status": "active"
+        },
+        "target_os_username": "student",
+        "matched_schedule_ids": [
+          "3a9d5e10-2b4c-4d6e-8f10-1a2b3c4d5e6f"
+        ],
+        "data_version": 12
+      }
+    },
+    {
+      "entry_id": "e1f2a3b4-c5d6-4e7f-8a9b-0c1d2e3f4a5b",
+      "outbox_seq": 102,
+      "occurred_at": 1793048330.12,
+      "event_type": "session_started",
+      "payload": {
+        "session_id": "a3c1f0d2-7e44-4b8e-9c1a-2f6d8e0b5a91",
+        "decision_entry_id": "d84f9a10-3c2b-4e6f-8a1d-5b7c9e0f2a34",
+        "user_id": "6f1c2a3b-4d5e-4f60-8a1b-2c3d4e5f6a7b",
+        "card_id": "0b7e4d21-3c4b-4a5d-9e6f-7a8b9c0d1e2f",
+        "os_username": "student",
+        "boot_id": "9f2c8d14-5b1e-4c33-9a70-0d6f2e8b1c47",
+        "decided_at": 1793048324.61,
+        "started_at": 1793048330.12,
+        "expires_at": 1793055600
+      }
+    },
+    {
+      "entry_id": "f2a3b4c5-d6e7-4f80-9a0b-1c2d3e4f5a6b",
+      "outbox_seq": 103,
+      "occurred_at": 1793055600.4,
+      "event_type": "session_ended",
+      "payload": {
+        "session_id": "a3c1f0d2-7e44-4b8e-9c1a-2f6d8e0b5a91",
+        "status": "forced_logout",
+        "end_reason": "schedule_expired",
+        "end_source": "reported",
+        "ended_at": 1793055600.4
+      }
+    },
+    {
+      "entry_id": "a3b4c5d6-e7f8-4a91-8b0c-2d3e4f5a6b7c",
+      "outbox_seq": 104,
+      "occurred_at": 1793055700,
+      "event_type": "security_alert",
+      "payload": {
+        "kind": "edge_db_recovered",
+        "detail": {
+          "lost_outbox_entries": 3
+        }
+      }
+    }
+  ]
+}

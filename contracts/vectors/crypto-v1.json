@@ -1,0 +1,101 @@
+{
+  "spec": "crypto-v1",
+  "inputs": {
+    "master_key_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "k_index_hex": "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+    "km_salt": "nfc-lab-km-v1"
+  },
+  "km": [
+    {
+      "mqtt_identity": "ws-01",
+      "key_version": 1,
+      "km_hex": "b691d791fa3019169765358701544eb5606b54508ebbb690bb998cee0eac0945"
+    },
+    {
+      "mqtt_identity": "ws-01",
+      "key_version": 2,
+      "km_hex": "3e7f3aca6bc95f8dca141a70b9c21679ab9655324874cfbaf2161386d4d40545"
+    },
+    {
+      "mqtt_identity": "lab-a-07",
+      "key_version": 1,
+      "km_hex": "4b2e89b928b5a0e84b713ce9d73baed71e2dc60dc32ca02312bb0c0df61d5e86"
+    }
+  ],
+  "uid_normalize": [
+    {
+      "raw": "1f:08:20:cf",
+      "normalized": "1F0820CF"
+    },
+    {
+      "raw": "04A32B1C5D6E80",
+      "normalized": "04A32B1C5D6E80"
+    },
+    {
+      "raw": "04 11 22 33 44 55 66 77 88 99",
+      "normalized": "04112233445566778899"
+    }
+  ],
+  "uid_normalize_invalid": [
+    "1F08",
+    "ZZ0820CF",
+    "1F0820CF00"
+  ],
+  "card_match_key": [
+    {
+      "mqtt_identity": "ws-01",
+      "key_version": 1,
+      "uid": "1F0820CF",
+      "match_key": "3c0789fedaf5e885151a997c5a5a3484e7538eb85b9c5a0a827ca5b952c675e7"
+    },
+    {
+      "mqtt_identity": "ws-01",
+      "key_version": 1,
+      "uid": "04A32B1C5D6E80",
+      "match_key": "2c201dc2f99e2e1eb00bda07ed4b6618d08f41428bb87c5e178c292fb6bb9bba"
+    },
+    {
+      "mqtt_identity": "ws-01",
+      "key_version": 1,
+      "uid": "04112233445566778899",
+      "match_key": "da65dd4b8f445f52a7a56e3f864dc27c7e7ea2f7a06f4cc54052eb82ec1f0fd6"
+    }
+  ],
+  "blind_index": [
+    {
+      "uid": "1F0820CF",
+      "index": "c9d82fa26eeba43d506cd1e185e70223bf8e496b50f81afeda249f2f2fc3ca00"
+    },
+    {
+      "uid": "04A32B1C5D6E80",
+      "index": "e5702f9c22e56566a5d9a466dc6da7d0479ba1bf4f32031fa729d263debced36"
+    },
+    {
+      "uid": "04112233445566778899",
+      "index": "c5d2e15f07f57f561b51a5e134e0f57c4a09b4da277ff87cb764764cff30d0a1"
+    }
+  ],
+  "signatures": [
+    {
+      "mqtt_identity": "ws-01",
+      "key_version": 1,
+      "tag": "snapshot-v1",
+      "payload_hex": "7b22736368656d61223a22736e617073686f742d7631222c22776f726b73746174696f6e5f6964223a2277732d3031222c2276657273696f6e223a31337d",
+      "signature": "949a5c654eadd9d7540c327231c74297fdda7ca9bf94b1a31a42b3b3028b06f6"
+    },
+    {
+      "mqtt_identity": "ws-01",
+      "key_version": 1,
+      "tag": "lease-v1",
+      "payload_hex": "7b22736368656d61223a226c656173652d7631222c22776f726b73746174696f6e5f6964223a2277732d3031222c22646573697265645f76657273696f6e223a31332c227365727665725f74696d65223a313739333034393332332e39362c226c656173655f6475726174696f6e5f736563223a38363430302c226e6f6e6365223a226334316230653761393264333566383831366134653062326339643766333531227d",
+      "signature": "248bacfec4e2594add68c36756f398b2a2127089d9cfc1d06df211370a8543ed"
+    },
+    {
+      "mqtt_identity": "ws-01",
+      "key_version": 1,
+      "tag": "ack-v1",
+      "payload_hex": "7b22736368656d61223a2261636b2d7631222c22636f6d6d616e64223a2261636b5f6f7574626f78222c22776f726b73746174696f6e5f6964223a2277732d3031222c2261636b65645f736571223a3130332c226e6f7465223a227469e1babf6e67205669e1bb8774227d",
+      "signature": "f423b8b39ed5b5e96457e5e89fe129cd87f7ead03425fd471b9d8a99d627a423"
+    }
+  ]
+}

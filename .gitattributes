@@ -1,0 +1,5 @@
+# Keep LF where tools require it regardless of core.autocrlf
+*.sh text eol=lf
+*.conf text eol=lf
+contracts/** text eol=lf
+*.png binary

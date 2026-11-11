@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "heartbeat-v1",
+  "title": "Heartbeat (Edge → Server)",
+  "type": "object",
+  "required": [
+    "schema",
+    "workstation_id",
+    "boot_id",
+    "snapshot_version",
+    "lease_nonce",
+    "trust_state",
+    "local_time",
+    "clock_skew_detected",
+    "last_apply_error",
+    "active_session_id",
+    "profiles"
+  ],
+  "properties": {
+    "schema": {
+      "const": "heartbeat-v1"
+    },
+    "workstation_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{3,64}$"
+    },
+    "boot_id": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    },
+    "snapshot_version": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "lease_nonce": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "trust_state": {
+      "enum": [
+        "NoData",
+        "Fresh",
+        "Expired",
+        "ClockInvalid"
+      ]
+    },
+    "local_time": {
+      "type": "number",
+      "minimum": 0
+    },
+    "clock_skew_detected": {
+      "type": "boolean"
+    },
+    "last_apply_error": {
+      "enum": [
+        null,
+        "signature_invalid",
+        "key_version_mismatch",
+        "older_version",
+        "schema_invalid"
+      ]
+    },
+    "active_session_id": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "profiles": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z_][a-z0-9_-]{0,31}$"
+      }
+    }
+  }
+}

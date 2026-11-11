@@ -1,0 +1,24 @@
+# Dev infrastructure: PostgreSQL 15 + Mosquitto 2 (mTLS, ACL, CRL).
+# Usage: bash gen-dev-certs.sh && docker compose up -d   (from deploy/dev)
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: nfclab
+      POSTGRES_USER: nfclab
+      POSTGRES_PASSWORD: nfclab-dev
+    ports: ["127.0.0.1:5432:5432"]
+    volumes: ["./data/postgres:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nfclab -d nfclab"]
+      interval: 5s
+      retries: 10
+
+  mosquitto:
+    image: eclipse-mosquitto:2.0.18
+    ports: ["127.0.0.1:8883:8883"]
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/acl.conf:/mosquitto/config/acl.conf:ro
+      - ./certs:/mosquitto/certs:ro
+      - ./data/mosquitto:/mosquitto/data

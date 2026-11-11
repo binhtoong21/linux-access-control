@@ -18,6 +18,11 @@ Hệ thống quản lý và kiểm soát truy cập phòng máy thực hành th�
 ## 📂 Cấu Trúc Repository
 
 ```text
+├── contracts/              # Hợp đồng dùng chung Edge ⇄ Server: JSON Schema bản tin MQTT, test vector mật mã
+├── edge/                   # Edge Agent (Python ≥ 3.10): domain/ (CR-001, thuần), infra/ (SQLite, MQTT, PC/SC…)
+├── server/                 # Server NestJS/TypeScript: mỗi bounded context một module
+├── deploy/dev/             # Môi trường dev: PostgreSQL 15 + Mosquitto mTLS/ACL/CRL, script sinh CA dev
+├── .github/workflows/      # CI: contracts, edge (Python 3.10), server (Node 20)
 ├── design/                 # Toàn bộ tài liệu phân tích và thiết kế hệ thống (mục lục: design/README.md)
 │   ├── README.md           # Mục lục, trạng thái từng phần, đường đọc gợi ý
 │   ├── _templates/         # Template ADR, use case
@@ -53,6 +58,23 @@ Hệ thống quản lý và kiểm soát truy cập phòng máy thực hành th�
 ├── .gitignore              # Cấu hình bỏ qua các file tạm thời, cache và nhạy cảm
 └── README.md               # Tài liệu tổng quan dự án
 ```
+
+---
+
+## 🛠️ Phát Triển
+
+```bash
+# Edge (Python ≥ 3.10)
+cd edge && python -m venv .venv && .venv/bin/pip install -e ".[dev]" && .venv/bin/pytest
+
+# Server (Node ≥ 20, pnpm)
+cd server && pnpm install && pnpm test && pnpm build
+
+# Hạ tầng dev (Docker): PostgreSQL + Mosquitto mTLS
+cd deploy/dev && bash gen-dev-certs.sh && docker compose up -d
+```
+
+Mọi thay đổi định dạng bản tin hoặc mật mã bắt đầu từ `contracts/` (xem [contracts/README.md](contracts/README.md)); test của cả hai phía chạy trên cùng các tệp đó.
 
 ---
 

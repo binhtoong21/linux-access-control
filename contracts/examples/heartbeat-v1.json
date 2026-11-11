@@ -1,0 +1,16 @@
+{
+  "schema": "heartbeat-v1",
+  "workstation_id": "ws-01",
+  "boot_id": "9f2c8d14-5b1e-4c33-9a70-0d6f2e8b1c47",
+  "snapshot_version": 12,
+  "lease_nonce": "c41b0e7a92d35f8816a4e0b2c9d7f351",
+  "trust_state": "Fresh",
+  "local_time": 1793049293.8,
+  "clock_skew_detected": false,
+  "last_apply_error": null,
+  "active_session_id": "a3c1f0d2-7e44-4b8e-9c1a-2f6d8e0b5a91",
+  "profiles": [
+    "student",
+    "labuser"
+  ]
+}

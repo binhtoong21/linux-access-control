@@ -1,0 +1,15 @@
+{
+  "schema": "hello-v1",
+  "workstation_id": "ws-01",
+  "boot_id": "9f2c8d14-5b1e-4c33-9a70-0d6f2e8b1c47",
+  "agent_version": "1.0.0",
+  "snapshot_version": 12,
+  "key_version": 2,
+  "lease_nonce": "7f3a9c1e5b2d4f60a8e1c3b5d7f90214",
+  "pending_outbox_count": 4,
+  "profiles": [
+    "student",
+    "labuser"
+  ],
+  "local_time": 1793049263.81
+}

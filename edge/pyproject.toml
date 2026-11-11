@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nfc-agent"
+version = "0.1.0"
+description = "Edge Agent: NFC login for shared Linux workstations (edge authentication)"
+requires-python = ">=3.10"  # Ubuntu 22.04 ships Python 3.10 (ADR-006)
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6", "jsonschema>=4.21"]
+
+[tool.setuptools.packages.find]
+include = ["nfc_agent*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]

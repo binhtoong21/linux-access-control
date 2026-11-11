@@ -1,0 +1,6 @@
+{
+  "schema": "ack-v1",
+  "command": "ack_outbox",
+  "workstation_id": "ws-01",
+  "acked_seq": 103
+}
