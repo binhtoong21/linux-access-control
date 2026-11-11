@@ -952,7 +952,7 @@ Trạng thái service ngầm:
 
 ### 8.20. Thực nghiệm Spike S9: Thu hồi Chứng chỉ Máy trạm bằng `crlfile` của Mosquitto
 - **Mục tiêu:** Kiểm chứng cơ chế thu hồi credential của D-014: khi Admin duyệt cài lại hoặc vô hiệu hóa máy, chứng chỉ cũ phải bị broker từ chối mà chứng chỉ mới **cùng CN** vẫn vào được; đồng thời tìm tình huống CRL có thể làm tự khóa toàn hệ thống.
-- **Cách chạy:** Claude Code chạy qua SSH (`vm2`, key-based) bằng user thường, **không đụng broker S8**: CA thử nghiệm ECDSA P-256 quản lý bằng `openssl ca`, broker Mosquitto `2.0.11` riêng ở `127.0.0.1:18883`, client `mosquitto_pub/sub` MQTT v5. Script `~/spike/s9_crl.sh`.
+- **Cách chạy:** Chạy bằng user thường, **không đụng broker S8**: CA thử nghiệm ECDSA P-256 quản lý bằng `openssl ca`, broker Mosquitto `2.0.11` riêng ở `127.0.0.1:18883`, client `mosquitto_pub/sub` MQTT v5. Script `~/spike/s9_crl.sh`.
 - **Kết quả đo:**
   - Trước thu hồi: `ws01_old` (serial `1001`) và `ws01_new` (serial `1002`, cùng `CN=ws-01`) đều `rc=0`.
   - Thu hồi `1001` + `SIGHUP`: kết nối mới bằng `ws01_old` bị từ chối (`certificate verify failed`); `ws01_new`, `nfc-server` vẫn `rc=0`.
@@ -965,7 +965,7 @@ Trạng thái service ngầm:
 
 ### 8.21. Thực nghiệm Spike S10: Smoke-test `lab-greeter-wrapper.sh` Trong Vòng Boot LightDM Thật
 - **Mục tiêu:** Đóng giới hạn còn lại của S7b (chạy `lab_greeter.py` trực tiếp, chưa qua wrapper): 3 crash liên tiếp phải rơi về `lightdm-gtk-greeter`; 3 lần đăng nhập bình thường không được đếm nhầm; wrapper phải chuyển tiếp `SIGTERM` để không có greeter mồ côi.
-- **Cách chạy:** Claude Code chạy qua SSH với sudo trên VM S7b. Gắn wrapper qua `Exec=` của `/usr/share/xgreeters/lab-greeter.desktop`; kịch bản crash thay tạm `lab_greeter.py` bằng `sys.exit(1)`; kịch bản đăng nhập dùng harness S7b rút còn 3 chu kỳ. Script `~/spike/s10/s10_wrapper.sh`.
+- **Cách chạy:** Chạy với sudo trên VM S7b. Gắn wrapper qua `Exec=` của `/usr/share/xgreeters/lab-greeter.desktop`; kịch bản crash thay tạm `lab_greeter.py` bằng `sys.exit(1)`; kịch bản đăng nhập dùng harness S7b rút còn 3 chu kỳ. Script `~/spike/s10/s10_wrapper.sh`.
 - **Kết quả đo:**
   - **Phần A, wrapper đúng như ADR-005 cũ** (`CRASH_LOG=/run/lab-greeter-crashes`): log greeter `Permission denied` (greeter chạy dưới user `lightdm`, `/run` là `root 0755`), không mốc crash nào được ghi, LightDM thoát lặp tới khi systemd `Start request repeated too quickly` → `lightdm=failed` suốt 60s, **màn hình đen, không có fallback**.
   - **Phần B** (`CRASH_LOG=/var/lib/lightdm/lab-greeter-crashes`): sau 3 crash chạy `lightdm-gtk-greeter`, `lightdm=active` ổn định; systemd dừng ở `restart counter is at 3` (dưới giới hạn 5/10s).
@@ -976,7 +976,7 @@ Trạng thái service ngầm:
 
 ### 8.22. Thực nghiệm Spike S11: Agent Chạy Dưới Systemd Hardening Của ADR-006
 - **Mục tiêu:** S6 và S7b chạy Agent không có hardening; cần chứng minh với `ProtectSystem=strict`, `ProtectHome=read-only`, `PrivateTmp=true`, `ReadWritePaths=/var/lib/nfc-agent /run`, `CapabilityBoundingSet=CAP_KILL CAP_DAC_OVERRIDE CAP_SETUID CAP_SETGID`, Agent vẫn mở được socket cho greeter/PAM, ghi `edge.db` và gọi logind dọn phiên.
-- **Cách chạy:** Claude Code chạy qua SSH; harness S7b (đóng vai Agent, 3 chu kỳ GNOME thật) đặt trong unit tạm `systemd-run` mang đúng các thuộc tính trên; probe từng thao tác bằng `~/spike/s10/s11_probe.py`.
+- **Cách chạy:** Harness S7b (đóng vai Agent, 3 chu kỳ GNOME thật) đặt trong unit tạm `systemd-run` mang đúng các thuộc tính trên; probe từng thao tác bằng `~/spike/s10/s11_probe.py`.
 - **Kết quả đo:**
   - **Đúng như ADR-006:** `[01/3] ❌ LỖI: Quá thời gian chờ greeter_ready!`. Probe: `chown` socket `/run/nfc/greeter-push.sock` cho nhóm `lightdm` bị `PermissionError: [Errno 1] Operation not permitted`; mọi thao tác khác (socket PAM, SQLite WAL, thư mục định danh, đọc `/etc`, `loginctl list-sessions/kill-user/disable-linger`, đổi UID sang `student`) đều đạt.
   - **Thêm `CAP_CHOWN`:** `3/3` chu kỳ đạt (`Login->GNOME` 4704–5167 ms, teardown 2101.1–2246.6 ms, `started > decided_at` 3/3, 0/3 vượt 3.0s), đúng 1 tiến trình greeter sau đó.
