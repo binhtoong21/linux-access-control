@@ -13,8 +13,8 @@
 | ID | Tiêu đề | Status | Date | Link |
 |----|---------|--------|------|------|
 | ADR-001 | Xác thực ở edge, dữ liệu cục bộ có thời hạn tin cậy (lease) | Accepted | 2026-10-16 | [→](ADR-001-xac-thuc-o-edge-va-lease.md) |
-| ADR-002 | Giao thức MQTT 5, phân quyền ACL, định danh máy trạm và mTLS | Proposed | 2026-11-10 | [→](ADR-002-giao-thuc-mqtt-va-dinh-danh-may-tram.md) |
-| ADR-003 | Lưu trữ cục bộ SQLite WAL, hợp nhất DB và xác thực snapshot bằng K_m | Proposed | 2026-11-10 | [→](ADR-003-luu-tru-cuc-bo-va-xac-thuc-snapshot.md) |
+| ADR-002 | Giao thức MQTT 5, phân quyền ACL, định danh máy trạm và mTLS | Accepted | 2026-11-11 | [→](ADR-002-giao-thuc-mqtt-va-dinh-danh-may-tram.md) |
+| ADR-003 | Lưu trữ cục bộ SQLite WAL, hợp nhất DB và xác thực snapshot bằng K_m | Accepted | 2026-11-11 | [→](ADR-003-luu-tru-cuc-bo-va-xac-thuc-snapshot.md) |
 | ADR-004 | Mô hình Profile OS dùng chung và phân tách danh tính xác thực | Accepted | 2026-11-11 | [→](ADR-004-mo-hinh-profile-os-dung-chung.md) |
 | ADR-005 | Kiến trúc PAM module C, Lab Custom Greeter và cơ chế khôi phục | Proposed | 2026-11-10 | [→](ADR-005-pam-greeter-va-display-manager.md) |
 | ADR-006 | Lựa chọn ngôn ngữ và techstack cho Edge Agent, Server và Dashboard | Accepted | 2026-11-11 | [→](ADR-006-ngon-ngu-va-techstack.md) |

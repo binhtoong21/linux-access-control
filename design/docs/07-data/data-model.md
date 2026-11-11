@@ -403,8 +403,8 @@ erDiagram
 | `uid_scheme` | `TEXT` | No | `'hmac-sha256-v1'` | Chuẩn băm `match_key` ([ADR-007](../06-architecture/decisions/ADR-007-khoa-so-khop-uid.md)) |
 | `snapshot_created_at` | `REAL` | No | `0` | `created_at` của snapshot (UTC epoch seconds) |
 | `received_at` | `REAL` | No | `0` | Mốc Edge nhận snapshot (UTC) |
-| `trusted_until` | `REAL` | No | `0` | Mốc hết hạn tin cậy (UTC) |
-| `last_server_time` | `REAL` | No | `0` | Mốc `server_time` gần nhất đã persist (dùng tính `floor` theo Lease Persist Policy, ADR-003 Mục 5) |
+| `trusted_until` | `REAL` | No | `0` | Mốc hết hạn tin cậy theo giờ máy: `max(cũ, giờ máy lúc nhận + lease_duration_sec)` (BR-006, D-018) |
+| `last_sync_local_time` | `REAL` | No | `0` | Giờ **của máy** lúc nhận snapshot mới hoặc gia hạn hợp lệ gần nhất, chỉ tiến; dùng tính `floor = last_sync_local_time - 60s` (D-018). Ghi cùng `trusted_until` theo Lease Persist Policy (ADR-003 Mục 5) |
 | `lease_duration_sec` | `INTEGER` | No | `86400` | Thời lượng lease D mặc định `24h` |
 | `warning_before_sec` | `INTEGER` | No | `300` | Thời gian cảnh báo trước hạn W = `5 phút` |
 | `max_session_duration_sec` | `INTEGER` | No | `43200` | Trần độ dài phiên tối đa (`12h`) |
@@ -480,7 +480,7 @@ erDiagram
 |---|---|---|---|---|
 | Server (`users`, `cards`, `groups`, `schedules`, `workstations`, `profiles`) | `snapshots` & `sync_states` | `server_outbox` (`BEGIN...COMMIT`) + Reconcile Worker | Khi thay đổi nghiệp vụ, lúc khởi động & định kỳ | Ký `HMAC-SHA256(K_m, "snapshot-v1:" \|\| payload_raw)` trên byte gốc |
 | Server `snapshots` | Edge `edge.db` (`snapshot_*`, `snapshot_meta`) | MQTT 5 mTLS (`8883`) `.../snapshot` (QoS 1, Retain) | Khi `version` tăng hoặc Edge tụt version | Kiểm tra `User Property signature` bằng `hmac.compare_digest` + `key_version`, thay thế trong `BEGIN IMMEDIATE` |
-| Edge `LeaseRenewalService` | Edge `snapshot_meta` (`trusted_until`, `last_server_time`) | MQTT 5 `.../lease` (QoS 1, User Property `signature`) | Mỗi Heartbeat 30s (`acked_version == desired_version`) | Cập nhật RAM ngay; chỉ flush SQLite khi tăng >= 300s hoặc kèm transaction khác / `SIGTERM` (`ADR-003`) |
+| Edge `LeaseRenewalService` | Edge `snapshot_meta` (`trusted_until`, `last_sync_local_time`) | MQTT 5 `.../lease` (QoS 1, User Property `signature`) | Mỗi Heartbeat 30s (`acked_version == desired_version`) | Cập nhật RAM ngay; chỉ flush SQLite khi tăng >= 300s hoặc kèm transaction khác / `SIGTERM` (`ADR-003`) |
 | Edge Quẹt thẻ (`CR-001`) | Edge `audit_outbox` + `local_sessions (pending)` | SQLite Transaction `BEGIN IMMEDIATE ... COMMIT` | Mỗi lần quẹt thẻ hợp lệ | Atomic Write-Ahead Pairing (`INV-014`, `D-005`) với `synchronous=FULL` |
 | Edge `audit_outbox` | Server `audit_logs` & `sessions` (mục lỗi → `ingest_rejects`) | MQTT 5 `.../outbox` (QoS 1, FIFO Batch <= 50) → `.../command/ack` | Liên tục theo batch khi Online | `ON CONFLICT (entry_id) DO NOTHING` (`XINV-006`), savepoint theo từng mục (D-015) + `DELETE WHERE outbox_seq <= acked_seq` (`INV-013`) |
 | Edge `Auto-Discovery` | Edge `local_workstation_profiles.present_locally` & Server `workstation_profiles` | MQTT 5 `.../hello` / `.../heartbeat` | Khi Agent khởi động / thay đổi allowlist | Chỉ nhận danh sách user nhóm `labstudent` UID >= 1000 (`INV-018`) |

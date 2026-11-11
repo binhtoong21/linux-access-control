@@ -75,7 +75,7 @@ classDiagram
 ### Edge
 > Toàn bộ thực thể và kho lưu trữ của Edge được quản lý bền vững tại kho cục bộ của máy trạm. Mọi thao tác cập nhật dữ liệu, ghi nhật ký và đối soát phiên đều thực thi trong các giao dịch nguyên tử.
 
-**LocalSnapshot**: snapshot đang dùng (version, content gồm key_version, parameters), received_at, trusted_until (UTC), last_server_time (UTC), lease_duration. Thay thế nguyên tử; chỉ nhận bản có version lớn hơn. Nếu snapshot có `key_version` khác với `key_version` cục bộ của máy thì từ chối nạp, giữ bản cũ, không ack (lease dần hết hạn).
+**LocalSnapshot**: snapshot đang dùng (version, content gồm key_version, parameters), received_at, trusted_until (UTC), last_sync_local_time (UTC), lease_duration. Thay thế nguyên tử; chỉ nhận bản có version lớn hơn. Nếu snapshot có `key_version` khác với `key_version` cục bộ của máy thì từ chối nạp, giữ bản cũ, không ack (lease dần hết hạn).
 
 **LocalWorkstationProfile**: danh sách profile được phép dùng cục bộ theo allowlist của máy trạm: os_username, is_default, status (`enabled`, `disabled`), có trong snapshot hay không, có thật trên máy hay không. `is_default` và `status` đến từ snapshot; "có thật trên máy" do Auto-Discovery ghi nhận. Agent và PAM chỉ mở phiên cho profile **có trong snapshot với status `enabled` và có thật trên máy**; profile mới phát hiện chưa dùng được cho tới khi server ghi nhận và gửi snapshot mới.
 
@@ -146,7 +146,7 @@ classDiagram
 
 ### LoginEvaluationService (Edge)
 Đầu vào: `card_uid`, `now` (lấy đúng một lần cả giờ hệ thống UTC và `CLOCK_BOOTTIME`), `LocalSnapshot`, trạng thái phiên hiện tại. Thực hiện CR-001:
-1. Đánh giá tính hợp lệ của dữ liệu và đồng hồ: Chưa có snapshot, hoặc quá thời hạn tin cậy `trusted_until` (UTC), hoặc giờ hiện tại < mốc sàn đồng hồ `floor = max(snapshot.created_at, last_server_time) - CLOCK_FLOOR_TOLERANCE` (với `CLOCK_FLOOR_TOLERANCE = 60s`, BR-006, BR-012, D-012) → `denied(data_stale)` kèm chi tiết `clock_invalid` hoặc `lease_expired` / `no_data`.
+1. Đánh giá tính hợp lệ của dữ liệu và đồng hồ: Chưa có snapshot, hoặc quá thời hạn tin cậy `trusted_until` (UTC), hoặc giờ hiện tại < mốc sàn đồng hồ `floor = last_sync_local_time - CLOCK_FLOOR_TOLERANCE` (với `CLOCK_FLOOR_TOLERANCE = 60s`, BR-006, BR-012, D-012) → `denied(data_stale)` kèm chi tiết `clock_invalid` hoặc `lease_expired` / `no_data`.
 2. Tính `CardMatchKey` từ UID vừa quẹt (ADR-007). Tra thẻ trong snapshot theo `CardMatchKey`: không có hoặc `unbound` → `unknown_card`; `disabled` → `card_disabled`.
 3. Chủ thẻ `inactive` → `user_inactive`.
 4. Lấy Schedule `enabled` khớp user hoặc nhóm của user và máy hoặc zone của máy. Rỗng → `no_schedule`.

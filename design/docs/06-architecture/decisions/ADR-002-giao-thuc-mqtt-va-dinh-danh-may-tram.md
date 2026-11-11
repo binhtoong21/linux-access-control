@@ -4,7 +4,7 @@
 
 | Field | Value |
 |---|---|
-| **Status** | Proposed |
+| **Status** | Accepted (2026-11-11, sau Spike S9) |
 | **Date** | 2026-11-10 |
 | **Deciders** | Nhóm tác giả ĐATN & Giảng viên hướng dẫn |
 | **Supersedes** | Không |
@@ -151,11 +151,11 @@ sequenceDiagram
 
     Note over A,B: Kết nối mTLS thành công (Port 8883)
     A->>B: SUBSCRIBE: command/#, snapshot, lease
-    A->>B: PUBLISH QoS 1: hello {boot_id, snapshot_version, pending_outbox_count}
+    A->>B: PUBLISH QoS 1: hello {boot_id, snapshot_version, lease_nonce, pending_outbox_count}
     B->>S: Chuyển tiếp hello
     S->>S: Đánh dấu workstation online
     alt snapshot_version == desired_version (Dữ liệu đã mới nhất)
-        S->>B: PUBLISH QoS 1: lease [User Property signature] {server_time, trusted_until}
+        S->>B: PUBLISH QoS 1: lease [User Property signature] {server_time, lease_duration_sec, desired_version, nonce}
         B->>A: Nhận gia hạn lease tức thì (thẩm định signature) -> Phục hồi đăng nhập
     else snapshot_version < desired_version (Dữ liệu bị tụt hậu)
         S->>B: PUBLISH QoS 1 (Retained): snapshot [User Property signature] {version, created_at, ...}
@@ -167,8 +167,8 @@ sequenceDiagram
     end
     Note over A,S: Bắt đầu tiến trình đẩy Outbox nền (xem Mục 5)
     loop Định kỳ mỗi 30 giây
-        A->>B: PUBLISH QoS 0: heartbeat {boot_id, snapshot_version, trust_state, ...}
-        S->>B: PUBLISH QoS 1: lease [User Property signature] {server_time, trusted_until}
+        A->>B: PUBLISH QoS 0: heartbeat {boot_id, snapshot_version, trust_state, lease_nonce, ...}
+        S->>B: PUBLISH QoS 1: lease [User Property signature] {server_time, lease_duration_sec, desired_version, nonce}
     end
 ```
 
@@ -181,7 +181,7 @@ sequenceDiagram
   - Agent thẩm định chữ ký trực tiếp trên chuỗi byte nhận được từ MQTT wire trước khi xử lý logic hoặc parse JSON. Nếu chữ ký sai, từ chối ngay lập tức.
 - **Quy tắc nhận sau khi chữ ký hợp lệ:**
   * *Snapshot:* `version` lớn hơn bản đang dùng thì nạp; **bằng** bản đang dùng (snapshot retained được giao lại mỗi lần reconnect) thì bỏ qua lặng lẽ, không ghi lỗi; nhỏ hơn thì bỏ qua và ghi `last_apply_error`.
-  * *Lease:* chỉ nhận khi `desired_version` bằng version cục bộ. `trusted_until` và `last_server_time` chỉ được tiến (`max(cũ, mới)`), không lùi. Nhờ vậy phát lại một bản lease cũ không có tác dụng gì, mà không cần so `server_time` với giá trị trước (so như vậy sẽ làm máy từ chối mọi lease nếu đồng hồ server từng chạy nhanh rồi được chỉnh lại).
+  * *Lease (D-018):* chỉ nhận khi `desired_version` bằng version cục bộ **và** `nonce` bằng một trong 3 `lease_nonce` gần nhất Agent đã gửi trong Hello/heartbeat (mỗi lần gửi sinh nonce ngẫu nhiên 128-bit mới, chỉ giữ trong RAM). Agent đặt `trusted_until = max(cũ, giờ máy lúc nhận + lease_duration_sec)` và `last_sync_local_time = max(cũ, giờ máy lúc nhận)`. Nonce nằm trong phần được ký nên broker không thể phát lại một bản lease cũ để gia hạn mãi; không phụ thuộc đồng hồ server. `server_time` chỉ dùng để phát hiện lệch giờ (cảnh báo `clock_skew_detected`).
   * *ACK:* `acked_seq` nhỏ hơn hoặc bằng mức đã xóa thì bỏ qua (phát lại vô hại).
 - **Payload Hello (`.../hello`):**
   ```json
@@ -189,6 +189,7 @@ sequenceDiagram
     "workstation_id": "ws-01",
     "boot_id": "9f2c8d14-...",
     "snapshot_version": 12,
+    "lease_nonce": "7f3a9c1e5b2d4f60a8e1c3b5d7f90214",
     "pending_outbox_count": 4,
     "agent_version": "1.0.0"
   }
@@ -198,9 +199,9 @@ sequenceDiagram
   ```json
   {
     "server_time": 1793049263.96,
-    "trusted_until": 1793078063.96,
+    "lease_duration_sec": 86400,
     "desired_version": 12,
-    "max_drift": 60.0
+    "nonce": "7f3a9c1e5b2d4f60a8e1c3b5d7f90214"
   }
   ```
 - **Payload Heartbeat thống nhất (`.../heartbeat`):**
@@ -210,6 +211,7 @@ sequenceDiagram
     "boot_id": "9f2c8d14-...",
     "snapshot_version": 12,
     "trust_state": "Fresh",
+    "lease_nonce": "c41b0e7a92d35f8816a4e0b2c9d7f351",
     "local_time": 1793049263.81,
     "clock_skew_detected": false,
     "last_apply_error": null

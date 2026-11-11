@@ -39,7 +39,7 @@ sequenceDiagram
     participant L as Greeter và PAM
     participant D as Distribution (server)
 
-    Note over A,K: Nhận snapshot hoặc gia hạn hợp lệ: ghi trusted_until (UTC) và last_server_time
+    Note over A,K: Nhận snapshot hoặc gia hạn hợp lệ: ghi trusted_until (UTC) và last_sync_local_time
     Note over A: Không liên lạc được server, hạn tin cậy đến
     A->>A: Tính lại trạng thái tin cậy: Expired
     U->>A: Quẹt thẻ
@@ -49,7 +49,7 @@ sequenceDiagram
 
     A->>D: Hello khi kết nối lại (boot_id, version, trạng thái tin cậy)
     D-->>A: Gia hạn hoặc snapshot, kèm server_time
-    A->>K: Ghi trusted_until mới và cập nhật last_server_time
+    A->>K: Ghi trusted_until mới và cập nhật last_sync_local_time
     A->>A: Kiểm tra độ lệch |local_time - server_time|
     alt Lệch trong ngưỡng (<= 60s)
         Note over A: Fresh, quẹt thẻ bình thường
@@ -64,9 +64,10 @@ sequenceDiagram
 2. **Hạn tính từ lúc Agent nhận**, thời lượng D do server cấp (cấu hình tập trung, NFR-M02). Mọi snapshot và phản hồi gia hạn đều kèm `server_time`.
 3. **Đồng hồ hợp lý và mốc sàn cải tiến (D-012, Điểm 8):**
    - **(a) Giờ hệ thống không lùi về quá khứ:** `local_time >= floor`, trong đó mốc sàn được tính:
-     `floor = max(snapshot.created_at, last_server_time) - CLOCK_FLOOR_TOLERANCE` (với `CLOCK_FLOOR_TOLERANCE = 60s`).
-     * `last_server_time` được lưu bền vững cùng bản ghi với `trusted_until` mỗi khi nhận snapshot hoặc gia hạn lease, do đó **không tốn thêm bất kỳ thao tác ghi đĩa riêng nào**.
-     * Mốc sàn luôn tiến lên theo thời gian thực mỗi chu kỳ lease thay vì bị cũ như `snapshot.created_at`. Dung sai `CLOCK_FLOOR_TOLERANCE` (60s) áp dụng cho cả hai vế, triệt tiêu hoàn toàn nguy cơ báo lỗi oan khi máy trạm hơi trôi giờ chậm (dưới ngưỡng cảnh báo) rồi nhận snapshot mới.
+     `floor = last_sync_local_time - CLOCK_FLOOR_TOLERANCE` (với `CLOCK_FLOOR_TOLERANCE = 60s`).
+     * `last_sync_local_time` là **giờ của chính máy trạm** ghi lại lúc nhận snapshot mới hoặc gia hạn hợp lệ gần nhất, chỉ tiến (`max(cũ, giờ máy hiện tại)`). Giá trị này được lưu bền vững cùng bản ghi với `trusted_until`, nên **không tốn thêm thao tác ghi đĩa riêng**.
+     * Mốc sàn so giờ máy với **chính giờ máy trước đó**, không so với giờ server, nên máy chạy lệch giờ so với server (chậm hay nhanh) không bị từ chối oan; lệch giờ chỉ dẫn tới cảnh báo ở (b) (BR-012, D-018). Mốc sàn vẫn bắt được đúng trường hợp cần bắt: giờ máy bị lùi so với lần đồng bộ trước (pin CMOS kiệt, lùi giờ tay).
+     * Hệ quả chấp nhận: nếu NTP chỉnh giờ máy lùi lại hơn 60s (máy từng chạy nhanh), quẹt thẻ bị `clock_invalid` tạm thời cho tới khi giờ thật vượt qua mốc sàn (tối đa bằng độ lệch đã chỉnh trừ 60s).
      * Nếu `local_time < floor`, xác định pin CMOS kiệt khiến giờ quay về 1970/2020 → từ chối `data_stale (clock_invalid)`.
    - **(b) Kiểm tra lệch giờ khi Online:** Agent đối chiếu với `server_time` trong Heartbeat. Nếu `|local_time - server_time| > CLOCK_SKEW_WARN_THRESHOLD` (60s), Agent gửi cờ cảnh báo `clock_skew_detected` lên dashboard để kỹ thuật viên can thiệp. **Agent vẫn chấp nhận gia hạn lease** (không từ chối gia hạn để tránh làm tê liệt máy khi RTC chỉ trôi nhẹ) và không tự chỉnh giờ OS. Cờ NTP chỉ để báo cáo.
 4. **Khởi động lại khi offline:** Đồng hồ được tin nếu `local_time >= floor` và `local_time <= trusted_until`. Cho phép quẹt thẻ bình thường theo lịch đã cache (D-012).
@@ -93,6 +94,6 @@ sequenceDiagram
 ## Câu hỏi cho 06
 | ADR | Câu hỏi |
 |-----|---------|
-| Lưu trữ cục bộ | Vị trí và cơ chế ghi bền vững cho `trusted_until`, `last_server_time` và `lease_duration` trong kho cục bộ. |
+| Lưu trữ cục bộ | Vị trí và cơ chế ghi bền vững cho `trusted_until`, `last_sync_local_time` và `lease_duration` trong kho cục bộ. |
 | Đồng hồ | Cách đọc `CLOCK_BOOTTIME` trên Linux; xử lý bước nhảy NTP hợp lệ mà không gây hiểu nhầm thành `clock_invalid`. |
 | Giao thức MQTT | Cấu trúc trường `server_time` trong envelope của snapshot / phản hồi gia hạn; các trường `trust_state`, `clock_skew_detected` và `last_apply_error` trong heartbeat. |

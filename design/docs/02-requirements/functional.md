@@ -57,7 +57,7 @@
 | FR-053 | Máy mới online hoặc kết nối lại nhận ngay bản mới nhất | Must | MVP | |
 | FR-054 | PC báo phiên bản đang dùng; server biết máy nào chưa cập nhật | Must | MVP | Admin thấy máy chưa nhận thay đổi |
 | FR-055 | Dữ liệu cục bộ có thời hạn tin cậy (làm mới khi nhận snapshot hợp lệ hoặc xác nhận gia hạn từ server cho cùng phiên bản); quá hạn mà không đồng bộ được thì ngừng cho vào bằng thẻ | Must | MVP | BR-006; giá trị chọn sau |
-| FR-056 | PC kiểm tra tính hợp lý của đồng hồ (`local_time >= floor` với `floor = max(snapshot.created_at, last_server_time) - CLOCK_FLOOR_TOLERANCE` để tránh RTC pin CMOS chết; vi phạm từ chối quẹt thẻ với `data_stale (clock_invalid)`); khi online đối chiếu giờ với server qua Heartbeat, nếu lệch quá `CLOCK_SKEW_WARN_THRESHOLD` (60s) thì gửi cảnh báo `clock_skew_detected` lên Dashboard nhưng không từ chối gia hạn lease hay quẹt thẻ | Must | MVP | D-012, BR-012, Điểm 8 |
+| FR-056 | PC kiểm tra tính hợp lý của đồng hồ (`local_time >= floor` với `floor = last_sync_local_time - CLOCK_FLOOR_TOLERANCE` để tránh RTC pin CMOS chết; vi phạm từ chối quẹt thẻ với `data_stale (clock_invalid)`); khi online đối chiếu giờ với server qua Heartbeat, nếu lệch quá `CLOCK_SKEW_WARN_THRESHOLD` (60s) thì gửi cảnh báo `clock_skew_detected` lên Dashboard nhưng không từ chối gia hạn lease hay quẹt thẻ | Must | MVP | D-012, BR-012, Điểm 8 |
 | FR-057 | PC tự kết nối lại MQTT khi mất kết nối | Must | MVP | |
 
 ## Module 06: Health

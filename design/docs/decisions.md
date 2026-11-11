@@ -76,8 +76,8 @@ Bản ghi nhật ký phản ánh quyết định của Agent (`LoginDecision`), 
    - **Bộ đếm thời lượng phiên (Session Timer):** Bắt buộc sử dụng đồng hồ đơn điệu `CLOCK_BOOTTIME`. Timer này đếm tick phần cứng kể từ lúc boot, hoàn toàn miễn nhiễm với việc đổi giờ hệ thống (bước nhảy NTP hay can thiệp `settimeofday`) và tính cả thời gian hệ thống suspend.
    - **Đánh giá Lịch & Lease:** Sử dụng giờ hệ thống (wall-clock UTC).
 2. **Mốc sàn cải tiến (Điểm 8):** Loại bỏ cơ chế mốc sàn ghi đĩa liên tục gây hao mòn SSD. Thay bằng quy tắc thực tế:
-   - Khi nhận snapshot hoặc gia hạn lease, Agent cập nhật `trusted_until` cùng với `last_server_time`; hai giá trị luôn được ghi bền vững cùng nhau, nhưng gia hạn định kỳ chỉ ghi đĩa khi `trusted_until` tiến thêm ≥ 5 phút (ADR-003 §5). Mất điện chỉ làm lease ngắn đi và mốc sàn thấp hơn tối đa vài phút, tức là lệch về phía an toàn.
-   - Mốc sàn đồng hồ được tính: `floor = max(snapshot.created_at, last_server_time) - CLOCK_FLOOR_TOLERANCE` (với dung sai `CLOCK_FLOOR_TOLERANCE = 60s`).
+   - Khi nhận snapshot hoặc gia hạn lease, Agent cập nhật `trusted_until` cùng với `last_sync_local_time`; hai giá trị luôn được ghi bền vững cùng nhau, nhưng gia hạn định kỳ chỉ ghi đĩa khi `trusted_until` tiến thêm ≥ 5 phút (ADR-003 §5). Mất điện chỉ làm lease ngắn đi và mốc sàn thấp hơn tối đa vài phút, tức là lệch về phía an toàn.
+   - Mốc sàn đồng hồ được tính: `floor = last_sync_local_time - CLOCK_FLOOR_TOLERANCE` (với dung sai `CLOCK_FLOOR_TOLERANCE = 60s`); `last_sync_local_time` là **giờ của chính máy trạm** ghi lại lúc nhận snapshot mới hoặc gia hạn hợp lệ gần nhất, chỉ tiến (`max(cũ, giờ máy hiện tại)`) (sửa bởi D-018).
    - Khi quẹt thẻ lúc Offline: Nếu `local_time < floor`, từ chối ngay với lý do `data_stale (clock_invalid)` (phát hiện pin CMOS mainboard bị kiệt khiến giờ quay về 1970/2020). Nếu `local_time >= floor`, chấp nhận đánh giá lịch bình thường.
    - Khi Online: Heartbeat gửi kèm `server_time`. Nếu `|local_time - server_time| > CLOCK_SKEW_WARN_THRESHOLD` (60s), Agent ghi nhận và gửi cảnh báo `clock_skew_detected` lên dashboard để kỹ thuật viên kiểm tra pin CMOS / NTP. Agent vẫn chấp nhận gia hạn lease bình thường.
 
@@ -112,15 +112,23 @@ Khi máy báo `snapshot_version` lớn hơn `desired_version` (chỉ xảy ra kh
 2. **Khi `edge.db` hỏng:** Agent đổi tên tệp hỏng để giữ lại, cố trích các mục `audit_outbox` chưa gửi từ tệp hỏng sang tệp mới; phần không cứu được thì ghi một sự kiện cảnh báo (`edge_db_recovered`, kèm số mục mất) để Admin biết nhật ký có khoảng trống. Máy về `NoData`, đường mật khẩu dự phòng vẫn dùng được, và tự lấy lại snapshot khi online.
 **Nguồn:** BR-004, BR-007, INV-013, ADR-003, migrations.md; review sau 07-data.
 
+### D-018: Mốc sàn đồng hồ và thời hạn lease tính theo giờ của chính máy trạm (sửa D-012)
+1. **Lỗi của công thức cũ.** `floor = max(snapshot.created_at, last_server_time) − 60s` lấy mốc theo **giờ server** rồi so với **giờ máy**. Máy chạy chậm hơn server quá 60s (pin CMOS yếu, NTP chưa chạy) bị `data_stale(clock_invalid)` ở mọi lần quẹt, kể cả khi online, trái với BR-012/D-012 ("lệch giờ chỉ cảnh báo, không chặn quẹt thẻ").
+2. **Công thức mới.** `floor = last_sync_local_time − 60s`, với `last_sync_local_time` là giờ của chính máy lúc nhận snapshot mới hoặc gia hạn hợp lệ gần nhất, chỉ tiến. Vẫn phát hiện giờ máy bị lùi (pin CMOS chết về 1970, lùi giờ tay); lệch giờ so với server quay về đúng vai trò chỉ cảnh báo (`clock_skew_detected`). Hệ quả chấp nhận: NTP chỉnh lùi hơn 60s thì quẹt thẻ bị chặn tạm thời cho tới khi giờ thật vượt mốc sàn.
+3. **Lease tính theo giờ máy, khớp BR-006.** Server gửi thời lượng `lease_duration_sec` (không gửi mốc `trusted_until` theo giờ server); Agent đặt `trusted_until = max(cũ, giờ máy lúc nhận + D)`.
+4. **Chống phát lại lease.** Vì hạn tính từ lúc nhận, broker bị chiếm có thể phát lại một bản lease cũ để gia hạn mãi. Mỗi Hello/heartbeat mang một `lease_nonce` ngẫu nhiên mới; bản lease phải nhắc lại đúng một trong vài nonce gần nhất Agent đã gửi (nằm trong phần được ký HMAC) thì mới được nhận. Không phụ thuộc đồng hồ, không cần bộ đếm. Snapshot chỉ làm mới thời hạn khi có `version` mới, nên phát lại snapshot retained cũng không gia hạn được.
+**Nguồn:** BR-006, BR-012, FR-056, XINV-007, D-012, ADR-001, ADR-002, lease-expiration.md; review 01–05.
+
 ### ADR-001 (Accepted): Xác thực ở edge, dữ liệu cục bộ có thời hạn tin cậy (lease)
-Quy định ở Agent theo CR-001 từ snapshot cục bộ, không hỏi server khi quẹt thẻ. Dữ liệu cục bộ có thời hạn tin cậy (lease) được gia hạn qua phản hồi heartbeat khi `acked_version == desired_version`. Kiểm tra đồng hồ kết hợp hai hạn (UTC tuyệt đối bền vững và `CLOCK_BOOTTIME` cho phiên) kèm mốc sàn cải tiến `floor = max(snapshot.created_at, last_server_time) - CLOCK_FLOOR_TOLERANCE`. Cần thầy xác nhận: giá trị lease `D` và việc tin RTC sau khi khởi động lại lúc offline.
+Quy định ở Agent theo CR-001 từ snapshot cục bộ, không hỏi server khi quẹt thẻ. Dữ liệu cục bộ có thời hạn tin cậy (lease) được gia hạn qua phản hồi heartbeat khi `acked_version == desired_version`. Kiểm tra đồng hồ kết hợp hai hạn (UTC tuyệt đối bền vững và `CLOCK_BOOTTIME` cho phiên) kèm mốc sàn cải tiến `floor = last_sync_local_time - CLOCK_FLOOR_TOLERANCE`. Cần thầy xác nhận: giá trị lease `D` và việc tin RTC sau khi khởi động lại lúc offline.
 **Nguồn:** [ADR-001](06-architecture/decisions/ADR-001-xac-thuc-o-edge-va-lease.md).
 
-### ADR-002 (Proposed): Giao thức MQTT 5, phân quyền ACL, định danh máy trạm và mTLS
+### ADR-002 (Accepted): Giao thức MQTT 5, phân quyền ACL, định danh máy trạm và mTLS
 Chuẩn hóa giao thức MQTT 5 qua mTLS cổng 8883. Phân tách Mosquitto ACL triệt để giữa luồng đọc (`command/#`, `snapshot`, `lease`) và luồng ghi (`hello`, `heartbeat`, `outbox`, `status`), bãi bỏ wildcard lỏng lẻo. Giao thức Outbox đẩy theo lô (batch) và xác nhận lũy tiến (Cumulative ACK). Quy trình Master Image sysprep sạch (kèm CA server nhúng sẵn) tự sinh Ed25519 CSR, luôn do Admin duyệt trên Web Dashboard, phòng vệ trùng MAC/`machine_id` (P1-4), thu hồi chứng chỉ cũ qua CRL của Mosquitto (D-014). Mục outbox lỗi không chặn lô (D-015).
-**Nguồn:** [ADR-002](06-architecture/decisions/ADR-002-giao-thuc-mqtt-va-dinh-danh-may-tram.md), S5, D-010, `reconnect.md`.
+Lease mang thời lượng và nonce chống phát lại (D-018). Accepted sau S9.
+**Nguồn:** [ADR-002](06-architecture/decisions/ADR-002-giao-thuc-mqtt-va-dinh-danh-may-tram.md), S5, S8, S9, D-010, D-014, D-018, `reconnect.md`.
 
-### ADR-003 (Proposed): Lưu trữ cục bộ SQLite WAL, hợp nhất DB và xác thực snapshot bằng K_m
+### ADR-003 (Accepted): Lưu trữ cục bộ SQLite WAL, hợp nhất DB và xác thực snapshot bằng K_m
 Hợp nhất toàn bộ Snapshot, Lease, Session và AuditOutbox vào một CSDL SQLite duy nhất `/var/lib/nfc-agent/edge.db` (chế độ WAL, `synchronous=FULL`). Khắc phục mâu thuẫn S5 vs D-006.4: chuyển giao việc fsync cho động cơ SQLite WAL. Bảo đảm tính nguyên tử ghi trước (Atomic Write-Ahead: ghi đồng thời Outbox và LocalSession pending trước khi trả quyền cho PAM). Xác thực toàn vẹn Snapshot, Lease và ACK bằng HMAC-SHA256 tính trên toàn bộ byte payload với khóa riêng `K_m`, chống broker bị chiếm hoặc replay snapshot giữa các máy. Định danh máy (`K_m`, `key_version`) nằm ngoài `edge.db` để phục hồi được khi DB hỏng (D-017).
 **Nguồn:** [ADR-003](06-architecture/decisions/ADR-003-luu-tru-cuc-bo-va-xac-thuc-snapshot.md), S5, D-006.4, INV-011, INV-013, INV-014.
 
@@ -152,7 +160,7 @@ Các quyết định sau được xác định trong 01–04 nhưng thuộc ki�
 |------|-------------|---------|
 | Giao thức MQTT 5 & mTLS: Client Certificate Ed25519, topic, QoS, Clean Start / Session Expiry, LWT với Will Delay | bounded-contexts, UC-004, reconnect.md | Chốt dùng MQTT 5 + mTLS; LWT là gợi ý bổ trợ, BR-019 vẫn là nguồn sự thật |
 | Giao thức đẩy Outbox: thứ tự `outbox_seq`, kích thước lô | reconnect.md | **Chốt ở ADR-002:** lô tối đa 50 mục, ACK lũy tiến theo `outbox_seq`, mục lỗi không chặn lô (D-015) |
-| Lưu trữ cục bộ: format SQLite WAL, giao dịch nguyên tử (nhật ký + pending), lưu `last_server_time`, fsync vs write | BR-006, swipe-login.md, lease-expiration.md | Cần hỗ trợ transaction atomic write |
+| Lưu trữ cục bộ: format SQLite WAL, giao dịch nguyên tử (nhật ký + pending), lưu `last_sync_local_time`, fsync vs write | BR-006, swipe-login.md, lease-expiration.md | Cần hỗ trợ transaction atomic write |
 | PAM và greeter: kênh Unix domain socket, ai khởi xướng, timeout cho phép một lần, vô hiệu hóa lock screen & switch user | UC-001, swipe-login.md | Agent khóa trạng thái Waiting/Processing/Authorizing |
 | Ánh xạ tài khoản OS & Recovery: tài khoản dùng chung `student`, cách nhận biết phiên OS thực tế khi restart | UC-001, swipe-login.md | Đối chiếu bảng recovery Agent restart |
 | Khóa so khớp UID (PD-002): **chốt bởi ADR-007** | PD-002, domain-model.md | HMAC có khóa theo máy kèm `key_version`, server mã hóa + chỉ mục mù |

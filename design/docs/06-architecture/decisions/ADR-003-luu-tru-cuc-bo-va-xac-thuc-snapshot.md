@@ -4,7 +4,7 @@
 
 | Field | Value |
 |---|---|
-| **Status** | Proposed |
+| **Status** | Accepted (2026-11-11; bằng chứng S5 có giới hạn, xem Decision Drivers) |
 | **Date** | 2026-11-10 |
 | **Deciders** | Nhóm tác giả ĐATN & Giảng viên hướng dẫn |
 | **Supersedes** | Quyết định lưu file Snapshot JSON rời trong Spike S5 |
@@ -122,7 +122,7 @@ flowchart TD
 ### 3. Lược Đồ Cơ Sở Dữ Liệu Cục Bộ (`edge.db` Architecture)
 
 Để đảm bảo tính tự trị của Edge và khả năng thẩm định tức thời không cần Server, cơ sở dữ liệu `edge.db` được tổ chức thành 4 phân vùng bảng logic:
-1. **Phân vùng Cấu hình & Trạng thái Tin cậy (Metadata & Lease):** Bảng `agent_meta` (bản sao định danh từ `identity/`, `boot_id`), `local_liveness` và `snapshot_meta`. `snapshot_meta` lưu `key_version` của snapshot đang dùng cùng cặp mốc thời gian tin cậy (`trusted_until`, `last_server_time`); snapshot chỉ được nạp khi `key_version` của nó bằng `key_version` trong `identity/`.
+1. **Phân vùng Cấu hình & Trạng thái Tin cậy (Metadata & Lease):** Bảng `agent_meta` (bản sao định danh từ `identity/`, `boot_id`), `local_liveness` và `snapshot_meta`. `snapshot_meta` lưu `key_version` của snapshot đang dùng cùng cặp mốc thời gian tin cậy (`trusted_until`, `last_sync_local_time`); snapshot chỉ được nạp khi `key_version` của nó bằng `key_version` trong `identity/`.
 2. **Phân vùng Thẩm định Thẻ & Phân Lịch (Identity, Cards & Schedules):** Lưu trữ dữ liệu cấu hình đồng bộ từ Server:
    - `snapshot_cards`: Ánh xạ `card_match_key` (HMAC theo máy) sang `user_id`, kèm trạng thái kích hoạt của thẻ.
    - `snapshot_users`: Lưu thông tin sinh viên/giảng viên, trạng thái hoạt động (`active`/`inactive`).
@@ -157,7 +157,7 @@ flowchart TD
    - Tính toán: `expected_sig = HexEncode(HMAC-SHA256(K_m, "snapshot-v1:" || message.payload))`.
    - So khớp bằng thuật toán an toàn hằng số thời gian (`hmac.compare_digest`) với giá trị trong MQTT 5 User Property `signature`.
    - **Xử lý vi phạm:** Nếu chữ ký không khớp, Agent **từ chối nạp snapshot**, ghi sự kiện `security_alert` (`snapshot_signature_invalid`) vào `audit_outbox` và giữ cấu hình tin cậy cũ. Nếu chữ ký đúng nhưng `version` **bằng** bản hiện hành (snapshot retained giao lại khi reconnect) thì bỏ qua lặng lẽ; nhỏ hơn thì bỏ qua và ghi `last_apply_error`; `key_version` khác `identity/` thì bỏ qua và ghi `last_apply_error = key_version_mismatch`.
-   - **Lease và ACK:** áp dụng các quy tắc nhận ở ADR-002 §4 (`desired_version` phải bằng version cục bộ; `trusted_until` và `last_server_time` chỉ tiến, không lùi).
+   - **Lease và ACK:** áp dụng các quy tắc nhận ở ADR-002 §4 (`desired_version` phải bằng version cục bộ, `nonce` khớp một `lease_nonce` vừa gửi; `trusted_until` và `last_sync_local_time` tính theo giờ máy và chỉ tiến, D-018).
 
 ---
 
@@ -166,13 +166,13 @@ flowchart TD
 Trong điều kiện mạng bình thường, Agent nhận bản tin gia hạn Lease định kỳ mỗi 30 giây qua Heartbeat (ADR-002).
 - Nếu mỗi nhịp 30 giây Agent đều thực thi lệnh `UPDATE snapshot_meta ...` với `PRAGMA synchronous = FULL`, ổ cứng thể rắn (SSD) của máy trạm sẽ phải chịu hơn 2.800 lần ghi bắt buộc mỗi ngày, gây suy giảm tuổi thọ bộ nhớ Flash của phòng lab.
 - **Giải pháp tối ưu hóa:**
-  1. Agent cập nhật và duy trì cặp mốc `trusted_until` và `last_server_time` trong **bộ nhớ RAM** để phục vụ việc thẩm định quẹt thẻ với độ trễ 0-ms.
+  1. Agent cập nhật và duy trì cặp mốc `trusted_until` và `last_sync_local_time` trong **bộ nhớ RAM** để phục vụ việc thẩm định quẹt thẻ với độ trễ 0-ms.
   2. Agent chỉ thực hiện ghi bền vững (persist) xuống bảng `snapshot_meta` trên SQLite khi:
      - Giá trị `trusted_until` mới tăng thêm **tối thiểu 5 phút (300 giây)** so với mốc đã lưu trên đĩa; HOẶC
      - Khi có một giao dịch ghi khác đang diễn ra (ví dụ: vừa nạp Snapshot mới, hoặc vừa ghi nhận một sự kiện quẹt thẻ / mở phiên).
   3. Khi tắt máy trạm an toàn (`SIGTERM` tới Agent daemon), Agent thực hiện flush mốc lease hiện hành xuống SQLite trước khi thoát.
 
-Chính sách này giảm tần suất ghi đĩa của lease từ 120 lần/giờ xuống còn tối đa 12 lần/giờ. `trusted_until` và `last_server_time` luôn được ghi cùng nhau. Khi sập nguồn, giá trị trên đĩa cũ hơn tối đa 5 phút: lease ngắn đi và mốc sàn đồng hồ thấp hơn một chút, cả hai đều lệch về phía an toàn (ADR-001, D-012).
+Chính sách này giảm tần suất ghi đĩa của lease từ 120 lần/giờ xuống còn tối đa 12 lần/giờ. `trusted_until` và `last_sync_local_time` luôn được ghi cùng nhau. Khi sập nguồn, giá trị trên đĩa cũ hơn tối đa 5 phút: lease ngắn đi và mốc sàn đồng hồ thấp hơn một chút, cả hai đều lệch về phía an toàn (ADR-001, D-012).
 
 ---
 
