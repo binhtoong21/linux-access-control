@@ -45,10 +45,10 @@ flowchart LR
 
 **Luồng chính:**
 1. User quẹt thẻ; Agent đọc và chuẩn hóa UID.
-2. Agent đánh giá cục bộ theo CR-001 → `granted`, xác định duy nhất target profile (`os_username`) kèm hạn phiên.
+2. Agent đánh giá cục bộ theo CR-001 → `granted`, xác định duy nhất target profile (`os_username`) kèm hạn phiên; ghi bền vững cùng lúc bản ghi nhật ký vào AuditOutbox và LocalSession `pending` trước khi trả quyết định (BR-007b, D-005).
 3. Màn hình login báo thành công.
 4. Agent hoàn tất đăng nhập hệ điều hành vào profile dùng chung (`os_username`) qua PAM (cách ánh xạ: 06).
-5. Agent mở LocalSession (gắn với `user_id` và `os_username`), phát `SessionStarted`, ghi một bản ghi vào AuditOutbox.
+5. Khi phiên OS đã mở, Agent chuyển LocalSession sang `active` (gắn với `user_id` và `os_username`) và phát `SessionStarted` vào AuditOutbox.
 
 **Nhánh:**
 - AF-1 Máy còn phiên cũ: nếu cùng user thì không ngắt phiên, ghi nhận `noop(already_active)` và gửi D-Bus notify thời gian còn lại; nếu khác user khi máy đang ở Greeter hoặc phiên cũ đã hết hạn ca học, ghi nhận `granted`, ghi Write-Ahead vào DB trước rồi mới teardown phiên cũ (`abandoned(superseded)`); nếu khác user khi Desktop đang active và còn hạn, từ chối với lý do `workstation_busy` (BR-008, P1-1).

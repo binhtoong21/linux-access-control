@@ -19,7 +19,7 @@ stateDiagram-v2
     Discarded --> [*]
 ```
 
-`Discarded` là trạng thái nội bộ của Agent: phiên chưa từng bắt đầu trên OS nên không gửi `SessionStarted` lên server. Server chỉ quản lý các trạng thái `active`, `completed`, `forced_logout`, `abandoned` (sinh từ `SessionStarted`). Các trạng thái kết thúc là bất biến, không đảo ngược (INV-007).
+`Discarded` là trạng thái nội bộ của Agent: phiên chưa từng bắt đầu trên OS nên không gửi `SessionStarted` lên server. Server chỉ quản lý các trạng thái `active`, `completed`, `forced_logout`, `abandoned` (sinh từ `SessionStarted`). Các trạng thái kết thúc không quay về `active` (INV-007); phía server, kết thúc do suy luận được báo cáo thật thay đúng một lần (D-015).
 
 ## Sequence
 

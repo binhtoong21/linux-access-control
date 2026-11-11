@@ -26,7 +26,7 @@ sequenceDiagram
     O->>A: Khởi động Agent (trước greeter, có thời gian chờ tối đa)
     A->>K: Nạp snapshot, LocalSession, outbox, last_alive_at, boot_id cũ
     A->>A: So boot_id: khác thì là reboot
-    A->>K: LocalSession active thành abandoned (workstation_rebooted), reconstructed, ended_at = last_alive_at; pending thành discarded
+    A->>K: LocalSession active thành abandoned (workstation_rebooted), reconstructed, ended_at = max(started_at, last_alive_at); pending thành discarded
     A->>K: Đưa SessionEnded vào outbox (trước khi gửi Hello)
     A->>A: Tính trạng thái tin cậy (UTC trusted_until; kiểm tra local_time >= floor)
     A->>L: Sẵn sàng nhận quẹt thẻ
@@ -40,7 +40,7 @@ sequenceDiagram
 2. **Đối chiếu xong mới nhận quẹt thẻ.** Agent chưa phát tín hiệu "sẵn sàng" cho greeter cho đến khi đã hoàn tất đối chiếu LocalSession và tính xong trạng thái tin cậy.
 3. **Sự kiện dựng lại vào outbox trước khi gửi Hello.** Gói tin `Hello` báo số mục outbox đã tính cả các sự kiện `SessionEnded` vừa được dựng lại, do đó server biết chính xác số lượng outbox cần vét cạn trước khi kích hoạt logic suy luận (khớp với nguyên tắc 4 của `reconnect`).
 4. **Phân biệt reboot và Agent restart bằng `boot_id` của kernel.** Nếu `boot_id` khác: máy đã reboot, toàn bộ phiên OS cũ đã mất, mọi phiên `active` chuyển sang `abandoned`. Nếu `boot_id` giống: chỉ là tiến trình Agent khởi động lại, áp dụng bảng recovery của `swipe-login`.
-5. **Ước lượng có gắn nhãn nguồn gốc (`end_source`).** Agent ghi định kỳ `last_alive_at` xuống đĩa; khi dựng lại phiên sau sập, ghi nhận `ended_at = last_alive_at` (cận dưới) với `end_source = reconstructed`. Khi server suy luận sau khi outbox hết, server dùng `ended_at = max(started_at, lần cuối nghe từ máy ở boot cũ)` với `end_source = inferred` (đảm bảo không vi phạm INV-007).
+5. **Ước lượng có gắn nhãn nguồn gốc (`end_source`).** Agent ghi định kỳ `last_alive_at` xuống đĩa; khi dựng lại phiên sau sập, ghi nhận `ended_at = max(started_at, last_alive_at)` (cận dưới; lấy `max` vì `last_alive_at` ghi thưa có thể cũ hơn lúc phiên bắt đầu, khi đó `ended_at` sẽ nhỏ hơn `started_at` và vi phạm INV-007) với `end_source = reconstructed`. Khi server suy luận sau khi outbox hết, server dùng `ended_at = max(started_at, lần cuối nghe từ máy ở boot cũ)` với `end_source = inferred` (đảm bảo không vi phạm INV-007).
 6. **Phát hiện reboot bằng `boot_id`, không phụ thuộc trạng thái offline.** Nếu máy reboot nhanh hơn ngưỡng heartbeat timeout, server không đánh dấu máy là offline nhưng vẫn nhận biết được sự kiện reboot nhờ `boot_id` thay đổi (XINV-008).
 7. **Agent không được chặn quá trình khởi động máy.** Nếu Agent gặp lỗi không khởi động được (lỗi kho đĩa, hỏng file cấu hình), hệ điều hành vẫn phải vào greeter để cho phép đăng nhập qua đường dự phòng cục bộ (BR-004, NFR-M01).
 8. **Tắt máy có kế hoạch: Agent dừng sau các phiên người dùng.** Cấu hình thứ tự systemd để Agent chứng kiến các phiên người dùng kết thúc và ghi nhận timestamp chính xác trước khi dừng.

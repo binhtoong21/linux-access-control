@@ -38,12 +38,12 @@ sequenceDiagram
         else Thẻ & Lịch hợp lệ (tiến hành xét trạng thái phiên theo BR-008)
             alt Thẻ của chính user đang active trên Desktop (same_user)
                 Note over A: Trả về noop(already_active), không kill phiên
+                A->>K: Ghi AuditLog noop(already_active) vào SQLite WAL (ghi bền trước, BR-007b)
                 A->>OS: Bắn D-Bus notification lên Desktop: báo thời gian còn lại
-                A->>K: Ghi AuditLog noop(already_active) vào SQLite WAL
             else Thẻ của user khác quẹt khi Desktop đang active và phiên còn hạn
                 Note over A: Kiểm tra logind: nếu phiên OS thực sự active -> từ chối workstation_busy
+                A->>K: Ghi AuditLog denied(workstation_busy) vào SQLite WAL (ghi bền trước, BR-007b)
                 A->>R: Tín hiệu còi buzzer/nháy LED đỏ (FR-013)
-                A->>K: Ghi AuditLog denied(workstation_busy) vào SQLite WAL
             else Máy đang ở Greeter (đã logout), phiên cũ hết hạn, hoặc phiên OS cũ đã mất (os_session_lost)
                 Note over A: Cấp quyền (granted) & kích hoạt thay thế phiên (superseded)
                 A->>K: Giao dịch SQLite WAL nguyên tử: AuditLog(granted, target_os_user) + LocalSession(pending, target_os_user)

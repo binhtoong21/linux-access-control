@@ -79,7 +79,7 @@ classDiagram
 
 **LocalWorkstationProfile**: danh sách profile được phép dùng cục bộ theo allowlist của máy trạm: os_username, is_default, status (`enabled`, `disabled`), có trong snapshot hay không, có thật trên máy hay không. `is_default` và `status` đến từ snapshot; "có thật trên máy" do Auto-Discovery ghi nhận. Agent và PAM chỉ mở phiên cho profile **có trong snapshot với status `enabled` và có thật trên máy**; profile mới phát hiện chưa dùng được cho tới khi server ghi nhận và gửi snapshot mới.
 
-**LocalSession**: session_id, decision_id (bắt buộc, khớp entry_id), user_id, card_id, os_username, os_session_id (id logind của GUI session trên seat0), decided_at, started_at, expires_at (UTC), boottime_limit (hạn đo theo `CLOCK_BOOTTIME`), boot_id, status (`pending`, `active`, `discarded`). Tối đa một phiên active và một pending.
+**LocalSession**: session_id, decision_id (bắt buộc, khớp entry_id), user_id, card_id, os_username, os_session_id (id logind của GUI session trên seat0), decided_at, started_at, expires_at (UTC), boottime_limit (hạn đo theo `CLOCK_BOOTTIME`), boot_id, status (`pending`, `active`, `completed`, `forced_logout`, `abandoned`, `discarded`), ended_at, end_reason, end_source (`reported`, `reconstructed`). Tối đa một phiên active và một pending. `discarded` là trạng thái nội bộ của Edge (phiên chưa từng mở trên OS), không gửi lên server.
 
 **LocalLiveness**: `last_alive_at` ghi định kỳ xuống đĩa; dùng làm cận dưới `ended_at` khi dựng lại phiên sau crash đột ngột.
 
@@ -98,7 +98,6 @@ classDiagram
 | SnapshotContent | Các mục thẻ (CardMatchKey, trạng thái, chủ thẻ), mục user (id, tên, trạng thái, nhóm), mục Schedule áp dụng cho máy, metadata allowlist profile (cờ disabled, default). Chỉ chứa dữ liệu liên quan tới máy (INV-012); **gồm cả thẻ `disabled` và user `inactive`** để hiển thị đúng lý do từ chối. Snapshot không chứa UID gốc (ADR-007) |
 | LoginDecision | id (do Edge sinh), outcome, reason, card_uid, user, expires_at, decided_at, data_version |
 | BootId | Định danh một lần khởi động máy |
-| EnrollmentUse | workstation_id, used_at |
 | CardMatchKey | Khóa so khớp thẻ trong snapshot: HMAC của UID bằng khóa riêng theo máy. Domain dùng trừu tượng; thuật toán cụ thể ở ADR-007 |
 | UserSnapshot, CardSnapshot, WorkstationSnapshot | Ảnh chụp tại thời điểm sự kiện (mã, tên, hostname, zone) |
 
@@ -175,7 +174,7 @@ Kết quả là LoginDecision, luôn kèm phát `LoginDecided`. Ghi bền vững
 - Khi người dùng đăng xuất, phát `SessionEnded` (`user_logout`, `end_source = reported`).
 - Tắt máy có kế hoạch: đóng `LocalSession active` với `abandoned(workstation_rebooted, end_source = reported, ended_at = now)`.
 - Khởi động Agent & Recovery sau reboot/sập: nạp `boot_id` cũ, `last_alive_at`, `LocalSession`, `AuditOutbox`.
-  * Khác `boot_id` (máy reboot): `LocalSession active` chuyển thành `abandoned(workstation_rebooted, end_source = reconstructed, ended_at = last_alive_at)`; `pending` chuyển `discarded`. Phát `SessionEnded` đưa vào outbox TRƯỚC khi gửi `Hello`.
+  * Khác `boot_id` (máy reboot): `LocalSession active` chuyển thành `abandoned(workstation_rebooted, end_source = reconstructed, ended_at = max(started_at, last_alive_at))`; `pending` chuyển `discarded`. Phát `SessionEnded` đưa vào outbox TRƯỚC khi gửi `Hello`.
   * Trùng `boot_id` (Agent restart): đối chiếu LocalSession (`active`, `pending`) với phiên OS thực tế:
     + `active` còn hạn & còn phiên OS: giữ; hết hạn: kết thúc OS, đóng `forced_logout(schedule_expired)`; không còn phiên OS: đóng `abandoned(os_session_lost)`.
     + `pending`: chỉ chuyển sang `active` nếu tìm thấy phiên OS trên `seat0` được tạo SAU thời điểm quyết định (`decided_at`) và còn hạn (ghi nhận `os_session_id`); nếu không còn phiên OS hoặc phiên OS được tạo trước `decided_at` (phiên cũ còn sót) hoặc đã hết hạn: dọn phiên OS cũ (nếu có) và chuyển `pending` thành `discarded`.
@@ -184,13 +183,13 @@ Kết quả là LoginDecision, luôn kèm phát `LoginDecided`. Ghi bền vững
 Dựng Snapshot cho một máy: lấy Schedule áp dụng (đích là máy hoặc zone của máy), gom user và nhóm liên quan, thẻ của các user đó (kể cả thẻ `disabled`, user `inactive`), metadata allowlist profile và `key_version` của máy trạm. Mục thẻ chứa `CardMatchKey` tính bằng khóa riêng của máy (ADR-007), không chứa UID gốc. Tăng version khi nội dung đổi. Ghi `desired_version` vào SyncState rồi phát `SnapshotPublished`.
 
 ### LeaseRenewalService (Distribution)
-Nhận thông điệp Hello / heartbeat từ máy: nếu `acked_version == desired_version`, phản hồi xác nhận gia hạn thời hạn tin cậy; nếu máy tụt lại (`acked_version < desired_version`), gửi Snapshot mới nhất (đầy đủ).
+Nhận thông điệp Hello / heartbeat từ máy: nếu `acked_version == desired_version`, phản hồi xác nhận gia hạn thời hạn tin cậy; nếu máy tụt lại (`acked_version < desired_version`), gửi Snapshot mới nhất (đầy đủ); nếu máy báo version lớn hơn (server vừa khôi phục từ bản sao lưu), nâng `desired_version = max(desired, acked) + 1` và gửi snapshot mới (D-016).
 
 ### SnapshotApplier (Edge)
 Nhận snapshot: kiểm tra hợp lệ, version lớn hơn bản đang dùng, đối chiếu `key_version` khớp với khóa máy; thay thế nguyên tử; làm mới thời hạn tin cậy; phát `SnapshotApplied`. Không hợp lệ hoặc lệch `key_version` thì giữ bản cũ.
 
 ### AuditIngestService (Operations)
-Nhận bản ghi từ Edge; loại trùng theo `entry_id`; lưu `received_at`. Xử lý lặp lại an toàn.
+Nhận bản ghi từ Edge; loại trùng theo `entry_id`; lưu `received_at`. Xử lý lặp lại an toàn. Mỗi bản ghi áp dụng riêng: bản ghi không áp dụng được thì giữ nguyên văn để Admin xem, không chặn lô (D-015). `SessionEnded` thật thay kết quả suy luận đúng một lần; `SessionStarted` mới khi máy còn phiên `active` cũ thì suy luận phiên cũ kết thúc trước (D-015).
 
 ### WorkstationLivenessService (Operations)
 - Quá số lần heartbeat bị bỏ lỡ → `WorkstationWentOffline`.
