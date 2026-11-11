@@ -189,7 +189,7 @@ erDiagram
 - `workstation_id UUID NOT NULL REFERENCES workstations(id)`
 - `reason VARCHAR(16) NOT NULL CHECK (reason IN ('reinstalled', 'disabled'))`
 - `revoked_at TIMESTAMPTZ NOT NULL DEFAULT now()`
-- Nguồn để sinh tệp CRL cho Mosquitto (`crlfile`). Ghi cùng giao dịch với việc duyệt cài lại hoặc vô hiệu hóa máy; sau `COMMIT` server sinh lại CRL và nạp lại broker. Bật lại máy `disabled` cần đăng ký lại (`nfc-agent reenroll` trên máy, Admin duyệt cài lại; ADR-002 §7.6), không gỡ serial khỏi danh sách.
+- Nguồn để sinh tệp CRL cho Mosquitto (`crlfile`). Ghi cùng giao dịch với việc duyệt cài lại hoặc vô hiệu hóa máy; sau `COMMIT` server sinh lại CRL và khởi động lại broker (S9). Bật lại máy `disabled` cần đăng ký lại (`nfc-agent reenroll` trên máy, Admin duyệt cài lại; ADR-002 §7.6), không gỡ serial khỏi danh sách.
 
 ---
 
@@ -484,4 +484,4 @@ erDiagram
 | Edge Quẹt thẻ (`CR-001`) | Edge `audit_outbox` + `local_sessions (pending)` | SQLite Transaction `BEGIN IMMEDIATE ... COMMIT` | Mỗi lần quẹt thẻ hợp lệ | Atomic Write-Ahead Pairing (`INV-014`, `D-005`) với `synchronous=FULL` |
 | Edge `audit_outbox` | Server `audit_logs` & `sessions` (mục lỗi → `ingest_rejects`) | MQTT 5 `.../outbox` (QoS 1, FIFO Batch <= 50) → `.../command/ack` | Liên tục theo batch khi Online | `ON CONFLICT (entry_id) DO NOTHING` (`XINV-006`), savepoint theo từng mục (D-015) + `DELETE WHERE outbox_seq <= acked_seq` (`INV-013`) |
 | Edge `Auto-Discovery` | Edge `local_workstation_profiles.present_locally` & Server `workstation_profiles` | MQTT 5 `.../hello` / `.../heartbeat` | Khi Agent khởi động / thay đổi allowlist | Chỉ nhận danh sách user nhóm `labstudent` UID >= 1000 (`INV-018`) |
-| Server duyệt cài lại / vô hiệu hóa máy | Mosquitto `crlfile` | `revoked_certificates` → sinh lại CRL → nạp lại broker | Khi Admin thao tác | Chứng chỉ cũ bị broker từ chối (D-014) |
+| Server duyệt cài lại / vô hiệu hóa máy | Mosquitto `crlfile` | `revoked_certificates` → sinh lại CRL (ghi tạm rồi đổi tên) → khởi động lại broker | Khi Admin thao tác; sinh lại CRL khi server khởi động và hằng ngày | Chứng chỉ cũ bị broker từ chối, kết nối cũ bị ngắt (D-014, S9) |

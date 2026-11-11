@@ -21,6 +21,7 @@
 | S7 | Teardown liên tiếp cùng UID & Linger (Đạt một phần cgroup) | 1 ngày | Cao (chốt chặn ADR-004) | ⚠️ Đạt một phần |
 | S7b | Teardown thật qua GNOME/LightDM & SIGTERM Trap | 1 ngày | Cao (xác nhận ADR-004/008) | ✅ Đạt (20/20) |
 | S8 | Kiểm chứng Mật mã, mTLS & Giao dịch Node.js | 0,5 ngày | Trung bình (xác nhận ADR-006) | ✅ Đạt (3/3) |
+| S9 | Thu hồi chứng chỉ máy trạm bằng `crlfile` của Mosquitto | 0,5 giờ | Trung bình (xác nhận D-014, ADR-002) | ✅ Đạt (3 phát hiện) |
 
 Nên đặt mua hoặc mượn đầu đọc ngay hôm nay vì có thời gian chờ, S1 chạy song song với S0. Trình tự S2 → S3 → S4 vì chúng phụ thuộc nhau. S5 có thể làm xen.
 
@@ -140,6 +141,12 @@ Kiểm chứng tốc độ giải phóng cgroup `user-<UID>.slice` và `/run/use
 **Kết quả (2026-11-11):** **✅ Đạt 3/3** trên Node.js `v20.20.2`, Mosquitto `2.0.11`, PostgreSQL `14.24`: (1) `@peculiar/x509` + `reflect-metadata` + `crypto.webcrypto` xác thực & ký Client Cert từ CSR Ed25519 (`Valid: true`) và `HKDF+HMAC` khớp Python 3 `100%`; (2) `mqtt.js` mTLS `8883` nhận tin có MQTT 5 `User Property`, nhận `0` tin rò rỉ từ `ws-other-99`, chặn `PUBLISH` trái phép với `135 (0x87)` (đồng thời phát hiện `acl_file` lọc `read` ở egress thay vì chặn `SUBACK` — đã hiệu chỉnh vào ADR-002); (3) giao dịch `pg` `COMMIT` + `ROLLBACK` sạch `schedules=1, outbox_events=1`. Xem [spike-results/s8-server-crypto-mtls-pg.md](spike-results/s8-server-crypto-mtls-pg.md).
 **Ảnh hưởng:** Xác nhận chính thức **ADR-006** lên trạng thái `Accepted`.
 
+## S9: Thu hồi chứng chỉ bằng CRL (Mosquitto `crlfile`)
+
+**Câu hỏi:** Mosquitto 2.0.11 có từ chối chứng chỉ máy đã thu hồi mà vẫn nhận chứng chỉ mới cùng CN không; nạp lại CRL thế nào; có tình huống CRL làm tự khóa toàn hệ thống không?
+**Kết quả (2026-11-11):** **✅ Đạt** trên Mosquitto `2.0.11` + OpenSSL `3.0.2`: thu hồi theo serial, chứng chỉ mới cùng CN `ws-01` vẫn vào được; `SIGHUP` nạp lại CRL nhưng **không ngắt** kết nối đang mở của chứng chỉ đã thu hồi (phải khởi động lại broker); CRL **hết hạn** làm broker từ chối mọi client; **thiếu tệp** CRL thì broker không khởi động. Xem [spike-results/s9-mosquitto-crl.md](spike-results/s9-mosquitto-crl.md).
+**Ảnh hưởng:** Hiệu chỉnh ADR-002 §1 và D-014 điểm 5 (khởi động lại broker, CRL hạn dài + làm mới định kỳ, tệp luôn tồn tại và ghi nguyên tử).
+
 ## Từ kết quả spike đến ADR
 
 | Kết quả | ADR được viết |
@@ -150,6 +157,7 @@ Kiểm chứng tốc độ giải phóng cgroup `user-<UID>.slice` và `/run/use
 | S1 | Bổ sung ADR-007 (thứ tự byte, loại đầu đọc) |
 | S7, S7b | ADR-004 (Mô hình profile dùng chung) & ADR-008 (Vòng đời phiên & Teardown đa pha) |
 | S8 | ADR-006 (Lựa chọn techstack Server NestJS / Node.js) |
+| S9 | ADR-002 (thu hồi chứng chỉ qua CRL), D-014 |
 
 ## Quy tắc quyết định
 
