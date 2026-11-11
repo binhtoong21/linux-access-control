@@ -136,7 +136,7 @@ Bài kiểm chứng thực tế trên **Node.js `v20.20.2` + Mosquitto `2.0.11` 
   - *Nguy cơ:* Lỗ hổng bộ nhớ hoặc thư viện bên thứ ba khi chạy quyền root.
   - *Biện pháp giảm thiểu:* 
     1. Module PAM C độc lập ngăn sự cố của Agent ảnh hưởng đến chuỗi xác thực hệ thống.
-    2. Cấu hình Systemd Hardening giam lỏng Agent daemon: `ProtectSystem=strict`, `ProtectHome=read-only`, `PrivateTmp=true`, `ReadWritePaths=/var/lib/nfc-agent /run`, `CapabilityBoundingSet=CAP_KILL CAP_DAC_OVERRIDE CAP_SETUID CAP_SETGID`.
+    2. Cấu hình Systemd Hardening giam lỏng Agent daemon: `ProtectSystem=strict`, `ProtectHome=read-only`, `PrivateTmp=true`, `ReadWritePaths=/var/lib/nfc-agent /run`, `CapabilityBoundingSet=CAP_KILL CAP_DAC_OVERRIDE CAP_SETUID CAP_SETGID CAP_CHOWN`. `CAP_CHOWN` bắt buộc để giao socket `/run/nfc/greeter-push.sock` cho nhóm `lightdm`; thiếu nó thì greeter không kết nối được Agent và không ai đăng nhập được bằng thẻ ([Spike S11](../../../../spike-results/s11-agent-systemd-hardening.md): 3/3 chu kỳ GNOME thật đạt dưới cấu hình này).
     3. Cố định phiên bản Python >= 3.10 mặc định của Ubuntu 22.04 LTS và cô lập dependencies trong virtualenv thuộc sở hữu `root:root 0700`.
 - **Duy Trì Hai Ngôn Ngữ:**
   - *Nguy cơ:* Lệch chuẩn hợp đồng giao tiếp JSON qua MQTT.

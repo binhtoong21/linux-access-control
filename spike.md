@@ -23,6 +23,7 @@
 | S8 | Kiểm chứng Mật mã, mTLS & Giao dịch Node.js | 0,5 ngày | Trung bình (xác nhận ADR-006) | ✅ Đạt (3/3) |
 | S9 | Thu hồi chứng chỉ máy trạm bằng `crlfile` của Mosquitto | 0,5 giờ | Trung bình (xác nhận D-014, ADR-002) | ✅ Đạt (3 phát hiện) |
 | S10 | Smoke-test wrapper greeter trong vòng boot LightDM | 1 giờ | Cao (BR-004, xác nhận ADR-005) | ✅ Đạt (sau khi sửa lỗi tự khóa) |
+| S11 | Agent chạy dưới systemd hardening của ADR-006 | 0,5 giờ | Trung bình (xác nhận ADR-006) | ✅ Đạt (thêm `CAP_CHOWN`) |
 
 Nên đặt mua hoặc mượn đầu đọc ngay hôm nay vì có thời gian chờ, S1 chạy song song với S0. Trình tự S2 → S3 → S4 vì chúng phụ thuộc nhau. S5 có thể làm xen.
 
@@ -154,6 +155,12 @@ Kiểm chứng tốc độ giải phóng cgroup `user-<UID>.slice` và `/run/use
 **Kết quả (2026-11-11):** **✅ Đạt sau khi sửa**: bản trong ADR ghi tệp đếm ở `/run` mà user `lightdm` không ghi được, nên LightDM crash lặp tới khi systemd dừng hẳn (màn hình đen, không fallback). Chuyển sang `/var/lib/lightdm`: 3 crash thì rơi về greeter chuẩn; 3 lần đăng nhập GNOME thật qua harness S7b không kích hoạt fallback, chỉ còn 1 tiến trình greeter. Xem [spike-results/s10-greeter-wrapper.md](spike-results/s10-greeter-wrapper.md).
 **Ảnh hưởng:** Sửa ADR-005 (đường dẫn tệp đếm, cách gắn wrapper qua `.desktop`, ràng buộc với giới hạn khởi động lại systemd); nâng ADR-005 lên `Accepted`.
 
+## S11: Agent dưới systemd hardening (ADR-006)
+
+**Câu hỏi:** Với `ProtectSystem=strict`, `ProtectHome=read-only`, `PrivateTmp`, `ReadWritePaths` và `CapabilityBoundingSet` của ADR-006, Agent có còn mở socket cho greeter/PAM, ghi `edge.db`, gọi logind dọn phiên được không? (S6, S7b chạy không có hardening.)
+**Kết quả (2026-11-11):** **✅ Đạt sau khi sửa**: đúng như ADR-006 thì `chown` socket đẩy sự kiện cho nhóm `lightdm` bị chặn (`EPERM`), greeter không kết nối được, 0 lần đăng nhập. Thêm `CAP_CHOWN`: 3/3 chu kỳ GNOME thật đạt, teardown ≤ 2246.6 ms. Xem [spike-results/s11-agent-systemd-hardening.md](spike-results/s11-agent-systemd-hardening.md).
+**Ảnh hưởng:** Bổ sung `CAP_CHOWN` vào ADR-006.
+
 ## Từ kết quả spike đến ADR
 
 | Kết quả | ADR được viết |
@@ -166,6 +173,7 @@ Kiểm chứng tốc độ giải phóng cgroup `user-<UID>.slice` và `/run/use
 | S8 | ADR-006 (Lựa chọn techstack Server NestJS / Node.js) |
 | S9 | ADR-002 (thu hồi chứng chỉ qua CRL), D-014 |
 | S10 | ADR-005 (wrapper greeter và fallback) |
+| S11 | ADR-006 (systemd hardening của Agent) |
 
 ## Quy tắc quyết định
 
