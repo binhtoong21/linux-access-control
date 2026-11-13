@@ -72,6 +72,8 @@ cd server && pnpm install && pnpm test && pnpm build
 # Test DB thật (migration, health; DB bị xóa sạch mỗi lần chạy, tạo một lần: docker compose exec postgres createdb -U nfclab nfclab_test):
 #   TEST_DATABASE_URL=postgres://nfclab:nfclab-dev@127.0.0.1:5432/nfclab_test pnpm test
 # Áp migration: DATABASE_URL=postgres://nfclab:nfclab-dev@127.0.0.1:5432/nfclab pnpm db:migrate
+# Admin đầu tiên (mật khẩu qua stdin): read -rs PW; printf "%s" "$PW" | DATABASE_URL=... pnpm admin:create --username root --display-name "Quản trị"
+# Chạy server: DATABASE_URL=... JWT_SECRET=<≥ 32 ký tự> pnpm start
 
 # Hạ tầng dev (Docker): PostgreSQL + Mosquitto mTLS
 cd deploy/dev && bash gen-dev-certs.sh && docker compose up -d   # PG_PORT=15432 nếu máy đã có PostgreSQL ở 5432
