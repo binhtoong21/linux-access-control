@@ -62,7 +62,7 @@
 | BR-018 | INV-010, XINV-009 |
 | BR-020 | INV-018 |
 | VR-001 | INV-002 |
-| VR-002, VR-007 | INV-001, Value Object CardUid |
+| VR-002, VR-007, VR-013 | INV-001, Value Object CardUid |
 | VR-003, VR-004, VR-009 | INV-005 |
 | VR-005 | INV-004 |
 | VR-006 | INV-003 |

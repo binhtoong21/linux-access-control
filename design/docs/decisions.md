@@ -133,6 +133,10 @@ Khi máy báo `snapshot_version` lớn hơn `desired_version` (chỉ xảy ra kh
 Mỗi thao tác ghi của Admin qua API (tạo/sửa/bật/tắt user, thẻ, nhóm, lịch, zone, profile; duyệt/từ chối đăng ký; vô hiệu hóa/xóa máy; tạo/vô hiệu hóa admin) được ghi vào `admin_audit_logs`: ai, lúc nào, hành động, đối tượng, giá trị trước/sau. Chỉ ghi thêm, ghi cùng giao dịch với thay đổi. Lý do: `audit_logs` chỉ ghi lần quẹt thẻ; nếu không có bảng này thì việc cấp thẻ hay sửa lịch trái phép không để lại dấu vết, và mối đe dọa "Admin dùng sai quyền" trong threat model không có biện pháp. Không chứa UID thô và mật khẩu.
 **Nguồn:** [09-security/threat-model.md](09-security/threat-model.md), [11-operations/observability.md](11-operations/observability.md).
 
+### D-021: Chặn đăng ký thẻ UID ngẫu nhiên; độ dài UID không bị giới hạn thêm
+Hệ thống so khớp thẻ bằng UID (ADR-007) nên chỉ cần UID **tĩnh**; thẻ 4, 7, 10 byte dùng lẫn được (VR-007). Thẻ UID ngẫu nhiên (4 byte, byte đầu `08` theo ISO/IEC 14443-3; Spike S1 thấy ở CCCD) trước đây vẫn đăng ký được rồi bị từ chối `unknown_card` ở mọi lần quẹt sau mà Admin không rõ lý do. Từ nay `POST /cards` từ chối với `RANDOM_UID_NOT_SUPPORTED` (VR-013). Chỉ kiểm ở server khi đăng ký; Agent không đổi. Giới hạn: chỉ nhận diện được UID ngẫu nhiên theo đúng quy ước `08`; thẻ đổi UID theo cách khác vẫn rơi vào `unknown_card`.
+**Nguồn:** [02-requirements/business-rules.md](02-requirements/business-rules.md) VR-013, [08-api/api.md](08-api/api.md), S1.
+
 ### ADR-001 (Accepted): Xác thực ở edge, dữ liệu cục bộ có thời hạn tin cậy (lease)
 Quy định ở Agent theo CR-001 từ snapshot cục bộ, không hỏi server khi quẹt thẻ. Dữ liệu cục bộ có thời hạn tin cậy (lease) được gia hạn qua phản hồi heartbeat khi `acked_version == desired_version`. Kiểm tra đồng hồ kết hợp hai hạn (UTC tuyệt đối bền vững và `CLOCK_BOOTTIME` cho phiên) kèm mốc sàn cải tiến `floor = last_sync_local_time - CLOCK_FLOOR_TOLERANCE`. Đã chốt: `D = 24h`; tin RTC sau khi khởi động lại lúc offline nếu `local_time >= floor` (D-018).
 **Nguồn:** [ADR-001](06-architecture/decisions/ADR-001-xac-thuc-o-edge-va-lease.md).

@@ -59,6 +59,7 @@ BR-XXX là quy tắc nghiệp vụ bất biến, độc lập công nghệ. Cộ
 | VR-010 | AdminAccount.username | Duy nhất, không rỗng |
 | VR-011 | User.external_id định dạng an toàn | Chỉ chứa chữ cái không dấu, chữ số, dấu gạch dưới, gạch ngang hoặc dấu chấm (`^[A-Za-z0-9._-]{1,32}$`); không rỗng |
 | VR-012 | WorkstationProfile.os_username | Hợp lệ theo chuẩn POSIX username, tồn tại trên máy trạm, không phải tài khoản root/system UID < 1000 |
+| VR-013 | Card.uid khi đăng ký là UID tĩnh | Từ chối UID 4 byte có byte đầu `08` (UID ngẫu nhiên theo ISO/IEC 14443-3, ví dụ CCCD gắn chip, điện thoại giả lập thẻ): thẻ loại này đổi UID mỗi lần chạm nên không bao giờ khớp lại. Chỉ áp dụng khi đăng ký thẻ; quẹt thẻ không đổi (UID lạ vẫn là `unknown_card`). D-021 |
 
 ## Notes
 - BR-001 và CR-001 là rule phức tạp nhất, cần test nhiều tổ hợp, đặc biệt BR-016 và biên giờ BR-012.

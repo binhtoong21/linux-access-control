@@ -67,7 +67,7 @@ UID chỉ đi vào API, không bao giờ được trả ra trong danh sách; ch�
 
 | Method | Path | Mô tả | Request | Response |
 |---|---|---|---|---|
-| POST | `/cards` | Đăng ký thẻ cho user | `{uid, user_id}` hoặc `{from_audit_entry_id, user_id}` (FR-073: lấy UID từ bản ghi `unknown_card`) | 201 `Card`; nếu UID đã có và `unbound` thì gắn lại (200); 409 `CARD_ALREADY_BOUND` nếu đang có chủ (INV-001, VR-002); 400 `INVALID_UID` (VR-007) |
+| POST | `/cards` | Đăng ký thẻ cho user | `{uid, user_id}` hoặc `{from_audit_entry_id, user_id}` (FR-073: lấy UID từ bản ghi `unknown_card`) | 201 `Card`; nếu UID đã có và `unbound` thì gắn lại (200); 409 `CARD_ALREADY_BOUND` nếu đang có chủ (INV-001, VR-002); 400 `INVALID_UID` (VR-007); 400 `RANDOM_UID_NOT_SUPPORTED` (VR-013, cả khi lấy từ bản ghi `unknown_card`) |
 | GET | `/cards` | Tra cứu | `?uid=` (qua blind index), `?user_id=`, `?status=` | 200 trang `Card[]` (không có UID) |
 | GET | `/cards/{id}` | Chi tiết, kèm UID đã giải mã | — | 200 |
 | POST | `/cards/{id}/disable` · `/enable` | Khóa / mở khóa (`active ⇄ disabled`) | — | 200; 409 `INVALID_STATE_TRANSITION` |
@@ -194,6 +194,7 @@ Header `Authorization: Bearer <fetch_code>`.
 |---|---|---|---|
 | `VALIDATION_ERROR` | 400 | Dữ liệu sai định dạng hoặc vi phạm VR; `details` liệt kê từng trường | VR-001…012 |
 | `INVALID_UID` | 400 | UID không phải hex 4/7/10 byte | VR-007 |
+| `RANDOM_UID_NOT_SUPPORTED` | 400 | UID ngẫu nhiên (4 byte, byte đầu `08`); thẻ này không dùng được với cơ chế so khớp UID tĩnh | VR-013, D-021 |
 | `INVALID_CSR` | 400 | CSR sai định dạng, sai thuật toán | ADR-002 |
 | `INVALID_CREDENTIALS` | 401 | Sai username/password | FR-080 |
 | `UNAUTHORIZED` | 401 | Chưa đăng nhập, JWT hết hạn, admin bị vô hiệu hóa | INV-016 |
