@@ -131,7 +131,9 @@ Một nơi duy nhất cho mọi tham số trước đây ghi "chốt sau". Giá 
 | Kích thước snapshot tối đa | 1 MB | Server | ~vài nghìn user; vượt thì báo lỗi dựng snapshot |
 | Giữ snapshot cũ | 5 bản/máy | Server | `migrations.md` §4 |
 | Chứng chỉ máy / CA / CRL | 3 năm / 10 năm / 10 năm, CRL sinh lại hằng ngày | Server | ADR-002, S9 |
-| JWT Admin | 8h | Server | `api.md` |
+| JWT Admin | 8h, HS256, không có refresh token | Server | `api.md` |
+| Mật khẩu Admin | 10–128 ký tự, băm Argon2id | Server | NFR-SEC06 |
+| Khóa đăng nhập sai | 5 lần sai theo username + IP → khóa 15 phút (bộ đếm trong RAM, mất khi khởi động lại) | Server | `api.md` Rate Limiting |
 | Giới hạn tần suất | xem `api.md` | Server | |
 
 ## Configuration Management
@@ -139,6 +141,8 @@ Một nơi duy nhất cho mọi tham số trước đây ghi "chốt sau". Giá 
 | Cấu hình | Biến / tệp | Mặc định | Mô tả |
 |---|---|---|---|
 | Kết nối CSDL | `DATABASE_URL` | — | PostgreSQL cục bộ |
+| Khóa ký JWT Admin | `JWT_SECRET` | — | ≥ 32 ký tự ngẫu nhiên, trong `EnvironmentFile` quyền `0600`. Đổi hoặc mất khóa chỉ làm mọi Admin phải đăng nhập lại, nên không cần sao lưu |
+| Cổng HTTP | `PORT` | `8000` | Chỉ nghe `127.0.0.1`, sau Nginx |
 | Broker | `MQTT_URL`, `MQTT_CERT`, `MQTT_KEY`, `MQTT_CA` | `mqtts://localhost:8883` | Chứng chỉ `CN = nfc-server` |
 | Thư mục khóa | `KEYS_DIR` | `/etc/nfc-server/keys` | `0700`, chủ `nfcsrv` |
 | Tệp CRL | `CRL_PATH` | `/etc/mosquitto/nfc/crl.pem` | Server ghi, Mosquitto đọc |

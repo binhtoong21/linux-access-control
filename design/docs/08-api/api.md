@@ -21,7 +21,7 @@ TLS bắt buộc (NFR-SEC01). Dashboard được phục vụ cùng origin nên k
 | Agent (đăng ký máy) | `POST` không cần xác thực; `GET` trạng thái dùng `Authorization: Bearer <fetch_code>` | Agent xác thực Server bằng CA nhúng trong Master Image (D-014). `fetch_code` chỉ lưu bản băm |
 | Agent (vận hành) | Không dùng REST | mTLS trên MQTT (ADR-002) |
 
-Thao tác ghi từ Dashboard yêu cầu thêm header `X-Requested-With: dashboard` (chống CSRF kèm `SameSite=Strict`).
+Mọi request ghi (`POST`/`PUT`/`PATCH`/`DELETE`) từ Dashboard, kể cả `POST /auth/login`, phải có header `X-Requested-With: dashboard` (chống CSRF kèm `SameSite=Strict`); thiếu thì 403 `CSRF_HEADER_REQUIRED`. Hai endpoint đăng ký của Agent (Mục 6) được miễn.
 
 ## Quy Ước Chung
 
@@ -207,6 +207,9 @@ Header `Authorization: Bearer <fetch_code>`.
 | `DUPLICATE_REQUIRES_REINSTALL` | 409 | Duyệt yêu cầu có cờ trùng thành máy mới | D-014, INV-009 |
 | `LAST_ACTIVE_ADMIN` | 409 | Vô hiệu hóa admin hoạt động cuối cùng | — |
 | `RATE_LIMITED` | 429 | Vượt giới hạn tần suất | — |
+| `CSRF_HEADER_REQUIRED` | 403 | Request ghi thiếu header `X-Requested-With: dashboard` | Mục Authentication |
+| `INTERNAL_ERROR` | 500 | Lỗi không lường trước; chi tiết chỉ ghi log server, không trả về client | — |
+| `HTTP_ERROR` | 4xx khác | Lỗi giao thức chung do framework (413, 415…) | — |
 
 ## Idempotency & Concurrency
 
