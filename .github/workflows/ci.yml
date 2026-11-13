@@ -33,6 +33,19 @@ jobs:
     name: Server (Node 20)
     runs-on: ubuntu-22.04
     defaults: { run: { working-directory: server } }
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: nfclab_test
+          POSTGRES_USER: nfclab
+          POSTGRES_PASSWORD: nfclab-dev
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U nfclab -d nfclab_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://nfclab:nfclab-dev@127.0.0.1:5432/nfclab_test
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

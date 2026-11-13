@@ -67,6 +67,15 @@ d('baseline migrations', () => {
   });
 
   describe('constraints', () => {
+    it('workstations: mqtt_identity cannot carry MQTT topic characters (chk_workstations_mqtt_identity)', async () => {
+      const code = await pgCode(
+        q(
+          `INSERT INTO workstations (mqtt_identity, machine_id, mac_address, hostname, public_key)
+           VALUES ('ws/#', 'machine-bad', '00:11:22:33:44:99', 'host-bad', 'pk')`,
+        ),
+      );
+      expect(code).toBe('23514');
+    });
     it('cards: unbound card cannot have an owner (chk_cards_owner_unbound)', async () => {
       const u = await user('SV-CARD');
       const code = await pgCode(

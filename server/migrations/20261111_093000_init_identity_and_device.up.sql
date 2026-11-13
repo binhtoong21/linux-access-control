@@ -63,8 +63,8 @@ CREATE INDEX idx_group_members_user ON group_members (user_id);
 
 CREATE TABLE zones (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name VARCHAR(128) NOT NULL,
-  location VARCHAR(255) NOT NULL,
+  name VARCHAR(128) NOT NULL CONSTRAINT chk_zones_name CHECK (length(btrim(name)) > 0),
+  location VARCHAR(255) NOT NULL CONSTRAINT chk_zones_location CHECK (length(btrim(location)) > 0),
   description TEXT DEFAULT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -74,7 +74,8 @@ CREATE UNIQUE INDEX uq_zones_name_ci ON zones (lower(btrim(name)));
 
 CREATE TABLE workstations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  mqtt_identity VARCHAR(64) NOT NULL CONSTRAINT uq_workstations_mqtt_identity UNIQUE,
+  mqtt_identity VARCHAR(64) NOT NULL CONSTRAINT uq_workstations_mqtt_identity UNIQUE
+    CONSTRAINT chk_workstations_mqtt_identity CHECK (mqtt_identity ~ '^[A-Za-z0-9_-]{3,64}$'),
   machine_id VARCHAR(64) NOT NULL CONSTRAINT uq_workstations_machine_id UNIQUE,
   mac_address MACADDR NOT NULL CONSTRAINT uq_workstations_mac_address UNIQUE,
   hostname VARCHAR(255) NOT NULL,
