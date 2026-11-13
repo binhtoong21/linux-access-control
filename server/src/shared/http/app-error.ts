@@ -1,14 +1,18 @@
 import { HttpException, ValidationError } from '@nestjs/common';
 
 // Error codes of 08-api/api.md "Error Codes"; each code has one fixed HTTP status.
-// Codes of later modules (INVALID_UID, CARD_ALREADY_BOUND, ...) are added with those modules.
+// Codes of later modules (INVALID_CSR, INVALID_FETCH_CODE, ...) are added with those modules.
 export const ERROR_STATUS = {
   VALIDATION_ERROR: 400,
+  INVALID_UID: 400,
+  RANDOM_UID_NOT_SUPPORTED: 400,
   INVALID_CREDENTIALS: 401,
   UNAUTHORIZED: 401,
   CSRF_HEADER_REQUIRED: 403,
   NOT_FOUND: 404,
   DUPLICATE: 409,
+  CARD_ALREADY_BOUND: 409,
+  REFERENCED_BY_SCHEDULE: 409,
   INVALID_STATE_TRANSITION: 409,
   LAST_ACTIVE_ADMIN: 409,
   RATE_LIMITED: 429,

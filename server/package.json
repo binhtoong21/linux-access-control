@@ -15,7 +15,8 @@
     "db:migrate": "pnpm build && node dist/infra/database/migrate-cli.js up",
     "db:rollback": "pnpm build && node dist/infra/database/migrate-cli.js down",
     "db:status": "pnpm build && node dist/infra/database/migrate-cli.js status",
-    "admin:create": "pnpm build && node dist/identity/create-admin-cli.js"
+    "admin:create": "pnpm build && node dist/identity/create-admin-cli.js",
+    "keys:init": "pnpm build && node dist/shared/crypto/keys-cli.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
