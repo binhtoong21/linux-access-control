@@ -2,6 +2,7 @@ import { Controller, Get, Inject, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { Pool } from 'pg';
 import { PG_POOL } from '../infra/database/database.module';
+import { Public } from '../shared/http/auth.decorators';
 
 const DB_CHECK_TIMEOUT_MS = 2000;
 
@@ -17,6 +18,7 @@ export interface HealthReport {
 export class SystemHealthController {
   constructor(@Inject(PG_POOL) private readonly pool: Pool) {}
 
+  @Public()
   @Get('health')
   async health(@Res({ passthrough: true }) res: Response): Promise<HealthReport> {
     const db = (await this.dbReachable()) ? 'ok' : 'down';
