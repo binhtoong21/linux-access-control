@@ -69,9 +69,12 @@ cd edge && python -m venv .venv && .venv/bin/pip install -e ".[dev]" && .venv/bi
 
 # Server (Node ≥ 20, pnpm)
 cd server && pnpm install && pnpm test && pnpm build
+# Test DB thật (migration, health; DB bị xóa sạch mỗi lần chạy, tạo một lần: docker compose exec postgres createdb -U nfclab nfclab_test):
+#   TEST_DATABASE_URL=postgres://nfclab:nfclab-dev@127.0.0.1:5432/nfclab_test pnpm test
+# Áp migration: DATABASE_URL=postgres://nfclab:nfclab-dev@127.0.0.1:5432/nfclab pnpm db:migrate
 
 # Hạ tầng dev (Docker): PostgreSQL + Mosquitto mTLS
-cd deploy/dev && bash gen-dev-certs.sh && docker compose up -d
+cd deploy/dev && bash gen-dev-certs.sh && docker compose up -d   # PG_PORT=15432 nếu máy đã có PostgreSQL ở 5432
 ```
 
 Mọi thay đổi định dạng bản tin hoặc mật mã bắt đầu từ `contracts/` (xem [contracts/README.md](contracts/README.md)); test của cả hai phía chạy trên cùng các tệp đó.

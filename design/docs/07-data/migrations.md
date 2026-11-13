@@ -7,10 +7,10 @@
 ## 1. Quy Ước Đặt Tên & Kỷ Luật Migration
 
 ### 1.1. Phía Server (PostgreSQL 15)
-- **Định dạng tên file:** `YYYYMMDD_HHMMSS_<mô_tả_ngắn>.sql` (hoặc migration pair `.up.sql` / `.down.sql` trong NestJS migration runner).
+- **Định dạng tên file:** cặp `server/migrations/YYYYMMDD_HHMMSS_<mô_tả_ngắn>.up.sql` / `.down.sql`, áp theo thứ tự tên; lệnh `pnpm db:migrate`, `db:rollback [n]`, `db:status`.
 - **Quy tắc bất di bất dịch:**
   1. **Không sửa migration đã chạy trên môi trường chung/production:** Mọi thay đổi sửa cột hoặc bổ sung index phải tạo file migration mới.
-  2. **Transactional DDL:** Toàn bộ câu lệnh thay đổi bảng/index bọc trong `BEGIN; ... COMMIT;` (trừ `CREATE INDEX CONCURRENTLY` cho bảng lớn nếu chạy online trên production).
+  2. **Transactional DDL:** Mỗi migration chạy trọn trong một giao dịch; runner `server/src/infra/database/migrator.ts` tự bọc `BEGIN … COMMIT` và ghi `schema_migrations` trong cùng giao dịch, dưới advisory lock (file `.sql` không tự viết `BEGIN/COMMIT`) (trừ `CREATE INDEX CONCURRENTLY` cho bảng lớn nếu chạy online trên production).
   3. **Bắt buộc kèm chiến lược rollback (`down`):** Mọi migration thêm bảng/cột đều phải có script hoàn tác tương ứng; riêng bước xóa cột/bảng phải tách pha (Expand-Contract).
   4. **An toàn cho bảng bất biến (`audit_logs`, `sessions`):** Trigger chống `UPDATE`/`DELETE` ở tầng CSDL KHÔNG được vô hiệu hóa trong migration nghiệp vụ thường; chỉ migration nâng cấp cấu trúc chính thức mới được `ALTER TABLE`. Down migration của baseline chỉ dùng cho môi trường dev/test; trên môi trường có dữ liệu thật không chạy down làm mất `audit_logs`.
 
@@ -27,9 +27,9 @@
 ### 2.1. Central Server (PostgreSQL 15)
 | # | Migration File | Phạm vi Bảng / Đối tượng | Date | Status | Rollback |
 |---|---|---|---|---|---|
-| 1 | `20261111_093000_init_identity_and_device.sql` | `users`, `cards`, `groups`, `group_members`, `admin_accounts`, `zones`, `workstations`, `workstation_profiles`, `enrollment_requests`, `revoked_certificates` + Partial Unique Index `uq_ws_default_profile` & CHECK `chk_cards_owner_unbound` | 2026-11-11 | Pending | ✅ (`DROP TABLE ... CASCADE`) |
-| 2 | `20261111_093100_init_scheduling_and_distribution.sql` | `schedules` (XOR subject/target + Recurrence checks), `snapshots` (`payload_raw BYTEA`, `hmac_signature`), `sync_states`, `server_outbox` + partial index pending | 2026-11-11 | Pending | ✅ (`DROP TABLE ... CASCADE`) |
-| 3 | `20261111_093200_init_operations_and_triggers.sql` | `workstation_statuses`, `sessions` (CHECK `chk_sessions_lifecycle` + `uq_sessions_active_ws`), `audit_logs`, `ingest_rejects`, `workstation_alerts`, `admin_audit_logs` + Trigger `trg_admin_audit_append_only`, `trg_audit_logs_append_only` (`INV-008`) & `trg_sessions_immutable_terminal` (`INV-007`, cho phép `inferred → reported` một lần) | 2026-11-11 | Pending | ✅ chỉ dev/test (`DROP TRIGGER / TABLE`) |
+| 1 | `20261111_093000_init_identity_and_device` | `users`, `cards`, `groups`, `group_members`, `admin_accounts`, `zones`, `workstations`, `workstation_profiles`, `enrollment_requests`, `revoked_certificates` + Partial Unique Index `uq_ws_default_profile`, CHECK `chk_cards_owner_unbound`, `chk_workstations_mqtt_identity` (regex chống ký tự topic MQTT) | 2026-11-11 | Applied (dev, 2026-11-13) | ✅ (`DROP TABLE ... CASCADE`) |
+| 2 | `20261111_093100_init_scheduling_and_distribution` | `schedules` (XOR subject/target + Recurrence checks), `snapshots` (`payload_raw BYTEA`, `hmac_signature`), `sync_states`, `server_outbox` + partial index pending | 2026-11-11 | Applied (dev, 2026-11-13) | ✅ (`DROP TABLE ... CASCADE`) |
+| 3 | `20261111_093200_init_operations_and_triggers` | `workstation_statuses`, `sessions` (CHECK `chk_sessions_lifecycle` + `uq_sessions_active_ws`), `audit_logs`, `ingest_rejects`, `workstation_alerts`, `admin_audit_logs` + Trigger `trg_admin_audit_append_only`, `trg_audit_logs_append_only` (`INV-008`) & `trg_sessions_immutable_terminal` (`INV-007`, cho phép `inferred → reported` một lần) | 2026-11-11 | Applied (dev, 2026-11-13) | ✅ chỉ dev/test (`DROP TRIGGER / TABLE`) |
 
 ### 2.2. Edge Agent (SQLite 3 WAL — `/var/lib/nfc-agent/edge.db`)
 | `user_version` | Migration Script | Nội dung Lược đồ & Chỉ mục | Rollback / Khôi phục |
