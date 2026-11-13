@@ -8,8 +8,10 @@ import { AuthController } from './auth.controller';
 import { AuthGuard } from './auth.guard';
 import { AuthService } from './auth.service';
 import { LoginThrottle } from './login-throttle';
+import { UsersController } from './users.controller';
+import { UsersService } from './users.service';
 
-// Identity bounded context (03-domain): admin accounts and sessions now; users, groups, cards in M2.3.
+// Identity bounded context (03-domain): admin accounts and sessions, users, groups, cards.
 @Module({
   imports: [
     JwtModule.registerAsync({
@@ -21,10 +23,11 @@ import { LoginThrottle } from './login-throttle';
       }),
     }),
   ],
-  controllers: [AuthController, AdminsController],
+  controllers: [AuthController, AdminsController, UsersController],
   providers: [
     AuthService,
     AdminsService,
+    UsersService,
     { provide: LoginThrottle, useValue: new LoginThrottle() },
     { provide: APP_GUARD, useClass: AuthGuard },
   ],
