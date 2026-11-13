@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { APP_CONFIG, AppConfig } from '../config';
+import { AdminsController } from './admins.controller';
+import { AdminsService } from './admins.service';
 import { AuthController } from './auth.controller';
 import { AuthGuard } from './auth.guard';
 import { AuthService } from './auth.service';
@@ -19,9 +21,10 @@ import { LoginThrottle } from './login-throttle';
       }),
     }),
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, AdminsController],
   providers: [
     AuthService,
+    AdminsService,
     { provide: LoginThrottle, useValue: new LoginThrottle() },
     { provide: APP_GUARD, useClass: AuthGuard },
   ],
