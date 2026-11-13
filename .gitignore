@@ -104,3 +104,4 @@ coverage/
 # --- Dev environment (generated CA, certs, data) ---
 deploy/dev/certs/
 deploy/dev/data/
+deploy/dev/keys/

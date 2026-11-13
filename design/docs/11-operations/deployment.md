@@ -145,6 +145,8 @@ Một nơi duy nhất cho mọi tham số trước đây ghi "chốt sau". Giá 
 | Cổng HTTP | `PORT` | `8000` | Chỉ nghe `127.0.0.1`, sau Nginx |
 | Broker | `MQTT_URL`, `MQTT_CERT`, `MQTT_KEY`, `MQTT_CA` | `mqtts://localhost:8883` | Chứng chỉ `CN = nfc-server` |
 | Thư mục khóa | `KEYS_DIR` | `/etc/nfc-server/keys` | `0700`, chủ `nfcsrv` |
+| Tệp khóa UID thẻ | `KEYS_DIR/uid-index.key`, `KEYS_DIR/uid-enc-<key_id>.key` | — | Mỗi tệp 32 byte ngẫu nhiên dạng 64 ký tự hex, quyền `0600` (Server từ chối khởi động nếu tệp đọc được bởi group/others). `uid-index.key` là `K_index` của blind index (không xoay trong MVP); `uid-enc-*` là khóa AES-256-GCM, mọi tệp đều được nạp để giải mã. Tạo bằng `pnpm keys:init`: chỉ tạo tệp còn thiếu, không bao giờ ghi đè. Thiếu khóa thì Server dừng ngay lúc khởi động |
+| Khóa AES đang dùng để mã hóa UID | `UID_ENC_KEY_ID` | `k1` | `^[A-Za-z0-9_-]{1,32}$`. Xoay khóa: đặt id mới rồi chạy `pnpm keys:init` để tạo tệp, giữ tệp cũ để đọc bản ghi cũ |
 | Tệp CRL | `CRL_PATH` | `/etc/mosquitto/nfc/crl.pem` | Server ghi, Mosquitto đọc |
 | Lệnh khởi động lại broker | `BROKER_RESTART_CMD` | `systemctl restart mosquitto` | Được phép qua sudoers giới hạn đúng lệnh này |
 | Tham số nghiệp vụ | bảng `Bảng Tham Số` | như trên | Đọc lúc khởi động |

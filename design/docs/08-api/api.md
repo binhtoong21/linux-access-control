@@ -26,7 +26,8 @@ Mọi request ghi (`POST`/`PUT`/`PATCH`/`DELETE`) từ Dashboard, kể cả `POS
 ## Quy Ước Chung
 
 - JSON UTF-8; thời gian dạng ISO 8601 UTC (`2026-11-11T09:30:00Z`); giờ trong ngày của lịch là `HH:MM` theo `Asia/Ho_Chi_Minh`.
-- Danh sách: `?limit=` (mặc định 50, tối đa 200) và `?cursor=` (con trỏ mờ trả về ở `next_cursor`). Danh sách nhỏ (zone, nhóm, admin) trả hết, không phân trang.
+- Danh sách: `?limit=` (mặc định 50, tối đa 200) và `?cursor=` (con trỏ mờ trả về ở `next_cursor`); trang có dạng `{items: [...], next_cursor}`, `next_cursor = null` ở trang cuối, cursor sai thì 400 `VALIDATION_ERROR`. Danh sách nhỏ (zone, nhóm, admin) trả hết, không phân trang.
+- Endpoint hành động gọi khi đối tượng đã ở đúng trạng thái đích (disable thẻ đã `disabled`, deactivate user đã `inactive`) trả 200 với trạng thái hiện tại, không ghi audit và không sinh event. Chuyển trạng thái không có trong state machine mới trả 409 `INVALID_STATE_TRANSITION`.
 - Không có `DELETE` cho user và audit (XINV-001, INV-008); "xóa user" là chuyển `inactive`.
 - Mọi thao tác ghi thành công được ghi vào `admin_audit_logs` cùng giao dịch (D-020).
 - Thay đổi trạng thái dùng endpoint hành động (`POST /cards/{id}/disable`) thay vì `PATCH status` tự do, để Server kiểm tra đúng chuyển trạng thái hợp lệ (INV-006).
@@ -59,7 +60,7 @@ Mọi request ghi (`POST`/`PUT`/`PATCH`/`DELETE`) từ Dashboard, kể cả `POS
 | PATCH | `/groups/{id}` | Sửa | `{name?, description?}` | 200 |
 | DELETE | `/groups/{id}` | Xóa | — | 204; 409 `REFERENCED_BY_SCHEDULE` (BR-017) |
 | GET | `/groups/{id}/members` | Thành viên | — | 200 `User[]` |
-| PUT | `/groups/{id}/members` | Thêm thành viên (hàng loạt) | `{user_ids: []}` | 200 |
+| PUT | `/groups/{id}/members` | Thêm thành viên (hàng loạt, chỉ thêm, thành viên đã có giữ nguyên) | `{user_ids: []}` (1–500 id) | 200 `{added}`; 400 `VALIDATION_ERROR` kèm `details` liệt kê id không tồn tại, khi đó không thêm ai |
 | DELETE | `/groups/{id}/members/{user_id}` | Bớt thành viên | — | 204 |
 
 ### Thẻ (FR-032, FR-033, FR-073)
