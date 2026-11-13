@@ -7,6 +7,8 @@ import { AdminsService } from './admins.service';
 import { AuthController } from './auth.controller';
 import { AuthGuard } from './auth.guard';
 import { AuthService } from './auth.service';
+import { GroupsController } from './groups.controller';
+import { GroupsService } from './groups.service';
 import { LoginThrottle } from './login-throttle';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
@@ -23,11 +25,12 @@ import { UsersService } from './users.service';
       }),
     }),
   ],
-  controllers: [AuthController, AdminsController, UsersController],
+  controllers: [AuthController, AdminsController, UsersController, GroupsController],
   providers: [
     AuthService,
     AdminsService,
     UsersService,
+    GroupsService,
     { provide: LoginThrottle, useValue: new LoginThrottle() },
     { provide: APP_GUARD, useClass: AuthGuard },
   ],
