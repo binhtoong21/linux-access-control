@@ -4,17 +4,23 @@
   "private": true,
   "description": "Central server: identity, device, scheduling, distribution, operations (ADR-006)",
   "license": "UNLICENSED",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "jest"
+    "test": "jest",
+    "db:migrate": "pnpm build && node dist/infra/database/migrate-cli.js up",
+    "db:rollback": "pnpm build && node dist/infra/database/migrate-cli.js down",
+    "db:status": "pnpm build && node dist/infra/database/migrate-cli.js status"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
     "@nestjs/core": "^11.0.0",
     "@nestjs/platform-express": "^11.0.0",
+    "pg": "^8.23.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1"
   },
@@ -22,6 +28,7 @@
     "@nestjs/testing": "^11.0.0",
     "@types/jest": "^29.5.12",
     "@types/node": "^20.14.0",
+    "@types/pg": "^8.23.1",
     "ajv": "^8.17.1",
     "jest": "^29.7.0",
     "ts-jest": "^29.2.5",
@@ -30,7 +37,10 @@
   "jest": {
     "preset": "ts-jest",
     "testEnvironment": "node",
-    "roots": ["<rootDir>/test", "<rootDir>/src"],
+    "roots": [
+      "<rootDir>/test",
+      "<rootDir>/src"
+    ],
     "testRegex": ".*\\.spec\\.ts$"
   }
 }
