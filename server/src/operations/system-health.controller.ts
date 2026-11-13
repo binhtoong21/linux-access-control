@@ -1,4 +1,5 @@
-import { Controller, Get, Inject, ServiceUnavailableException } from '@nestjs/common';
+import { Controller, Get, Inject, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { Pool } from 'pg';
 import { PG_POOL } from '../infra/database/database.module';
 
@@ -17,16 +18,15 @@ export class SystemHealthController {
   constructor(@Inject(PG_POOL) private readonly pool: Pool) {}
 
   @Get('health')
-  async health(): Promise<HealthReport> {
+  async health(@Res({ passthrough: true }) res: Response): Promise<HealthReport> {
     const db = (await this.dbReachable()) ? 'ok' : 'down';
-    const report: HealthReport = {
+    if (db === 'down') res.status(503);
+    return {
       status: db === 'ok' ? 'ok' : 'degraded',
       version: process.env.npm_package_version ?? '0.1.0',
       db,
       warnings: [],
     };
-    if (db === 'down') throw new ServiceUnavailableException(report);
-    return report;
   }
 
   private async dbReachable(): Promise<boolean> {

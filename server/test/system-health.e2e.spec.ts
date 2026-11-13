@@ -1,27 +1,16 @@
-import { INestApplication } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
-import { AddressInfo } from 'node:net';
-import { AppModule } from '../src/app.module';
-
-async function start(databaseUrl: string): Promise<{ app: INestApplication; base: string }> {
-  process.env.DATABASE_URL = databaseUrl;
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
-  const app = moduleRef.createNestApplication();
-  app.setGlobalPrefix('api/v1');
-  await app.listen(0, '127.0.0.1');
-  return { app, base: `http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}` };
-}
+import { startApp, TestApp } from './support/app';
 
 describe('GET /api/v1/system/health', () => {
-  const saved = process.env.DATABASE_URL;
+  const saved = { db: process.env.DATABASE_URL, jwt: process.env.JWT_SECRET };
   afterAll(() => {
-    process.env.DATABASE_URL = saved;
+    process.env.DATABASE_URL = saved.db;
+    process.env.JWT_SECRET = saved.jwt;
   });
 
   describe('database unreachable', () => {
-    let ctx: { app: INestApplication; base: string };
+    let ctx: TestApp;
     beforeAll(async () => {
-      ctx = await start('postgres://nobody:x@127.0.0.1:1/none');
+      ctx = await startApp('postgres://nobody:x@127.0.0.1:1/none');
     });
     afterAll(() => ctx.app.close());
 
@@ -30,13 +19,19 @@ describe('GET /api/v1/system/health', () => {
       expect(res.status).toBe(503);
       expect(await res.json()).toMatchObject({ status: 'degraded', db: 'down' });
     });
+
+    it('answers unknown routes in the API error format', async () => {
+      const res = await fetch(`${ctx.base}/api/v1/no-such-route`);
+      expect(res.status).toBe(404);
+      expect(((await res.json()) as any).error.code).toBe('NOT_FOUND');
+    });
   });
 
   const url = process.env.TEST_DATABASE_URL;
   (url ? describe : describe.skip)('database reachable', () => {
-    let ctx: { app: INestApplication; base: string };
+    let ctx: TestApp;
     beforeAll(async () => {
-      ctx = await start(url as string);
+      ctx = await startApp(url as string);
     });
     afterAll(() => ctx.app.close());
 
