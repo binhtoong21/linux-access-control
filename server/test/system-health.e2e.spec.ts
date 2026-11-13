@@ -23,7 +23,7 @@ describe('GET /api/v1/system/health', () => {
     it('answers unknown routes in the API error format', async () => {
       const res = await fetch(`${ctx.base}/api/v1/no-such-route`);
       expect(res.status).toBe(404);
-      expect(((await res.json()) as any).error.code).toBe('NOT_FOUND');
+      expect(((await res.json()) as { error: { code: string } }).error.code).toBe('NOT_FOUND');
     });
   });
 
