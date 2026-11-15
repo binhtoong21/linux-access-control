@@ -2,13 +2,15 @@ import { Inject, Injectable, Logger, OnApplicationBootstrap, OnApplicationShutdo
 import { connect, MqttClient } from 'mqtt';
 import { readFileSync } from 'node:fs';
 import { APP_CONFIG, AppConfig } from '../config';
+import { IngestService } from '../operations/ingest.service';
+import { SessionInferenceService } from '../operations/session-inference.service';
 import { OutboxWorker } from './outbox-worker';
 import { ReconcileResult } from './snapshot.service';
 import { OutgoingMessage, SyncService } from './sync.service';
 
-/** Topics the server reads (ADR-002 §1); outbox and status are added with the ingest of audit records. */
-export const SUBSCRIPTIONS = ['lab/workstation/+/hello', 'lab/workstation/+/heartbeat'];
-const TOPIC = /^lab\/workstation\/([A-Za-z0-9_-]{3,64})\/(hello|heartbeat)$/;
+/** Topics the server reads (ADR-002 §1). `status` (LWT) is only a hint and not used: the heartbeat decides (BR-019). */
+export const SUBSCRIPTIONS = ['lab/workstation/+/hello', 'lab/workstation/+/heartbeat', 'lab/workstation/+/outbox'];
+const TOPIC = /^lab\/workstation\/([A-Za-z0-9_-]{3,64})\/(hello|heartbeat|outbox)$/;
 const OFFLINE_CHECK_MS = 30_000;
 const RECONNECT_MS = 2_000;
 
@@ -30,6 +32,8 @@ export class MqttGateway implements OnApplicationBootstrap, OnApplicationShutdow
   constructor(
     private readonly sync: SyncService,
     private readonly worker: OutboxWorker,
+    private readonly ingest: IngestService,
+    private readonly inference: SessionInferenceService,
     @Inject(APP_CONFIG) private readonly config: MqttConfig,
   ) {}
 
@@ -57,7 +61,7 @@ export class MqttGateway implements OnApplicationBootstrap, OnApplicationShutdow
     });
     client.on('message', (topic, payload) => void this.receive(topic, payload));
     client.on('error', (err) => this.logger.error(`broker error: ${err.message}`));
-    this.timer = setInterval(() => void this.checkOffline(), OFFLINE_CHECK_MS);
+    this.timer = setInterval(() => void this.housekeeping(), OFFLINE_CHECK_MS);
     this.timer.unref();
   }
 
@@ -81,7 +85,13 @@ export class MqttGateway implements OnApplicationBootstrap, OnApplicationShutdow
     if (!match) return [];
     const [, identity, kind] = match;
     try {
-      const replies = kind === 'hello' ? await this.sync.handleHello(identity, payload) : await this.sync.handleHeartbeat(identity, payload);
+      let replies: OutgoingMessage[];
+      if (kind === 'outbox') {
+        const { ack } = await this.ingest.handleOutbox(identity, payload);
+        replies = ack ? [ack] : [];
+      } else {
+        replies = kind === 'hello' ? await this.sync.handleHello(identity, payload) : await this.sync.handleHeartbeat(identity, payload);
+      }
       for (const reply of replies) await this.send(reply);
       return replies;
     } catch (err) {
@@ -99,12 +109,15 @@ export class MqttGateway implements OnApplicationBootstrap, OnApplicationShutdow
     }
   }
 
-  private async checkOffline(): Promise<void> {
+  /** Every 30s: workstations without heartbeat go offline (BR-019), finished drains close lost sessions (XINV-008). */
+  async housekeeping(): Promise<void> {
     try {
       const offline = await this.sync.markOffline();
       if (offline.length > 0) this.logger.log(`offline: ${offline.join(', ')}`);
+      const drained = await this.inference.inferAbandoned();
+      if (drained.length > 0) this.logger.log(`draining finished: ${drained.join(', ')}`);
     } catch (err) {
-      this.logger.error(`offline check failed: ${err instanceof Error ? err.message : String(err)}`);
+      this.logger.error(`housekeeping failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 

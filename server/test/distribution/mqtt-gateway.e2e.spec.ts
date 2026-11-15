@@ -116,7 +116,7 @@ describe('MQTT settings', () => {
 
   it('ignores topics it does not handle and payloads that name another workstation', async () => {
     const hello = report('hello-v1', 'lab-a-01', 0);
-    for (const topic of ['lab/workstation/lab-a-01/outbox', 'lab/workstation/x/hello', 'lab/workstation/lab-a-01/hello/extra', 'other/topic']) {
+    for (const topic of ['lab/workstation/lab-a-01/status', 'lab/workstation/x/hello', 'lab/workstation/lab-a-01/hello/extra', 'other/topic']) {
       expect(await gateway.receive(topic, hello)).toEqual([]);
     }
     expect(await gateway.receive('lab/workstation/lab-a-02/hello', hello)).toEqual([]);
@@ -141,6 +141,35 @@ describe('MQTT settings', () => {
     const run = await worker.runOnce();
     expect(run.events).toBeGreaterThan(0);
     expect(sent.map(version)).toEqual([3]);
+  });
+
+  it('applies an outbox batch and sends the ACK; an untrusted batch gets no reply', async () => {
+    const batch = (identity: string) =>
+      Buffer.from(
+        JSON.stringify({
+          schema: 'outbox-v1',
+          workstation_id: identity,
+          batch_id: 'b-1',
+          from_seq: 7,
+          to_seq: 7,
+          records: [
+            {
+              entry_id: '5b0d3a1e-9c4f-4a2b-8e6d-1f2a3b4c5d6e',
+              outbox_seq: 7,
+              occurred_at: Date.now() / 1000,
+              event_type: 'security_alert',
+              payload: { kind: 'edge_db_recovered', detail: { lost_outbox_entries: 1 } },
+            },
+          ],
+        }),
+      );
+    const replies = await gateway.receive('lab/workstation/lab-a-01/outbox', batch('lab-a-01'));
+    expect(replies.map((m) => [m.topic, m.retain])).toEqual([['lab/workstation/lab-a-01/command/ack', false]]);
+    expect(JSON.parse(replies[0].payload.toString('utf8'))).toMatchObject({ command: 'ack_outbox', acked_seq: 7 });
+    expect(sent).toEqual(replies);
+    expect((await api.pool.query('SELECT kind FROM workstation_alerts')).rows).toEqual([{ kind: 'edge_db_recovered' }]);
+    expect(await gateway.receive('lab/workstation/lab-a-01/outbox', batch('lab-a-02'))).toEqual([]);
+    expect(sent).toHaveLength(1);
   });
 
   it('survives a send that fails: the reply is dropped and the worker still finishes', async () => {
