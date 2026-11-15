@@ -147,6 +147,16 @@ Admin được tắt profile đang là mặc định, hoặc để máy không c
 Yêu cầu cho Dashboard (M4): profile mặc định là nút chọn một (không bỏ chọn được); tắt profile đang là mặc định phải qua hộp xác nhận nêu rõ hệ quả.
 **Nguồn:** [08-api/api.md](08-api/api.md) "Zone và Máy trạm", FR-007, D-009, D-019.
 
+### D-026: Nhận nhật ký từ máy và API đọc lịch sử (M3.3)
+1. **ACK luôn tới `to_seq` khi lô tin được**, kể cả khi mọi mục đều lỗi; chỉ không ACK khi chính lô không tin được (không phải JSON, thiếu trường khung, sai định danh, máy lạ). Một mục lỗi không bao giờ làm kẹt hàng đợi của máy (D-015.2).
+2. **Phiên kết thúc suy luận sau reboot:** máy ở `Draining` quá 5 phút thì mọi phiên `active` của lần khởi động cũ thành `abandoned` / `workstation_rebooted` / `inferred`, `ended_at = max(started_at, min(expires_at, lúc Server thấy boot mới))`. Server không biết chính xác lúc máy tắt nên đây là cận trên hợp lý: phiên không thể kéo dài quá hạn của nó, cũng không thể sau lúc máy đã khởi động lại. Báo cáo thật đến sau vẫn thay được một lần. Chưa dùng `pending_outbox_count = 0` trong Hello để kết thúc chờ sớm.
+3. **`ingest_rejects` không chứa UID thô** (sửa chỗ mâu thuẫn giữa D-015 "giữ nguyên văn" và NFR-SEC03): `card_uid` thành `"[redacted]"` kèm blind index để vẫn tra theo thẻ.
+4. **Lọc nhật ký theo ảnh chụp lúc ghi** (`workstation_snapshot`, `user_snapshot`), không theo dữ liệu hiện tại: đổi tên, đổi zone sau đó không viết lại lịch sử.
+5. **Phân trang keyset** theo `(thời gian, id)` giảm dần, con trỏ giữ thời gian tới micro giây.
+
+Giới hạn: chưa kiểm với Agent thật gửi outbox (M3.6).
+**Nguồn:** [08-api/events.md](08-api/events.md) §3.3, [08-api/api.md](08-api/api.md), D-015, XINV-006, XINV-008, INV-007, NFR-SEC03.
+
 ### D-025: Cổng MQTT phía Server và quy tắc trả lời Hello / heartbeat (M3.2)
 1. **Server kiểm bản tin nhận được bằng chính `contracts/schemas` lúc chạy** (Ajv), không viết lại luật ở mã nguồn; `contracts/` là nguồn sự thật thật sự cho cả hai phía.
 2. **`acked_version` lưu đúng giá trị máy báo, không lấy max.** Máy dựng lại `edge.db` báo version 0 phải được gửi lại snapshot; nếu giữ max thì Server tưởng máy đã đồng bộ và chỉ gửi lease (máy sẽ từ chối vì version không khớp).

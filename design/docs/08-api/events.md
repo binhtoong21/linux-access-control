@@ -187,6 +187,8 @@ Quy tắc: `card_uid = null` khi không đọc được UID (`error`); `user`, `
 ```
 `kind` ∈ `snapshot_signature_invalid`, `edge_db_recovered`, `key_version_mismatch`, `teardown_failed_stuck_resource` (ADR-008: phiên cũ không dọn được sau 5s). Tên `security_alert` giữ cho gọn; thực chất là "cảnh báo từ máy cần Admin xem".
 
+**Chi tiết hiện thực (D-026):** lô chỉ bị bỏ qua, không ACK, khi chính lô không tin được (không phải JSON, thiếu `to_seq`/`records`, `workstation_id` khác định danh trên topic, máy lạ); mọi trường hợp khác đều ACK tới `to_seq`. Mục trùng: `entry_id` đã có (audit, cảnh báo), phiên đã có theo `session_id` hoặc `decision_entry_id`, `session_ended` cho phiên đã có kết thúc `reported`. Mục lỗi (loại lạ, sai kiểu, vi phạm ràng buộc CSDL, `session_ended` cho phiên Server không biết) vào `ingest_rejects` đúng một lần dù lô được gửi lại. `session_started` đóng phiên `active` cũ của máy thành `abandoned` / `os_session_lost` / `inferred`, `ended_at = max(started_at cũ, started_at mới)`.
+
 **Xử lý phía Server (D-015):** mỗi mục áp dụng trong một savepoint riêng; mục trùng `entry_id` bỏ qua; mục không áp dụng được vào `ingest_rejects`; lô luôn được ACK đến `to_seq`. `session_ended` thay kết quả suy luận đúng một lần; `session_started` khi máy còn phiên `active` cũ thì phiên cũ được suy luận kết thúc trước.
 
 ### 3.4. Status / LWT

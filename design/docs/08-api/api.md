@@ -173,6 +173,11 @@ Lọc `GET /schedules` (FR-022, trả lời "ai được vào đâu"): `workstat
 | GET | `/admin-audit-logs` | Nhật ký thao tác Admin (D-020) | `?admin_id=`, `?entity_type=`, `?entity_id=`, `?from=`, `?to=` | 200 trang |
 | GET | `/workstation-alerts` | Cảnh báo từ máy (`snapshot_signature_invalid`, `edge_db_recovered`, `key_version_mismatch`, `teardown_failed_stuck_resource`) | `?workstation_id=`, `?from=` | 200 trang |
 
+Quy ước chung của các danh sách trên (M3.3, D-026): trang `{items, next_cursor}`, mới nhất trước, hòa thời gian thì xếp theo `id` (con trỏ giữ thời gian tới micro giây nên không lặp hay sót bản ghi giữa hai trang); `from` tính cả, `to` không tính, cả hai ISO 8601.
+- `/audit-logs`: `zone_id` và `workstation_id` lọc theo ảnh chụp máy lưu kèm bản ghi (máy đổi zone sau đó không làm đổi lịch sử); `user_id` theo ảnh chụp user; `card_uid` nhận mọi cách viết mà chuẩn hóa UID chấp nhận, sai thì 400 `INVALID_UID`. Mỗi mục có `has_card_uid` thay cho UID.
+- `/ingest-rejects`: `?resolved=` nhận `false` (mặc định), `true`, `all`. `resolve` gọi lại là no-op, giữ người và ghi chú lần đầu; được ghi `admin_audit_logs` (`ingest_reject.resolve`). `raw_record` không chứa UID thô: `card_uid` được thay bằng `"[redacted]"` kèm `card_uid_index`.
+- `/sessions` lọc thời gian theo `started_at`; mỗi mục kèm `user {id, external_id, full_name}` và `workstation {id, mqtt_identity}`.
+
 `occurred_at` là giờ của máy trạm; Dashboard hiển thị kèm `received_at` để thấy bản ghi đến muộn hoặc máy lệch giờ.
 
 ### Hệ thống

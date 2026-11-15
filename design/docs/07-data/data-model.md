@@ -356,7 +356,7 @@ erDiagram
 | `note` | `TEXT` | Yes | `NULL` | Ghi chú xử lý |
 
 - Mỗi bản ghi trong lô được áp dụng trong một savepoint riêng; lỗi thì rollback savepoint đó, ghi một dòng vào đây và tiếp tục. Lô vẫn được ACK đến `to_seq`, nên một mục lỗi không chặn hàng đợi của máy. Dashboard hiển thị số mục lỗi theo máy để Admin xem.
-- Không chứa UID thô: trước khi ghi, server thay `card_uid` trong `raw_record` bằng `card_uid_index`.
+- Không chứa UID thô: trước khi ghi, server thay `card_uid` trong `raw_record` bằng `"[redacted]"` và thêm `card_uid_index` (blind index; `null` nếu UID sai định dạng) (D-026).
 - `CREATE INDEX idx_ingest_rejects_open ON ingest_rejects (workstation_id, received_at DESC) WHERE resolved_at IS NULL;`
 
 #### `workstation_alerts` (cảnh báo an ninh từ máy, `08-api/events.md` §3.3)
