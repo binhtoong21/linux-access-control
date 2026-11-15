@@ -3,7 +3,7 @@ import { Test } from '@nestjs/testing';
 import { AddressInfo } from 'node:net';
 import { AppModule } from '../../src/app.module';
 import { configureApp } from '../../src/app.setup';
-import { testKeysDir } from './keys';
+import { ensureTestCa } from './keys';
 
 export const TEST_JWT_SECRET = 'test-jwt-secret-0123456789abcdef0123456789';
 
@@ -16,7 +16,8 @@ export interface TestApp {
 export async function startApp(databaseUrl: string): Promise<TestApp> {
   process.env.DATABASE_URL = databaseUrl;
   process.env.JWT_SECRET = TEST_JWT_SECRET;
-  process.env.KEYS_DIR = testKeysDir();
+  // CA_CERT_FILE, CA_KEY_FILE and CRL_FILE keep their defaults inside this directory.
+  process.env.KEYS_DIR = await ensureTestCa();
   process.env.UID_ENC_KEY_ID = 'k1';
   // No timers in tests: they call OutboxWorker.runOnce() themselves.
   process.env.SNAPSHOT_WORKER = 'off';
