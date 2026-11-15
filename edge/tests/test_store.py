@@ -93,6 +93,23 @@ class TestApplySnapshot:
     def test_key_version_mismatch(self, store):
         assert store.apply_snapshot(*signed(snapshot_bytes(key_version=1)), NOW)[1] == "key_version_mismatch"
 
+    def test_a_snapshot_signed_with_the_old_key_after_a_reinstall_is_dropped_without_an_alert(self, store):
+        """M3 E2E: after a reinstall the broker delivered the retained snapshot of key_version 1, signed with the old
+        K_m; the agent (key_version 2) raised snapshot_signature_invalid for something that was not an attack."""
+        old_km = bytes(reversed(range(32)))
+        raw = snapshot_bytes(14, key_version=1)
+        assert store.apply_snapshot(raw, crypto.sign(old_km, "snapshot-v1", raw), NOW) == (
+            ApplyResult.REJECTED,
+            "key_version_mismatch",
+        )
+        assert store.meta()["last_apply_error"] == "key_version_mismatch"
+        assert store.snapshot_view() is None
+        assert store.outbox_batch() == []
+        # A wrong signature on the current key version is still an alert.
+        raw = snapshot_bytes(14)
+        assert store.apply_snapshot(raw, crypto.sign(old_km, "snapshot-v1", raw), NOW)[1] == "signature_invalid"
+        assert store.outbox_batch()[0]["payload"]["kind"] == "snapshot_signature_invalid"
+
     def test_other_workstation(self, store):
         assert store.apply_snapshot(*signed(snapshot_bytes(workstation="ws-02")), NOW)[1] == "schema_invalid"
 

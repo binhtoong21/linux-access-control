@@ -206,6 +206,12 @@ class Store:
 
     def apply_snapshot(self, raw: bytes, signature: str, received_local: float) -> tuple[ApplyResult, str | None]:
         """Verify on raw bytes, then replace every snapshot table and profile flag atomically (ADR-003 §4, INV-011)."""
+        if self._for_other_key_version(raw):
+            # D-017: signed for a key generation this workstation no longer has, typically the retained snapshot of
+            # before a reinstall that a restarted broker delivers again. Dropped like any mismatch, but not an attack
+            # to alert about (found in the M3 E2E); its content is never used, only the claimed key_version is read.
+            self.set_apply_error("key_version_mismatch")
+            return ApplyResult.REJECTED, "key_version_mismatch"
         if not crypto.verify(self._identity.km, "snapshot-v1", raw, signature):
             with self._tx():
                 self._db.execute("UPDATE snapshot_meta SET last_apply_error = 'signature_invalid' WHERE id = 1")
@@ -269,6 +275,18 @@ class Store:
                 ),
             )
         return ApplyResult.APPLIED, None
+
+    def _for_other_key_version(self, raw: bytes) -> bool:
+        """Our workstation name with another key_version, read without trusting it (the signature is checked after)."""
+        try:
+            snap = json.loads(raw)
+            return (
+                snap.get("workstation_id") == self._identity.mqtt_identity
+                and isinstance(snap.get("key_version"), int)
+                and snap["key_version"] != self._identity.key_version
+            )
+        except (ValueError, AttributeError):
+            return False
 
     @staticmethod
     def _snapshot_rows(snap: dict):
