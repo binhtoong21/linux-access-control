@@ -278,6 +278,14 @@ Không đi ra ngoài Server. Được ghi vào `server_outbox` **cùng giao dị
 | `WorkstationEnrollmentApproved` | Device | Chính máy đó (snapshot đầu tiên hoặc sau cài lại với `key_version` mới) |
 | `WorkstationDisabled` | Device | Không dựng snapshot; sinh lại CRL và khởi động lại broker (D-014) |
 
+Payload mang đủ dữ liệu để worker tìm máy bị ảnh hưởng cả khi bản ghi gốc đã đổi hoặc đã bị xóa:
+
+- `ScheduleCreated`: `{after: {target_type, target_workstation_id, target_zone_id}}`; `ScheduleDeleted`: `{before: {…}}` cùng dạng.
+- `ScheduleUpdated`: `{before, after}` chỉ gồm các cột đã đổi (target không đổi thì worker đọc target hiện tại từ bảng `schedules`).
+- `ScheduleEnabled`, `ScheduleDisabled`: `{}`.
+- `ZoneDeleted`: `{workstation_ids: [...]}` (các máy vừa bị gỡ zone); zone không có máy thì không phát event.
+- Thao tác không làm đổi dữ liệu (PATCH cùng giá trị, bật lịch đang bật) không phát event.
+
 Khung bản ghi `server_outbox`:
 ```json
 {

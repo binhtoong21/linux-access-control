@@ -88,6 +88,8 @@ UID chỉ đi vào API, không bao giờ được trả ra trong danh sách; ch�
 | GET | `/workstations/{id}/profiles` | Danh mục profile máy báo lên | — | 200 `Profile[]` |
 | PATCH | `/workstations/{id}/profiles/{os_username}` | Bật/tắt, chọn mặc định | `{status?, is_default?}` | 200 |
 
+`Zone`: `{id, name, location, description, workstation_count, created_at, updated_at}`; `GET /zones` trả toàn bộ, sắp theo tên, không phân trang. Tên zone duy nhất sau khi cắt khoảng trắng, không phân biệt hoa thường. `PATCH` không đổi gì trả 200, không ghi nhật ký.
+
 `WorkstationSummary` (đủ cho màn hình phòng máy, FR-042/062):
 ```json
 {
@@ -133,6 +135,12 @@ UID chỉ đi vào API, không bao giờ được trả ra trong danh sách; ch�
   "target_os_username": null
 }
 ```
+`Schedule` (response) giống `ScheduleInput`, thêm `id`, `status`, `created_at`, `updated_at`; `subject` và `target` kèm tên hiển thị: `{"type": "user", "id": "…", "name": "Nguyễn Văn A", "external_id": "SV001"}`, `{"type": "group" | "zone", "id": "…", "name": "…"}`, `{"type": "workstation", "id": "…", "name": "<mqtt_identity>"}`. `days_of_week` được lưu không trùng, theo thứ tự từ `MONDAY`.
+
+Lọc `GET /schedules` (FR-022, trả lời "ai được vào đâu"): `workstation_id` trả cả lịch gán thẳng cho máy lẫn lịch gán cho zone hiện tại của máy; `user_id` trả cả lịch gán thẳng cho user lẫn lịch gán cho nhóm user đang thuộc; `zone_id`, `group_id` khớp chính xác. Không phân trang, sắp theo tên.
+
+`PATCH` chỉ đổi các trường gửi lên; `valid_to: null` và `target_os_username: null` xóa giá trị. `PATCH`, `enable`, `disable` không làm đổi gì trả 200, không ghi nhật ký, không phát event. Subject hoặc target không tồn tại trả 400 `VALIDATION_ERROR` (`subject.id`, `target.id`).
+
 `end_time` cho phép `24:00`; `start_time < end_time` trong cùng ngày (D-011). Cảnh báo xung đột profile không chặn lưu: đó là cấu hình hợp lệ, chỉ từ chối tại máy khi hai lịch cùng khớp một lúc (BR-016).
 
 ### Nhật ký, Phiên, Cảnh báo (FR-072, FR-062)
