@@ -147,6 +147,16 @@ Admin được tắt profile đang là mặc định, hoặc để máy không c
 Yêu cầu cho Dashboard (M4): profile mặc định là nút chọn một (không bỏ chọn được); tắt profile đang là mặc định phải qua hộp xác nhận nêu rõ hệ quả.
 **Nguồn:** [08-api/api.md](08-api/api.md) "Zone và Máy trạm", FR-007, D-009, D-019.
 
+### D-023: Phạm vi nội dung snapshot, cách cấp version và worker dựng snapshot
+1. **Nội dung tối thiểu theo máy** (INV-012): chỉ Schedule đang bật của máy hoặc zone của máy; user là subject trực tiếp hoặc qua nhóm subject (kể cả `inactive`); thẻ `active`/`disabled` của các user đó; mọi profile của máy. `group_ids` của user chỉ gồm nhóm là subject trong chính snapshot đó, để máy không biết các nhóm không liên quan.
+2. **Chuẩn tắc và hash:** thứ tự khóa và thứ tự mảng cố định; `content_hash` không gồm `version` và `created_at`. Version chỉ tăng khi hash khác bản mới nhất.
+3. **Cấp version:** `max(version mới nhất đã lưu, desired_version, acked_version) + 1`. Máy báo version lớn hơn mọi bản server đang giữ (server khôi phục từ bản sao lưu cũ, D-016) thì được cấp bản mới dù nội dung không đổi. Máy `enrolled` chưa có snapshot luôn nhận v1, kể cả nội dung rỗng, để thoát `NoData`.
+4. **Reconcile theo mức:** có event thì reconcile mọi máy `enrolled`, cộng thêm lúc khởi động và mỗi giờ; chưa thu hẹp theo payload event (đủ cho ~40 máy). Lỗi dựng của một máy không chặn máy khác và không giữ event lại.
+5. **`master_key` là tệp** `KEYS_DIR/km-master.key`, cùng cơ chế với khóa UID.
+
+Giới hạn: M2.5 mới dựng, ký và lưu snapshot; chưa publish MQTT, chưa cập nhật `acked_version` (M3). Đã kiểm chéo một snapshot do Server dựng với mã thật của Agent (kiểm chữ ký, nạp vào `edge.db`, đánh giá quẹt thẻ) bằng script chạy tay, chưa thành test tự động trong CI.
+**Nguồn:** [08-api/events.md](08-api/events.md) §4.1, §5, [schedule-sync.md](05-behavior/sequences/schedule-sync.md), [11-operations/deployment.md](11-operations/deployment.md), INV-011, INV-012, D-016.
+
 ### ADR-001 (Accepted): Xác thực ở edge, dữ liệu cục bộ có thời hạn tin cậy (lease)
 Quy định ở Agent theo CR-001 từ snapshot cục bộ, không hỏi server khi quẹt thẻ. Dữ liệu cục bộ có thời hạn tin cậy (lease) được gia hạn qua phản hồi heartbeat khi `acked_version == desired_version`. Kiểm tra đồng hồ kết hợp hai hạn (UTC tuyệt đối bền vững và `CLOCK_BOOTTIME` cho phiên) kèm mốc sàn cải tiến `floor = last_sync_local_time - CLOCK_FLOOR_TOLERANCE`. Đã chốt: `D = 24h`; tin RTC sau khi khởi động lại lúc offline nếu `local_time >= floor` (D-018).
 **Nguồn:** [ADR-001](06-architecture/decisions/ADR-001-xac-thuc-o-edge-va-lease.md).

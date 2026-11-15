@@ -149,6 +149,8 @@ Một nơi duy nhất cho mọi tham số trước đây ghi "chốt sau". Giá 
 | Khóa AES đang dùng để mã hóa UID | `UID_ENC_KEY_ID` | `k1` | `^[A-Za-z0-9_-]{1,32}$`. Xoay khóa: đặt id mới rồi chạy `pnpm keys:init` để tạo tệp, giữ tệp cũ để đọc bản ghi cũ |
 | Tệp CRL | `CRL_PATH` | `/etc/mosquitto/nfc/crl.pem` | Server ghi, Mosquitto đọc |
 | Lệnh khởi động lại broker | `BROKER_RESTART_CMD` | `systemctl restart mosquitto` | Được phép qua sudoers giới hạn đúng lệnh này |
+| Khóa chủ `master_key` | `KEYS_DIR/km-master.key` | — | 32 byte dạng 64 ký tự hex, quyền `0600`, tạo bằng `pnpm keys:init` (không ghi đè). Mọi `K_m` dẫn xuất từ đây (ADR-007); thiếu tệp thì Server từ chối khởi động; mất hoặc đổi khóa thì phải đăng ký lại mọi máy |
+| Worker dựng snapshot | `SNAPSHOT_WORKER` | `on` | `off` tắt vòng lặp đọc `server_outbox` (bảo trì, test); event dồn lại và hiện ở `outbox_backlog` |
 | Tham số nghiệp vụ | bảng `Bảng Tham Số` | như trên | Đọc lúc khởi động |
 | Agent | `/etc/nfc-agent/agent.conf` | — | Địa chỉ server/broker, đường dẫn `ca.pem`, tham số cục bộ |
 

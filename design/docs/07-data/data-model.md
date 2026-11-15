@@ -237,7 +237,7 @@ erDiagram
 | `workstation_id` | `UUID` | No | — | FK → `workstations(id) ON DELETE CASCADE` |
 | `version` | `BIGINT` | No | — | Phiên bản tăng dần từ 1 (`CHECK (version >= 1)`, `INV-011`) |
 | `key_version` | `INTEGER` | No | — | Thế hệ khóa `K_m` dùng để sinh `CardMatchKey` và ký snapshot |
-| `content_hash` | `CHAR(64)` | No | — | SHA-256 nội dung chuẩn tắc (loại `created_at`) để xác định nội dung có đổi hay không (`schedule-sync.md`) |
+| `content_hash` | `CHAR(64)` | No | — | SHA-256 nội dung chuẩn tắc (loại `version` và `created_at`, `events.md` §4.1) để xác định nội dung có đổi hay không (`schedule-sync.md`) |
 | `payload_raw` | `BYTEA` | No | — | **Raw UTF-8 wire bytes** đã ký (KHÔNG dùng `JSONB` cho wire payload nhằm bảo toàn 100% chữ ký byte gốc theo [ADR-003](../06-architecture/decisions/ADR-003-luu-tru-cuc-bo-va-xac-thuc-snapshot.md) & [ADR-006](../06-architecture/decisions/ADR-006-ngon-ngu-va-techstack.md)) |
 | `hmac_signature` | `CHAR(64)` | No | — | `Hex(HMAC-SHA256(K_m, "snapshot-v1:" || payload_raw))` gửi kèm MQTT 5 `User Property signature` |
 | `created_at` | `TIMESTAMPTZ` | No | `now()` | |

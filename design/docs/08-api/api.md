@@ -177,7 +177,7 @@ Lọc `GET /schedules` (FR-022, trả lời "ai được vào đâu"): `workstat
 ### Hệ thống
 | Method | Path | Mô tả | Response |
 |---|---|---|---|
-| GET | `/system/health` | Tình trạng Server: CSDL, kết nối broker, worker snapshot, hạn CRL | 200 `{db: "ok", mqtt: "ok", outbox_backlog: 0, crl_next_update: "2036-11-09T…", warnings: []}`; `warnings` có `crl_expiring` khi còn dưới 30 ngày (S9) |
+| GET | `/system/health` | Tình trạng Server: CSDL, kết nối broker, worker snapshot, hạn CRL | 200 `{db: "ok", mqtt: "ok", outbox_backlog: 0, crl_next_update: "2036-11-09T…", warnings: []}`; `warnings` có `crl_expiring` khi còn dưới 30 ngày (S9), `snapshot_build_failed` khi có máy không dựng được snapshot ở lần reconcile gần nhất (xem log server). `outbox_backlog` = số domain event chưa xử lý, `null` khi không đọc được. Hiện có: `status`, `version`, `db`, `outbox_backlog`, `warnings`; `mqtt` và `crl_next_update` thêm ở M3 |
 
 ## 6. Endpoint Đăng Ký Dành Cho Agent (ADR-002 §7)
 

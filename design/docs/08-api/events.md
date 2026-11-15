@@ -238,6 +238,17 @@ Bản đầy đủ theo từng máy, không delta (INV-012). Server lưu nguyên
 | `version` bằng bản đang dùng → bỏ qua lặng lẽ (retained giao lại); nhỏ hơn → bỏ, `last_apply_error = older_version` | ADR-002 §4 |
 | `version` lớn hơn → thay nguyên tử mọi bảng `snapshot_*` và cờ profile, đặt `trusted_until = max(cũ, giờ máy + lease_duration_sec)`, `last_sync_local_time = max(cũ, giờ máy)`, rồi gửi heartbeat ngay | INV-011, D-018 |
 
+**Phạm vi nội dung (INV-012, FR-050, D-023):**
+
+| Mảng | Gồm | Không gồm |
+|---|---|---|
+| `schedules` | Schedule **đang bật** có target là máy này hoặc zone hiện tại của máy | Schedule tắt (Agent không cần biết) |
+| `users` | Subject trực tiếp và thành viên các nhóm subject của các Schedule trên, kể cả `inactive` (để Agent trả `user_inactive`). `group_ids` chỉ gồm nhóm là subject của các Schedule trong snapshot | User không dính Schedule nào của máy |
+| `cards` | Thẻ `active` và `disabled` của các user trên (để Agent trả `card_disabled`) | Thẻ `unbound`, thẻ của user khác |
+| `profiles` | Mọi profile của máy, kèm `status` và `is_default` | — |
+
+**Dạng chuẩn tắc:** thứ tự khóa cố định như ví dụ trên; `users`, `schedules` sắp theo `id`, `cards` theo `card_id`, `profiles` theo `os_username`, `group_ids` tăng dần (so sánh chuỗi theo mã ký tự). JSON gọn, UTF-8 không escape. Cùng dữ liệu luôn cho cùng chuỗi byte, trừ `version` và `created_at`; `snapshots.content_hash` là SHA-256 của nội dung **không gồm hai trường đó**, nên version chỉ tăng khi nội dung thật sự đổi. Snapshot lớn hơn 1 MB là lỗi dựng, không được phát.
+
 `days_mask`: Thứ Hai = 1, Thứ Ba = 2, Thứ Tư = 4, Thứ Năm = 8, Thứ Sáu = 16, Thứ Bảy = 32, Chủ Nhật = 64. `match_key = hex(HMAC-SHA256(K_m, "uid-match-v1" ‖ UID chuẩn hóa))` (ADR-007).
 
 ### 4.2. Lease (`lease-v1`)
@@ -287,6 +298,8 @@ Payload mang đủ dữ liệu để worker tìm máy bị ảnh hưởng cả k
 - `WorkstationZoneChanged`: `{before: {zone_id}, after: {zone_id}}` (`null` = không thuộc zone).
 - `WorkstationProfileConfigured`: `{os_username, before, after}`, `before`/`after` chỉ gồm `status` và/hoặc `is_default` đã đổi.
 - Thao tác không làm đổi dữ liệu (PATCH cùng giá trị, bật lịch đang bật) không phát event.
+
+**Worker (D-023):** một vòng lặp trong tiến trình Server, nhịp 2s (cửa sổ gộp). Mỗi nhịp nhận các event `pending` bằng `FOR UPDATE SKIP LOCKED`; có event thì reconcile **mọi máy `enrolled`** rồi đánh dấu `processed` (MVP chưa dùng payload để thu hẹp tập máy). Ngoài ra reconcile toàn bộ lúc khởi động và mỗi giờ (EF-4). Lỗi CSDL giữa chừng: event vẫn `pending`, thử lại ở nhịp sau. Một máy không dựng được snapshot (quá 1 MB, không giải mã được UID) không chặn máy khác: event vẫn được đánh dấu `processed`, lỗi ghi log và hiện ở `/system/health` (`snapshot_build_failed`) cho tới lần reconcile thành công. `SNAPSHOT_WORKER=off` tắt vòng lặp. Publish snapshot qua MQTT thuộc M3; tới lúc đó các event không liên quan snapshot (`WorkstationDisabled`) cần nhánh xử lý riêng trước khi đánh dấu.
 
 Khung bản ghi `server_outbox`:
 ```json
