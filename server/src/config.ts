@@ -1,4 +1,5 @@
 import { Global, Module } from '@nestjs/common';
+import path from 'node:path';
 
 // Server configuration from the environment (11-operations/deployment.md "Configuration Management").
 // Invalid or missing values stop the process at startup instead of failing later.
@@ -13,6 +14,16 @@ export interface AppConfig extends KeyConfig {
   jwtSecret: string;
   /** SNAPSHOT_WORKER=off stops the timers of the Distribution worker (tests, maintenance); default on. */
   snapshotWorkerEnabled: boolean;
+  /** CA that signs workstation certificates (ADR-002 §7); defaults ca.crt / ca.key in KEYS_DIR. */
+  caCertFile: string;
+  caKeyFile: string;
+  /** CRL file read by Mosquitto (`crlfile`); default crl.pem in KEYS_DIR. */
+  crlFile: string;
+  /** Shell command that restarts the broker after a revocation (D-014, S9); empty = only write the CRL. */
+  brokerRestartCmd: string;
+  /** Broker address handed to a workstation when its enrollment is approved. */
+  brokerHost: string;
+  brokerPort: number;
 }
 
 export const APP_CONFIG = Symbol('APP_CONFIG');
@@ -45,8 +56,22 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (jwtSecret.length < 32) errors.push('JWT_SECRET must be at least 32 characters');
   const snapshotWorker = env.SNAPSHOT_WORKER || 'on';
   if (snapshotWorker !== 'on' && snapshotWorker !== 'off') errors.push('SNAPSHOT_WORKER must be on or off');
+  const brokerPort = Number(env.BROKER_PORT ?? 8883);
+  if (!Number.isInteger(brokerPort) || brokerPort < 1 || brokerPort > 65535) errors.push('BROKER_PORT must be an integer 1-65535');
   if (errors.length) throw new Error(`invalid configuration: ${errors.join('; ')}`);
-  return { port, databaseUrl, jwtSecret, snapshotWorkerEnabled: snapshotWorker === 'on', ...keys };
+  return {
+    port,
+    databaseUrl,
+    jwtSecret,
+    snapshotWorkerEnabled: snapshotWorker === 'on',
+    caCertFile: env.CA_CERT_FILE || path.join(keys.keysDir, 'ca.crt'),
+    caKeyFile: env.CA_KEY_FILE || path.join(keys.keysDir, 'ca.key'),
+    crlFile: env.CRL_FILE || path.join(keys.keysDir, 'crl.pem'),
+    brokerRestartCmd: env.BROKER_RESTART_CMD ?? '',
+    brokerHost: env.BROKER_HOST || 'localhost',
+    brokerPort,
+    ...keys,
+  };
 }
 
 @Global()

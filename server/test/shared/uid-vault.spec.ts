@@ -133,6 +133,29 @@ describe('key config', () => {
     expect(loadKeyConfig({})).toEqual({ keysDir: '/etc/nfc-server/keys', uidEncKeyId: 'k1' });
   });
 
+  it('defaults the PKI files to KEYS_DIR and reads the broker settings', () => {
+    const keysDir = path.join('some', 'keys');
+    expect(loadConfig({ ...base, KEYS_DIR: keysDir })).toMatchObject({
+      caCertFile: path.join(keysDir, 'ca.crt'),
+      caKeyFile: path.join(keysDir, 'ca.key'),
+      crlFile: path.join(keysDir, 'crl.pem'),
+      brokerRestartCmd: '',
+      brokerHost: 'localhost',
+      brokerPort: 8883,
+    });
+    const custom = { CA_CERT_FILE: '/pki/ca.crt', CA_KEY_FILE: '/pki/ca.key', CRL_FILE: '/mosq/crl.pem' };
+    const broker = { BROKER_RESTART_CMD: 'systemctl restart mosquitto', BROKER_HOST: 'lab-server', BROKER_PORT: '8884' };
+    expect(loadConfig({ ...base, ...custom, ...broker })).toMatchObject({
+      caCertFile: '/pki/ca.crt',
+      caKeyFile: '/pki/ca.key',
+      crlFile: '/mosq/crl.pem',
+      brokerRestartCmd: 'systemctl restart mosquitto',
+      brokerHost: 'lab-server',
+      brokerPort: 8884,
+    });
+    expect(() => loadConfig({ ...base, BROKER_PORT: 'mqtt' })).toThrow(/BROKER_PORT/);
+  });
+
   it('reads SNAPSHOT_WORKER as on (default) or off', () => {
     expect(loadConfig(base).snapshotWorkerEnabled).toBe(true);
     expect(loadConfig({ ...base, SNAPSHOT_WORKER: 'on' }).snapshotWorkerEnabled).toBe(true);
