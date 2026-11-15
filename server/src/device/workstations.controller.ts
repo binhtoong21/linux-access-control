@@ -1,5 +1,5 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Query } from '@nestjs/common';
-import { IsBoolean, IsIn, IsOptional, IsUUID } from 'class-validator';
+import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
+import { Equals, IsBoolean, IsIn, IsOptional, IsUUID } from 'class-validator';
 import { ProfileStatus } from '../infra/database/schema';
 import { AppError } from '../shared/http/app-error';
 import { AuthenticatedAdmin, CurrentAdmin } from '../shared/http/auth.decorators';
@@ -39,6 +39,12 @@ class UpdateWorkstationDto {
   zone_id?: string | null;
 }
 
+class DisableWorkstationDto {
+  // Revocation cannot be undone, so the caller has to say it on purpose.
+  @Equals(true)
+  confirm!: boolean;
+}
+
 class UpdateProfileDto {
   @IsOptional()
   @IsIn(['enabled', 'disabled'])
@@ -67,6 +73,12 @@ export class WorkstationsController {
   update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateWorkstationDto, @CurrentAdmin() actor: AuthenticatedAdmin): Promise<WorkstationDetail> {
     if (dto.zone_id === undefined) return this.workstations.get(id);
     return this.workstations.setZone(id, dto.zone_id, actor.id);
+  }
+
+  @Post(':id/disable')
+  @HttpCode(200)
+  disable(@Param('id', ParseUUIDPipe) id: string, @Body() _dto: DisableWorkstationDto, @CurrentAdmin() actor: AuthenticatedAdmin): Promise<WorkstationDetail> {
+    return this.workstations.disable(id, actor.id);
   }
 
   @Get(':id/profiles')

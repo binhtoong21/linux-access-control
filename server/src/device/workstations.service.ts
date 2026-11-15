@@ -5,6 +5,7 @@ import { ProfileStatus } from '../infra/database/schema';
 import { recordAdminAction } from '../shared/admin-audit';
 import { AppError } from '../shared/http/app-error';
 import { emitEvent } from '../shared/outbox';
+import { PkiService } from './pki.service';
 
 export type WorkstationStatus = 'enrolled' | 'disabled';
 export type Connectivity = 'online' | 'offline';
@@ -133,7 +134,10 @@ function toSummary(r: Row): WorkstationSummary {
 
 @Injectable()
 export class WorkstationsService {
-  constructor(@Inject(KYSELY) private readonly db: Db) {}
+  constructor(
+    @Inject(KYSELY) private readonly db: Db,
+    private readonly pki: PkiService,
+  ) {}
 
   /**
    * One row per workstation with everything the room view shows (FR-042, FR-062). Thresholds are those of
@@ -231,6 +235,42 @@ export class WorkstationsService {
       }
       return this.detail(trx, id);
     });
+  }
+
+  /**
+   * D-014.5/.6: revokes the workstation's certificate. It keeps accepting cards from its local snapshot until its lease
+   * runs out (at most 24h); it comes back only by re-enrolling and being approved as a reinstall.
+   */
+  async disable(id: string, actorId: string): Promise<WorkstationDetail> {
+    const changed = await this.db.transaction().execute(async (trx) => {
+      const current = (
+        await sql<{ status: WorkstationStatus; cert_serial: string | null }>`
+          SELECT status, cert_serial FROM workstations WHERE id = ${id}::uuid FOR UPDATE
+        `.execute(trx)
+      ).rows[0];
+      if (!current) throw notFound();
+      if (current.status === 'disabled') return false;
+      await sql`UPDATE workstations SET status = 'disabled', updated_at = now() WHERE id = ${id}::uuid`.execute(trx);
+      if (current.cert_serial !== null) {
+        await sql`
+          INSERT INTO revoked_certificates (cert_serial, workstation_id, reason)
+          VALUES (${current.cert_serial}, ${id}::uuid, 'disabled')
+          ON CONFLICT (cert_serial) DO NOTHING
+        `.execute(trx);
+      }
+      await recordAdminAction(trx, {
+        adminId: actorId,
+        action: 'workstation.disable',
+        entityType: 'workstation',
+        entityId: id,
+        before: { status: 'enrolled' },
+        after: { status: 'disabled', revoked_cert_serial: current.cert_serial },
+      });
+      return true;
+    });
+    // After commit: the broker reads the CRL file, not the database (S9).
+    if (changed) await this.pki.revocationChanged();
+    return this.detail(this.db, id);
   }
 
   async profiles(id: string): Promise<ProfileView[]> {

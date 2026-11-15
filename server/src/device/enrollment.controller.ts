@@ -1,8 +1,15 @@
 import { Body, Controller, Get, Headers, HttpCode, Ip, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
-import { IsIn, IsMACAddress, IsOptional, IsString, IsUUID, Matches, MaxLength } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsIn, IsMACAddress, IsOptional, IsString, IsUUID, Matches, MaxLength, ValidateIf } from 'class-validator';
 import { MQTT_IDENTITY_PATTERN } from '../shared/crypto/pki';
 import { AuthenticatedAdmin, CurrentAdmin, Public, SkipCsrf } from '../shared/http/auth.decorators';
-import { EnrollmentRequestStatus, EnrollmentRequestView, EnrollmentService, EnrollmentStatus, EnrollmentTicket } from './enrollment.service';
+import {
+  BatchApproval,
+  EnrollmentRequestStatus,
+  EnrollmentRequestView,
+  EnrollmentService,
+  EnrollmentStatus,
+  EnrollmentTicket,
+} from './enrollment.service';
 
 class EnrollDto {
   @Matches(/^[A-Za-z0-9-]{1,64}$/, { message: 'machine_id must match ^[A-Za-z0-9-]{1,64}$' })
@@ -27,17 +34,33 @@ class EnrollDto {
 }
 
 class ApproveDto {
-  // Reinstalling an existing workstation is a separate mode, added with certificate revocation.
-  @IsIn(['new'])
-  mode!: 'new';
+  // "reinstall" updates the workstation the request collides with and takes no other parameter.
+  @IsIn(['new', 'reinstall'])
+  mode!: 'new' | 'reinstall';
 
+  @ValidateIf((dto: ApproveDto) => dto.mode !== 'reinstall')
   @Matches(MQTT_IDENTITY_PATTERN, { message: 'mqtt_identity must match ^[A-Za-z0-9_-]{3,64}$' })
-  mqtt_identity!: string;
+  mqtt_identity?: string;
 
   // Absent or null: the workstation starts outside any zone.
   @IsOptional()
   @IsUUID()
   zone_id?: string | null;
+}
+
+class ApproveBatchDto {
+  @IsUUID()
+  zone_id!: string;
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(200)
+  @IsUUID('all', { each: true })
+  request_ids!: string[];
+
+  // Two digits follow, so the result is always a valid mqtt identity.
+  @Matches(/^[A-Za-z0-9_-]{1,60}$/, { message: 'name_prefix must match ^[A-Za-z0-9_-]{1,60}$' })
+  name_prefix!: string;
 }
 
 class RejectDto {
@@ -85,7 +108,14 @@ export class EnrollmentRequestsController {
   @Post(':id/approve')
   @HttpCode(200)
   approve(@Param('id', ParseUUIDPipe) id: string, @Body() dto: ApproveDto, @CurrentAdmin() actor: AuthenticatedAdmin): Promise<EnrollmentRequestView> {
-    return this.enrollment.approveNew(id, dto.mqtt_identity, dto.zone_id ?? null, actor.id);
+    if (dto.mode === 'reinstall') return this.enrollment.approveReinstall(id, actor.id);
+    return this.enrollment.approveNew(id, dto.mqtt_identity as string, dto.zone_id ?? null, actor.id);
+  }
+
+  @Post('approve-batch')
+  @HttpCode(200)
+  approveBatch(@Body() dto: ApproveBatchDto, @CurrentAdmin() actor: AuthenticatedAdmin): Promise<BatchApproval> {
+    return this.enrollment.approveBatch(dto.zone_id, dto.request_ids, dto.name_prefix, actor.id);
   }
 
   @Post(':id/reject')

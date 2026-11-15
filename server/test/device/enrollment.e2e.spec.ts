@@ -167,7 +167,7 @@ interface Approved {
     expect(await errorCode(taken)).toBe('DUPLICATE');
     expect((await approve(ticket.request_id, 'x')).status).toBe(400);
     expect((await approve(ticket.request_id, 'lab-a-02', missing)).status).toBe(400);
-    expect((await api.call('POST', `/enrollment-requests/${ticket.request_id}/approve`, { mode: 'reinstall' })).status).toBe(400);
+    expect((await api.call('POST', `/enrollment-requests/${ticket.request_id}/approve`, { mode: 'reinstall' })).status).toBe(409);
     expect((await approve(missing, 'lab-a-02')).status).toBe(404);
     // Outside any zone is allowed.
     const view = await json<RequestView>(await approve(ticket.request_id, 'lab-a-02', null), 200);

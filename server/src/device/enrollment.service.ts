@@ -86,6 +86,11 @@ const denied = (): AppError => new AppError('INVALID_FETCH_CODE', 'Fetch code is
 const wrongState = (message: string): AppError => new AppError('INVALID_STATE_TRANSITION', message);
 const lock = (db: Db) => sql`SELECT pg_advisory_xact_lock(${ENROLLMENT_LOCK}::bigint)`.execute(db);
 
+export interface BatchApproval {
+  approved: { id: string; mqtt_identity: string; workstation_id: string }[];
+  skipped: { id: string; reason: string }[];
+}
+
 const toView = (r: ViewRow): EnrollmentRequestView => ({
   id: r.id,
   hostname: r.hostname,
@@ -304,6 +309,135 @@ export class EnrollmentService {
       if (isUniqueViolation(err)) throw new AppError('DUPLICATE_REQUIRES_REINSTALL', 'A workstation with this MAC or machine id already exists');
       throw err;
     }
+  }
+
+  /**
+   * D-014.2: a request that collides with an existing workstation is that workstation being reinstalled (new disk,
+   * `nfc-agent reenroll`). It keeps its name, zone, schedules and history; the key version goes up, so K_m changes and the
+   * next snapshot is signed with the new key, and the previous certificate is revoked.
+   */
+  async approveReinstall(id: string, actorId: string): Promise<EnrollmentRequestView> {
+    let revoked = false;
+    let view: EnrollmentRequestView;
+    try {
+      view = await this.db.transaction().execute(async (trx) => {
+        await lock(trx);
+        const request = (
+          await sql<{ status: EnrollmentRequestStatus; machine_id: string; mac_address: string; hostname: string; csr_pem: string; public_key: string }>`
+            SELECT status, machine_id, mac_address::text AS mac_address, hostname, csr_pem, public_key
+            FROM enrollment_requests WHERE id = ${id}::uuid FOR UPDATE
+          `.execute(trx)
+        ).rows[0];
+        if (!request) throw notFound();
+        const current = await this.row(trx, id);
+        if (request.status === 'approved') {
+          // Idempotent: a request approved as a reinstall points at the workstation it collided with.
+          if (current.duplicate_of_workstation_id !== null && current.duplicate_of_workstation_id === current.workstation_id) return toView(current);
+          throw wrongState('The request was already approved as a new workstation');
+        }
+        if (request.status === 'rejected') throw wrongState('The request was rejected');
+        const workstationId = current.duplicate_of_workstation_id;
+        if (workstationId === null) throw wrongState('The request does not match an existing workstation; approve it as a new one');
+        const workstation = (
+          await sql<{ mqtt_identity: string; key_version: number; cert_serial: string | null; zone_id: string | null }>`
+            SELECT mqtt_identity, key_version, cert_serial, zone_id FROM workstations WHERE id = ${workstationId}::uuid FOR UPDATE
+          `.execute(trx)
+        ).rows[0];
+        if (!workstation) throw notFound();
+
+        const certificate = await this.pki.ca.issue(request.csr_pem, workstation.mqtt_identity);
+        const keyVersion = workstation.key_version + 1;
+        await sql`
+          UPDATE workstations
+          SET key_version = ${keyVersion}, machine_id = ${request.machine_id}, mac_address = ${request.mac_address}::macaddr,
+              hostname = ${request.hostname}, public_key = ${request.public_key}, cert_serial = ${certificate.serial},
+              cert_expires_at = ${certificate.expiresAt}, status = 'enrolled', updated_at = now()
+          WHERE id = ${workstationId}::uuid
+        `.execute(trx);
+        if (workstation.cert_serial !== null) {
+          // Already there when the workstation was disabled before; a revoked certificate is never un-revoked (D-014.6).
+          await sql`
+            INSERT INTO revoked_certificates (cert_serial, workstation_id, reason)
+            VALUES (${workstation.cert_serial}, ${workstationId}::uuid, 'reinstalled')
+            ON CONFLICT (cert_serial) DO NOTHING
+          `.execute(trx);
+          revoked = true;
+        }
+        // Earlier enrollments of this workstation must not be fetchable any more: they would now hand out the new K_m.
+        await sql`
+          UPDATE enrollment_requests SET fetch_code_invalidated_at = now()
+          WHERE workstation_id = ${workstationId}::uuid AND id <> ${id}::uuid AND fetch_code_invalidated_at IS NULL
+        `.execute(trx);
+        await sql`
+          UPDATE enrollment_requests
+          SET status = 'approved', workstation_id = ${workstationId}::uuid, assigned_zone_id = ${workstation.zone_id}::uuid,
+              issued_cert_pem = ${certificate.pem}, reviewed_at = now(), reviewed_by = ${actorId}::uuid
+          WHERE id = ${id}::uuid
+        `.execute(trx);
+        await recordAdminAction(trx, {
+          adminId: actorId,
+          action: 'enrollment.approve',
+          entityType: 'workstation',
+          entityId: workstationId,
+          before: { key_version: workstation.key_version, cert_serial: workstation.cert_serial },
+          after: { request_id: id, mode: 'reinstall', key_version: keyVersion, cert_serial: certificate.serial },
+        });
+        await emitEvent(trx, {
+          aggregateType: 'workstation',
+          aggregateId: workstationId,
+          eventType: 'WorkstationEnrollmentApproved',
+          payload: { request_id: id, mode: 'reinstall', key_version: keyVersion },
+        });
+        return toView(await this.row(trx, id));
+      });
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        throw new AppError('DUPLICATE_REQUIRES_REINSTALL', 'The MAC or machine id of this request belongs to another workstation');
+      }
+      throw err;
+    }
+    // After commit (D-014.5): the broker reads the CRL file, not the database.
+    if (revoked) await this.pki.revocationChanged();
+    return view;
+  }
+
+  /**
+   * "Duyệt tất cả" of a zone (D-014.1). Each request is approved in its own transaction; flagged requests are never
+   * approved in bulk, an admin has to look at them one by one.
+   */
+  async approveBatch(zoneId: string, requestIds: string[], prefix: string, actorId: string): Promise<BatchApproval> {
+    const zone = (await sql`SELECT 1 FROM zones WHERE id = ${zoneId}::uuid`.execute(this.db)).rows[0];
+    if (!zone) throw new AppError('VALIDATION_ERROR', 'Zone does not exist', [{ field: 'zone_id', constraints: ['zone not found'] }]);
+    const used = (
+      await sql<{ mqtt_identity: string }>`
+        SELECT mqtt_identity FROM workstations WHERE left(mqtt_identity, ${prefix.length}::int) = ${prefix}
+      `.execute(this.db)
+    ).rows;
+    // Continue after the highest number already used with this prefix: lab-a-01, lab-a-02, …
+    let last = 0;
+    for (const { mqtt_identity } of used) {
+      const suffix = mqtt_identity.slice(prefix.length);
+      if (/^\d+$/.test(suffix)) last = Math.max(last, Number(suffix));
+    }
+    const result: BatchApproval = { approved: [], skipped: [] };
+    for (const id of [...new Set(requestIds)]) {
+      const [row] = await this.rows(this.db, { id });
+      const reason = !row ? 'not_found' : row.status !== 'pending' ? 'not_pending' : row.duplicate_mac_detected ? 'duplicate' : null;
+      if (reason !== null) {
+        result.skipped.push({ id, reason });
+        continue;
+      }
+      const name = `${prefix}${String(last + 1).padStart(2, '0')}`;
+      try {
+        const view = await this.approveNew(id, name, zoneId, actorId);
+        last += 1;
+        result.approved.push({ id, mqtt_identity: name, workstation_id: view.workstation?.id ?? '' });
+      } catch (err) {
+        if (!(err instanceof AppError)) throw err;
+        result.skipped.push({ id, reason: err.code.toLowerCase() });
+      }
+    }
+    return result;
   }
 
   /** The agent sees `rejected` and stops polling; a technician runs `nfc-agent reenroll` to try again. */
