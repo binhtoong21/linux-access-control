@@ -13,7 +13,7 @@ export type IdentityEventType =
   | 'CardDisabled'
   | 'CardEnabled';
 
-export type DeviceEventType = 'ZoneDeleted' | 'WorkstationZoneChanged' | 'WorkstationProfileConfigured';
+export type DeviceEventType = 'ZoneDeleted' | 'WorkstationZoneChanged' | 'WorkstationProfileConfigured' | 'WorkstationEnrollmentApproved';
 
 export type SchedulingEventType = 'ScheduleCreated' | 'ScheduleUpdated' | 'ScheduleEnabled' | 'ScheduleDisabled' | 'ScheduleDeleted';
 
