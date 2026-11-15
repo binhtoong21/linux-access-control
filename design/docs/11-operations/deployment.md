@@ -150,6 +150,10 @@ Một nơi duy nhất cho mọi tham số trước đây ghi "chốt sau". Giá 
 | Tệp CRL | `CRL_PATH` | `/etc/mosquitto/nfc/crl.pem` | Server ghi, Mosquitto đọc |
 | Lệnh khởi động lại broker | `BROKER_RESTART_CMD` | `systemctl restart mosquitto` | Được phép qua sudoers giới hạn đúng lệnh này |
 | Khóa chủ `master_key` | `KEYS_DIR/km-master.key` | — | 32 byte dạng 64 ký tự hex, quyền `0600`, tạo bằng `pnpm keys:init` (không ghi đè). Mọi `K_m` dẫn xuất từ đây (ADR-007); thiếu tệp thì Server từ chối khởi động; mất hoặc đổi khóa thì phải đăng ký lại mọi máy |
+| CA ký chứng chỉ máy trạm | `CA_CERT_FILE`, `CA_KEY_FILE` | `KEYS_DIR/ca.crt`, `KEYS_DIR/ca.key` | Khóa EC P-256, quyền `0600`. Thiếu hoặc sai thì Server từ chối khởi động (D-024.6) |
+| Tệp CRL cho Mosquitto | `CRL_FILE` | `KEYS_DIR/crl.pem` | Phải trùng `crlfile` của broker. Server ghi lại lúc khởi động, hằng ngày và sau mỗi lần thu hồi (ghi tệp tạm rồi đổi tên) |
+| Lệnh khởi động lại broker | `BROKER_RESTART_CMD` | rỗng | Chạy sau mỗi lần thu hồi chứng chỉ (S9: `SIGHUP` không ngắt kết nối đang mở). Ví dụ `sudo systemctl restart mosquitto` (cần quy tắc sudoers cho user `nfcsrv`); rỗng thì chỉ ghi CRL và log cảnh báo |
+| Địa chỉ broker trả cho máy khi duyệt đăng ký | `BROKER_HOST`, `BROKER_PORT` | `localhost`, `8883` | Tên phải khớp SAN trong chứng chỉ broker |
 | Worker dựng snapshot | `SNAPSHOT_WORKER` | `on` | `off` tắt vòng lặp đọc `server_outbox` (bảo trì, test); event dồn lại và hiện ở `outbox_backlog` |
 | Tham số nghiệp vụ | bảng `Bảng Tham Số` | như trên | Đọc lúc khởi động |
 | Agent | `/etc/nfc-agent/agent.conf` | — | Địa chỉ server/broker, đường dẫn `ca.pem`, tham số cục bộ |

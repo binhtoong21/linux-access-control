@@ -287,7 +287,7 @@ Không đi ra ngoài Server. Được ghi vào `server_outbox` **cùng giao dị
 | `WorkstationZoneChanged`, `ZoneDeleted` | Device | Máy đổi zone / mọi máy của zone |
 | `WorkstationProfileConfigured`, `WorkstationProfilesDiscovered` | Device | Chính máy đó |
 | `WorkstationEnrollmentApproved` | Device | Chính máy đó (snapshot đầu tiên hoặc sau cài lại với `key_version` mới) |
-| `WorkstationDisabled` | Device | Không dựng snapshot; sinh lại CRL và khởi động lại broker (D-014) |
+| ~~`WorkstationDisabled`~~ | Device | Không phát (D-024.2): vô hiệu hóa máy không đổi snapshot; thu hồi chứng chỉ, CRL và khởi động lại broker chạy trực tiếp sau khi commit |
 
 Payload mang đủ dữ liệu để worker tìm máy bị ảnh hưởng cả khi bản ghi gốc đã đổi hoặc đã bị xóa:
 
@@ -299,7 +299,7 @@ Payload mang đủ dữ liệu để worker tìm máy bị ảnh hưởng cả k
 - `WorkstationProfileConfigured`: `{os_username, before, after}`, `before`/`after` chỉ gồm `status` và/hoặc `is_default` đã đổi.
 - Thao tác không làm đổi dữ liệu (PATCH cùng giá trị, bật lịch đang bật) không phát event.
 
-**Worker (D-023):** một vòng lặp trong tiến trình Server, nhịp 2s (cửa sổ gộp). Mỗi nhịp nhận các event `pending` bằng `FOR UPDATE SKIP LOCKED`; có event thì reconcile **mọi máy `enrolled`** rồi đánh dấu `processed` (MVP chưa dùng payload để thu hẹp tập máy). Ngoài ra reconcile toàn bộ lúc khởi động và mỗi giờ (EF-4). Lỗi CSDL giữa chừng: event vẫn `pending`, thử lại ở nhịp sau. Một máy không dựng được snapshot (quá 1 MB, không giải mã được UID) không chặn máy khác: event vẫn được đánh dấu `processed`, lỗi ghi log và hiện ở `/system/health` (`snapshot_build_failed`) cho tới lần reconcile thành công. `SNAPSHOT_WORKER=off` tắt vòng lặp. Publish snapshot qua MQTT thuộc M3; tới lúc đó các event không liên quan snapshot (`WorkstationDisabled`) cần nhánh xử lý riêng trước khi đánh dấu.
+**Worker (D-023):** một vòng lặp trong tiến trình Server, nhịp 2s (cửa sổ gộp). Mỗi nhịp nhận các event `pending` bằng `FOR UPDATE SKIP LOCKED`; có event thì reconcile **mọi máy `enrolled`** rồi đánh dấu `processed` (MVP chưa dùng payload để thu hẹp tập máy). Ngoài ra reconcile toàn bộ lúc khởi động và mỗi giờ (EF-4). Lỗi CSDL giữa chừng: event vẫn `pending`, thử lại ở nhịp sau. Một máy không dựng được snapshot (quá 1 MB, không giải mã được UID) không chặn máy khác: event vẫn được đánh dấu `processed`, lỗi ghi log và hiện ở `/system/health` (`snapshot_build_failed`) cho tới lần reconcile thành công. `SNAPSHOT_WORKER=off` tắt vòng lặp. Publish snapshot qua MQTT thuộc M3; thu hồi chứng chỉ không đi qua outbox (D-024.2).
 
 Khung bản ghi `server_outbox`:
 ```json

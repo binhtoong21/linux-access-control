@@ -83,8 +83,7 @@ UID chỉ đi vào API, không bao giờ được trả ra trong danh sách; ch�
 | GET | `/workstations` | Danh sách cho Dashboard | `?zone_id=`, `?status=`, `?connectivity=`, `?sync=in_sync\|pending\|stuck` | 200 `WorkstationSummary[]` |
 | GET | `/workstations/{id}` | Chi tiết | — | 200 (xem dưới) |
 | PATCH | `/workstations/{id}` | Đổi zone, ghi chú | `{zone_id?}` | 200 |
-| POST | `/workstations/{id}/disable` | Vô hiệu hóa máy: thu hồi chứng chỉ, sinh lại CRL, khởi động lại broker (D-014) | `{confirm: true}` | 200; máy cũ vẫn cho quẹt tới khi lease hết (≤ 24h) |
-| DELETE | `/workstations/{id}` | Xóa máy đã `disabled` | — | 204; 409 `REFERENCED_BY_SCHEDULE`; 409 `INVALID_STATE_TRANSITION` nếu còn `enrolled` |
+| POST | `/workstations/{id}/disable` | Vô hiệu hóa máy: thu hồi chứng chỉ, sinh lại CRL, khởi động lại broker (D-014) | `{confirm: true}` | 200 (chi tiết máy, `status: "disabled"`); gọi lại là no-op; máy cũ vẫn cho quẹt tới khi lease hết (≤ 24h). Không có thao tác xóa máy: `disabled` là trạng thái cuối, máy chỉ hoạt động lại qua đăng ký lại + duyệt cài lại (D-024) |
 | GET | `/workstations/{id}/profiles` | Danh mục profile máy báo lên | — | 200 `Profile[]` |
 | PATCH | `/workstations/{id}/profiles/{os_username}` | Bật/tắt, chọn mặc định | `{status?, is_default?}` | 200 |
 
@@ -116,13 +115,15 @@ UID chỉ đi vào API, không bao giờ được trả ra trong danh sách; ch�
 ### Đăng ký máy: phía Admin (FR-040, D-014)
 | Method | Path | Mô tả | Request | Response |
 |---|---|---|---|---|
-| GET | `/enrollment-requests` | Danh sách | `?status=pending` (mặc định) | 200 `[{id, hostname, mac_address, machine_id, submitted_at, duplicate_mac_detected, duplicate_of: {id, mqtt_identity}?}]` |
-| POST | `/enrollment-requests/{id}/approve` | Duyệt máy mới | `{mode: "new", mqtt_identity, zone_id}` | 200; 409 `DUPLICATE_REQUIRES_REINSTALL` nếu yêu cầu có cờ trùng; 409 `DUPLICATE` nếu `mqtt_identity` đã dùng; 400 nếu sai mẫu `^[A-Za-z0-9_-]{3,64}$` |
-| POST | `/enrollment-requests/{id}/approve` | Duyệt cài lại máy đã có | `{mode: "reinstall"}` (máy = `duplicate_of`) | 200: `key_version + 1`, thu hồi chứng chỉ cũ, máy `disabled` trở lại `enrolled` |
-| POST | `/enrollment-requests/approve-batch` | Duyệt tất cả theo Zone | `{zone_id, request_ids: [], name_prefix: "lab-a-"}` | 200 `{approved: [...], skipped: [{id, reason: "duplicate"}]}`; tên máy sinh tuần tự `lab-a-01`, `lab-a-02`… |
-| POST | `/enrollment-requests/{id}/reject` | Từ chối | `{note?}` | 200 |
+| GET | `/enrollment-requests` | Danh sách | `?status=pending` (mặc định) | 200 `[{id, hostname, mac_address, machine_id, status, submitted_at, reviewed_at, duplicate_mac_detected, duplicate_of: {id, mqtt_identity}?, workstation: {id, mqtt_identity}?}]`; `?status=` nhận `pending`, `approved`, `rejected` |
+| POST | `/enrollment-requests/{id}/approve` | Duyệt máy mới | `{mode: "new", mqtt_identity, zone_id?}` (`zone_id` vắng hoặc `null`: máy chưa thuộc zone) | 200; 409 `DUPLICATE_REQUIRES_REINSTALL` nếu yêu cầu trùng một máy đã có (`duplicate_of`); 409 `DUPLICATE` nếu `mqtt_identity` đã dùng; 400 nếu sai mẫu `^[A-Za-z0-9_-]{3,64}$` |
+| POST | `/enrollment-requests/{id}/approve` | Duyệt cài lại máy đã có | `{mode: "reinstall"}` (máy = `duplicate_of`) | 200: `key_version + 1`, chứng chỉ mới, thu hồi chứng chỉ cũ, cập nhật `machine_id`/MAC/hostname, máy `disabled` trở lại `enrolled`; 409 `INVALID_STATE_TRANSITION` nếu yêu cầu không trùng máy nào |
+| POST | `/enrollment-requests/approve-batch` | Duyệt tất cả theo Zone | `{zone_id, request_ids: [], name_prefix: "lab-a-"}` | 200 `{approved: [{id, mqtt_identity, workstation_id}], skipped: [{id, reason}]}`; tên máy `<prefix><NN>` nối tiếp số lớn nhất đã dùng với prefix đó (`lab-a-01`, `lab-a-02`…); `reason` ∈ `duplicate` (mọi yêu cầu có cờ), `not_pending`, `not_found`, hoặc mã lỗi viết thường của lần duyệt thất bại |
+| POST | `/enrollment-requests/{id}/reject` | Từ chối | `{note?}` | 200; gọi lại là no-op; 409 `INVALID_STATE_TRANSITION` nếu đã duyệt |
 
 `approve` gửi lại cho yêu cầu đã `approved` với cùng tham số trả 200 như lần đầu (idempotent); khác tham số trả 409 `INVALID_STATE_TRANSITION`.
+
+Quy tắc cờ trùng (D-014.2, D-024): yêu cầu trùng MAC hoặc `machine_id` với một máy đã có mang `duplicate_of` và chỉ duyệt được thành cài lại; hai yêu cầu đang chờ trùng nhau đều mang cờ nhưng chưa có `duplicate_of`, Admin duyệt một cái thành máy mới thì cái còn lại tự trở thành trùng máy đó. Cùng một máy gửi lại yêu cầu với **cùng khóa** (mất gói trả lời) thì yêu cầu cũ đang chờ tự chuyển `rejected`, không bị gắn cờ. Duyệt cài lại làm mọi `fetch_code` cũ của máy đó hết hiệu lực.
 
 ### Lịch (FR-020 đến FR-023)
 | Method | Path | Mô tả | Request | Response |

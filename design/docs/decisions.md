@@ -122,7 +122,7 @@ Khi máy báo `snapshot_version` lớn hơn `desired_version` (chỉ xảy ra kh
 ### D-019: Các quy tắc quản trị chốt khi đặc tả API (08-api)
 1. **Admin đặt tên máy khi duyệt.** `mqtt_identity` (ví dụ `ws-07`) do Admin nhập khi duyệt máy mới, không lấy từ hostname vì hostname trong image clone có thể trùng. "Duyệt tất cả" theo Zone sinh tên tuần tự theo tiền tố (`lab-a-01`, `lab-a-02`…) và bỏ qua yêu cầu có cờ trùng (D-014). Cài lại máy giữ nguyên tên cũ.
 2. **Không vô hiệu hóa admin đang hoạt động cuối cùng**, để hệ thống không rơi vào trạng thái không còn ai quản trị (INV-016).
-3. **Chỉ xóa được máy đã `disabled`** và không còn Schedule tham chiếu (BR-017). Vô hiệu hóa trước để chứng chỉ bị thu hồi; máy vẫn cho quẹt theo snapshot cục bộ tới khi lease hết (D-014.6).
+3. ~~Chỉ xóa được máy đã `disabled` và không còn Schedule tham chiếu (BR-017).~~ **Đã thay bằng D-024.1: không có thao tác xóa máy.** Vô hiệu hóa để chứng chỉ bị thu hồi; máy vẫn cho quẹt theo snapshot cục bộ tới khi lease hết (D-014.6).
 4. **Kiểm tra lịch khi lưu chỉ cảnh báo, không chặn** các cấu hình có thể dẫn tới `ambiguous_profile` hoặc máy thiếu profile: chúng hợp lệ về dữ liệu, chỉ bị từ chối tại máy khi hai lịch cùng khớp một lúc (BR-016, D-009).
 5. **UID thẻ không hiện trong danh sách**, chỉ hiện ở chi tiết thẻ và chi tiết nhật ký; tra cứu theo UID đi qua blind index (NFR-SEC03, ADR-007). Đăng ký thẻ được từ một bản ghi `unknown_card` mà không cần gõ lại UID (FR-073).
 6. **Hai admin sửa cùng lúc thì bản lưu sau thắng**, không khóa bản ghi. Đủ cho MVP một vai trò với vài admin; mọi thay đổi đều sinh event dựng lại snapshot nên trạng thái cuối luôn được phân phối đúng (XINV-005).
@@ -146,6 +146,17 @@ Admin được tắt profile đang là mặc định, hoặc để máy không c
 
 Yêu cầu cho Dashboard (M4): profile mặc định là nút chọn một (không bỏ chọn được); tắt profile đang là mặc định phải qua hộp xác nhận nêu rõ hệ quả.
 **Nguồn:** [08-api/api.md](08-api/api.md) "Zone và Máy trạm", FR-007, D-009, D-019.
+
+### D-024: Các quy tắc chốt khi hiện thực đăng ký máy và thu hồi chứng chỉ (M3.1)
+1. **Không có thao tác xóa máy (sửa D-019.3).** Mọi máy đã vô hiệu hóa đều có dòng trong `revoked_certificates` (phải nằm trong CRL mãi) và thường có nhật ký, phiên tham chiếu tới nó; các bảng đó không cho xóa (nhật ký append-only), nên `DELETE /workstations/{id}` luôn thất bại. `disabled` là trạng thái cuối; máy vẫn nằm trong CSDL để giữ lịch sử, Dashboard mặc định ẩn máy `disabled`. Bình chốt 2026-11-15.
+2. **Thu hồi chứng chỉ chạy trực tiếp, không qua `server_outbox`.** Sau khi giao dịch vô hiệu hóa hoặc duyệt cài lại commit, Server ghi lại tệp CRL rồi chạy lệnh khởi động lại broker (`BROKER_RESTART_CMD`). Lệnh rỗng hoặc lỗi không làm hỏng thao tác: thu hồi đã lưu, CRL đã ghi, log cảnh báo; lưới an toàn là sinh lại CRL lúc khởi động và hằng ngày (D-014.5). Không phát event `WorkstationDisabled`, vì worker outbox chỉ dựng snapshot.
+3. **Cùng máy, cùng khóa gửi lại yêu cầu thì thay yêu cầu cũ đang chờ** (cũ chuyển `rejected`), không gắn cờ trùng: cùng khóa công khai chứng tỏ cùng một máy đang thử lại sau khi mất gói trả lời, và Admin không phải dọn tay yêu cầu lặp.
+4. **Duyệt cài lại vô hiệu hóa mọi `fetch_code` cũ của máy đó.** `K_m` được dẫn xuất theo `key_version` hiện tại lúc trả lời, nên mã cũ còn hiệu lực sẽ tải được `K_m` mới.
+5. **Duyệt hàng loạt đặt tên `<prefix><NN>`** nối tiếp số lớn nhất đã dùng; mỗi yêu cầu một giao dịch riêng; mọi yêu cầu có cờ đều bị bỏ qua.
+6. **Server là CA.** Khóa CA là EC P-256 (`CA_CERT_FILE`, `CA_KEY_FILE`); chứng chỉ máy 3 năm, serial ngẫu nhiên 128 bit; CRL hạn 10 năm, ghi tệp tạm rồi đổi tên. Thư viện `@peculiar/x509` 1.14.3 (bản 3.x chỉ có ESM, không chạy với jest CJS); CRL phải mang nhãn PEM `X509 CRL` thì OpenSSL và Mosquitto mới đọc.
+
+Giới hạn: `fetch_code` chưa bị vô hiệu hóa bởi Hello đầu tiên (M3.2); khởi động lại broker thật chưa được kiểm (M3.6).
+**Nguồn:** [08-api/api.md](08-api/api.md), ADR-002 §7, D-014, D-019, S8, S9.
 
 ### D-023: Phạm vi nội dung snapshot, cách cấp version và worker dựng snapshot
 1. **Nội dung tối thiểu theo máy** (INV-012): chỉ Schedule đang bật của máy hoặc zone của máy; user là subject trực tiếp hoặc qua nhóm subject (kể cả `inactive`); thẻ `active`/`disabled` của các user đó; mọi profile của máy. `group_ids` của user chỉ gồm nhóm là subject trong chính snapshot đó, để máy không biết các nhóm không liên quan.

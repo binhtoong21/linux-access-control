@@ -74,7 +74,9 @@ cd server && pnpm install && pnpm test && pnpm build
 # Áp migration: DATABASE_URL=postgres://nfclab:nfclab-dev@127.0.0.1:5432/nfclab pnpm db:migrate
 # Admin đầu tiên (mật khẩu qua stdin): read -rs PW; printf "%s" "$PW" | DATABASE_URL=... pnpm admin:create --username root --display-name "Quản trị"
 # Khóa UID thẻ và khóa chủ km-master.key (không ghi đè khóa có sẵn; chạy lại khi có loại khóa mới): KEYS_DIR=../deploy/dev/keys pnpm keys:init
-# Chạy server: DATABASE_URL=... JWT_SECRET=<≥ 32 ký tự> KEYS_DIR=../deploy/dev/keys pnpm start
+# Chạy server (CA dev do deploy/dev/gen-dev-certs.sh sinh; thiếu CA thì server không khởi động):
+#   DATABASE_URL=... JWT_SECRET=<≥ 32 ký tự> KEYS_DIR=../deploy/dev/keys \
+#   CA_CERT_FILE=../deploy/dev/certs/ca.crt CA_KEY_FILE=../deploy/dev/certs/ca/ca.key CRL_FILE=../deploy/dev/certs/crl.pem pnpm start
 
 # Hạ tầng dev (Docker): PostgreSQL + Mosquitto mTLS
 cd deploy/dev && bash gen-dev-certs.sh && docker compose up -d   # PG_PORT=15432 nếu máy đã có PostgreSQL ở 5432

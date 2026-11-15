@@ -44,7 +44,7 @@ MVP có một vai trò quản trị (D-007). Ma trận ghi cả các tác nhân 
 | Tác nhân | Tài nguyên | Được phép | Điều kiện / giới hạn |
 |---|---|---|---|
 | Admin | User, nhóm, thẻ, zone, lịch, profile | Tạo, sửa, bật/tắt; "xóa" user = `inactive` | Không xóa đối tượng còn lịch tham chiếu (BR-017) |
-| Admin | Máy trạm, yêu cầu đăng ký | Duyệt (máy mới / cài lại), từ chối, vô hiệu hóa, xóa máy đã `disabled` | Yêu cầu trùng chỉ duyệt thành cài lại (D-014) |
+| Admin | Máy trạm, yêu cầu đăng ký | Duyệt (máy mới / cài lại), từ chối, vô hiệu hóa (không xóa máy, D-024) | Yêu cầu trùng chỉ duyệt thành cài lại (D-014) |
 | Admin | Nhật ký, phiên, `ingest_rejects`, cảnh báo | Xem, lọc; xem UID giải mã ở trang chi tiết; đánh dấu đã xử lý mục lỗi | **Không** sửa, không xóa (INV-008, trigger CSDL) |
 | Admin | Tài khoản admin | Tạo, vô hiệu hóa, đổi mật khẩu của mình | Không vô hiệu hóa admin hoạt động cuối cùng (INV-016) |
 | Agent máy `{ws}` | Topic MQTT | Đọc `{ws}/snapshot`, `{ws}/lease`, `{ws}/command/#`; ghi `{ws}/hello`, `heartbeat`, `outbox`, `status` | Chỉ topic của chính CN (ACL `%u`, ADR-002) |
