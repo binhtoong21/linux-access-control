@@ -32,6 +32,7 @@ log = logging.getLogger("nfc_agent.enroll")
 
 PENDING_FILE = "enroll-pending.json"
 PENDING_KEY = "enroll-pending.key"
+STOPPED_FILE = "enroll-stopped"  # written by the agent after a rejection; removed by `nfc-agent reenroll`
 POLL_DEFAULT_SEC = 5.0
 BACKOFF_BASE_SEC = 1.0  # ADR-002 §6
 BACKOFF_MAX_SEC = 60.0
@@ -326,7 +327,7 @@ def reenroll(identity_dir: Path, state_dir: Path) -> Path | None:
     `edge.db` is not touched: unsent audit records go out once the workstation has its new certificate.
     Returns where the old identity was moved, or None when there was none.
     """
-    for name in (PENDING_FILE, PENDING_KEY):
+    for name in (PENDING_FILE, PENDING_KEY, STOPPED_FILE):
         (state_dir / name).unlink(missing_ok=True)
     if not identity_dir.exists():
         return None

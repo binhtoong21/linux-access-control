@@ -1,0 +1,7 @@
+# /etc/nfc-agent/agent.conf (root:root 0644). Copy into the master image together with ca.pem.
+# Without [server] url the workstation never enrolls (offline / dev provisioning with tools/dev_provision.py).
+[server]
+# HTTPS address of the server (Nginx). Its certificate must be signed by ca_file and match this host name.
+url = https://lab-server.local
+# The server's CA certificate: the only trust anchor for enrollment (D-014.3). Not a secret.
+ca_file = /etc/nfc-agent/ca.pem

@@ -44,6 +44,10 @@ class AgentConfig:
     control_socket: Path = CONTROL_SOCKET
     reader: str = "pcsc"  # "pcsc" | "sim"
     extra: dict = field(default_factory=dict)
+    # Enrollment (ADR-002 §7): no server URL = this workstation does not enroll (dev / offline provisioning).
+    server_url: str | None = None
+    ca_file: Path = Path("/etc/nfc-agent/ca.pem")
+    state_dir: Path = Path("/var/lib/nfc-agent")
 
 
 def read_boot_id() -> str:
