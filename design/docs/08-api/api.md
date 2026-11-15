@@ -106,7 +106,7 @@ UID chỉ đi vào API, không bao giờ được trả ra trong danh sách; ch�
 - `zone` là `null` khi máy chưa thuộc zone; `PATCH` với `zone_id: null` gỡ máy khỏi zone, zone không tồn tại trả 400 `VALIDATION_ERROR`. Bảng `workstations` không có cột ghi chú nên `PATCH` chỉ đổi zone.
 - Máy chưa từng kết nối (chưa có dòng trạng thái/đồng bộ) hiện `connectivity: "offline"`, `trust_state: null`, `sync` = `in_sync` ở version 0.
 - `sync.state`: `in_sync` khi `acked_version ≥ desired_version`; `stuck` khi còn lệch quá 10 phút trong lúc máy online; còn lại là `pending`.
-- Chọn một profile làm mặc định sẽ bỏ mặc định ở profile kia (mỗi máy tối đa một). Tắt profile mặc định hoặc bỏ mặc định không bị chặn; hệ quả hiện qua cờ `missing_profile`.
+- Chọn một profile làm mặc định sẽ bỏ mặc định ở profile kia (mỗi máy tối đa một). Tắt profile mặc định hoặc bỏ mặc định không bị chặn; hệ quả hiện qua cờ `missing_profile` (D-022).
 - `PATCH` máy hoặc profile không làm đổi gì trả 200, không ghi nhật ký, không phát event. `disable` và `DELETE` máy thuộc M3 (cần thu hồi chứng chỉ, CRL).
 
 `flags` luôn theo thứ tự liệt kê dưới đây. `missing_profile` bật khi có Schedule đang bật trỏ tới máy hoặc zone của máy mà profile cần dùng không có hoặc đang tắt trên máy (Schedule không chỉ định `target_os_username` thì xét profile mặc định). `security_alert` xét cảnh báo nhận trong 7 ngày; `ingest_rejects` xét mục chưa đánh dấu đã xem.

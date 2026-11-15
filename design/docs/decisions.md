@@ -137,6 +137,16 @@ Mỗi thao tác ghi của Admin qua API (tạo/sửa/bật/tắt user, thẻ, nh
 Hệ thống so khớp thẻ bằng UID (ADR-007) nên chỉ cần UID **tĩnh**; thẻ 4, 7, 10 byte dùng lẫn được (VR-007). Thẻ UID ngẫu nhiên (4 byte, byte đầu `08` theo ISO/IEC 14443-3; Spike S1 thấy ở CCCD) trước đây vẫn đăng ký được rồi bị từ chối `unknown_card` ở mọi lần quẹt sau mà Admin không rõ lý do. Từ nay `POST /cards` từ chối với `RANDOM_UID_NOT_SUPPORTED` (VR-013). Chỉ kiểm ở server khi đăng ký; Agent không đổi. Giới hạn: chỉ nhận diện được UID ngẫu nhiên theo đúng quy ước `08`; thẻ đổi UID theo cách khác vẫn rơi vào `unknown_card`.
 **Nguồn:** [02-requirements/business-rules.md](02-requirements/business-rules.md) VR-013, [08-api/api.md](08-api/api.md), S1.
 
+### D-022: Tắt hoặc bỏ profile mặc định của máy không bị chặn, chỉ cảnh báo
+Admin được tắt profile đang là mặc định, hoặc để máy không có profile mặc định (`PATCH /workstations/{id}/profiles/{os_username}`); server không trả 409. Hệ quả (Schedule không chỉ định `target_os_username` bị từ chối tại máy đó) hiện qua cờ `missing_profile` trên danh sách máy. Lý do:
+1. Trạng thái "máy không có profile mặc định dùng được" vẫn xảy ra dù server có chặn (máy mới đăng ký chưa báo profile, image thiếu tài khoản, profile biến mất trên máy), nên cờ `missing_profile` đằng nào cũng là cơ chế chính.
+2. Nhất quán với D-019.4: cấu hình dẫn tới máy thiếu profile là hợp lệ về dữ liệu, chỉ cảnh báo.
+3. Không phải tự khóa: Agent đồng bộ snapshot độc lập với đăng nhập nên bật lại trên Dashboard là máy nhận cấu hình mới; kỹ thuật viên vẫn vào bằng mật khẩu.
+4. Có nhu cầu thật: ngừng cho quẹt thẻ vào một máy có tài khoản dùng chung bị hỏng mà không phải tắt lịch của cả zone.
+
+Yêu cầu cho Dashboard (M4): profile mặc định là nút chọn một (không bỏ chọn được); tắt profile đang là mặc định phải qua hộp xác nhận nêu rõ hệ quả.
+**Nguồn:** [08-api/api.md](08-api/api.md) "Zone và Máy trạm", FR-007, D-009, D-019.
+
 ### ADR-001 (Accepted): Xác thực ở edge, dữ liệu cục bộ có thời hạn tin cậy (lease)
 Quy định ở Agent theo CR-001 từ snapshot cục bộ, không hỏi server khi quẹt thẻ. Dữ liệu cục bộ có thời hạn tin cậy (lease) được gia hạn qua phản hồi heartbeat khi `acked_version == desired_version`. Kiểm tra đồng hồ kết hợp hai hạn (UTC tuyệt đối bền vững và `CLOCK_BOOTTIME` cho phiên) kèm mốc sàn cải tiến `floor = last_sync_local_time - CLOCK_FLOOR_TOLERANCE`. Đã chốt: `D = 24h`; tin RTC sau khi khởi động lại lúc offline nếu `local_time >= floor` (D-018).
 **Nguồn:** [ADR-001](06-architecture/decisions/ADR-001-xac-thuc-o-edge-va-lease.md).
