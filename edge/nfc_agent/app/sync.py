@@ -76,6 +76,7 @@ class SyncClient:
         return self._connected
 
     def on_connected(self) -> None:
+        self._nonces.clear()
         self._connected = True
         self._inflight = None  # whatever was in flight is resent: the server drops duplicates (XINV-006)
         self._send(Outgoing(self._prefix + "hello", _json(self._hello()), qos=1))
@@ -84,6 +85,7 @@ class SyncClient:
     def on_disconnected(self) -> None:
         self._connected = False
         self._inflight = None
+        self._nonces.clear()
 
     def tick(self) -> None:
         if not self._connected:
@@ -204,10 +206,12 @@ class SyncClient:
             return False
         version = int(self._store.meta()["version"])
         duration = body.get("lease_duration_sec")
-        if body.get("desired_version") != version or version < 1 or body.get("nonce") not in self._nonces:
+        nonce = body.get("nonce")
+        if body.get("desired_version") != version or version < 1 or nonce not in self._nonces:
             return False
         if not isinstance(duration, int) or duration < 60:
             return False
+        self._nonces.remove(nonce)
         now = self._wall()
         server_time = body.get("server_time")
         if isinstance(server_time, (int, float)):

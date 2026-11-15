@@ -53,6 +53,7 @@ class SessionRow:
 class RecoveryReport:
     quarantined_as: str
     salvaged_outbox_entries: int
+    high_water_mark: int = 0
 
 
 class OutboxFull(RuntimeError):
@@ -81,17 +82,31 @@ def _migrate(conn: sqlite3.Connection) -> None:
             raise
 
 
-def _salvage_outbox(corrupt: Path) -> list[sqlite3.Row]:
+def _salvage_outbox(corrupt: Path) -> tuple[list[sqlite3.Row], int]:
+    rows: list[sqlite3.Row] = []
+    mark = 0
     try:
         old = sqlite3.connect(f"file:{corrupt}?mode=ro", uri=True)
         old.row_factory = sqlite3.Row
-        rows = old.execute(
-            "SELECT entry_id, occurred_at, event_type, payload_json, created_at FROM audit_outbox ORDER BY outbox_seq"
-        ).fetchall()
+        try:
+            rows = old.execute(
+                "SELECT outbox_seq, entry_id, occurred_at, event_type, payload_json, created_at"
+                " FROM audit_outbox ORDER BY outbox_seq"
+            ).fetchall()
+        except sqlite3.DatabaseError:
+            pass
+        try:
+            r = old.execute("SELECT seq FROM sqlite_sequence WHERE name = 'audit_outbox'").fetchone()
+            if r is not None and isinstance(r[0], int):
+                mark = r[0]
+        except sqlite3.DatabaseError:
+            pass
         old.close()
-        return rows
     except sqlite3.DatabaseError:
-        return []
+        pass
+    if rows:
+        mark = max(mark, max(r["outbox_seq"] for r in rows))
+    return rows, mark
 
 
 class Store:
@@ -111,7 +126,7 @@ class Store:
         store = cls(conn, identity, clock)
         store._sync_agent_meta(boot_id)
         if report:
-            store._restore_salvaged(path.with_name(report.quarantined_as))
+            store._restore_salvaged(path.with_name(report.quarantined_as), report.high_water_mark)
             store.record_alert("edge_db_recovered", {"salvaged_outbox_entries": report.salvaged_outbox_entries})
         return store, report
 
@@ -133,17 +148,39 @@ class Store:
             src = path.with_name(path.name + suffix)
             if src.exists():
                 src.rename(path.with_name(name + suffix))
-        return RecoveryReport(name, len(_salvage_outbox(path.with_name(name))))
+        rows, mark = _salvage_outbox(path.with_name(name))
+        return RecoveryReport(name, len(rows), mark)
 
-    def _restore_salvaged(self, corrupt: Path) -> None:
-        rows = _salvage_outbox(corrupt)
+    def _restore_salvaged(self, corrupt: Path, mark: int = 0) -> None:
+        rows, salvaged_mark = _salvage_outbox(corrupt)
+        high_mark = max(mark, salvaged_mark)
         with self._tx():
             for r in rows:
                 self._db.execute(
-                    "INSERT OR IGNORE INTO audit_outbox (entry_id, occurred_at, event_type, payload_json, created_at)"
-                    " VALUES (?, ?, ?, ?, ?)",
-                    (r["entry_id"], r["occurred_at"], r["event_type"], r["payload_json"], r["created_at"]),
+                    "INSERT OR IGNORE INTO audit_outbox ("
+                    "outbox_seq, entry_id, occurred_at, event_type, payload_json, created_at)"
+                    " VALUES (?, ?, ?, ?, ?, ?)",
+                    (
+                        r["outbox_seq"],
+                        r["entry_id"],
+                        r["occurred_at"],
+                        r["event_type"],
+                        r["payload_json"],
+                        r["created_at"],
+                    ),
                 )
+            if high_mark > 0:
+                current = self._db.execute("SELECT seq FROM sqlite_sequence WHERE name = 'audit_outbox'").fetchone()
+                if current is None:
+                    self._db.execute(
+                        "INSERT INTO sqlite_sequence (name, seq) VALUES ('audit_outbox', ?)",
+                        (high_mark,),
+                    )
+                elif high_mark > current[0]:
+                    self._db.execute(
+                        "UPDATE sqlite_sequence SET seq = ? WHERE name = 'audit_outbox'",
+                        (high_mark,),
+                    )
 
     def _sync_agent_meta(self, boot_id: str) -> None:
         """agent_meta mirrors identity/ on every start, never the other way round (D-017)."""

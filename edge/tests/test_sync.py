@@ -157,6 +157,33 @@ def test_a_lease_renews_only_for_our_version_and_a_recent_nonce(env):
     assert store.lease().last_sync_local_time == clock.now
 
 
+def test_lease_nonce_dies_on_disconnect_and_is_single_use(env):
+    client, store, clock, sent, _ = env
+    client.on_snapshot(*signed(snapshot_bytes(13)))
+    client.on_connected()
+    hello_nonce = body(sent[0])["lease_nonce"]
+    before = store.lease().trusted_until
+
+    # Disconnect invalidates the pre-disconnect nonce
+    client.on_disconnected()
+    client.on_connected()
+    reconnect_hello = [m for m in sent if m.topic.endswith("hello")][-1]
+    new_nonce = body(reconnect_hello)["lease_nonce"]
+    assert new_nonce != hello_nonce
+
+    # A lease answering a nonce sent before a disconnect is rejected after reconnect (and lease on disk unchanged)
+    assert client.on_lease(*lease(nonce=hello_nonce)) is False
+    assert store.lease().trusted_until == before
+
+    # A lease answering the new Hello's nonce after reconnect is accepted
+    clock.now += 600
+    assert client.on_lease(*lease(nonce=new_nonce)) is True
+    assert store.lease().trusted_until == clock.now + 86400
+
+    # The same signed lease delivered twice renews once (second call returns False)
+    assert client.on_lease(*lease(nonce=new_nonce)) is False
+
+
 def test_a_lease_is_written_to_disk_only_when_it_moved_forward_five_minutes(env):
     client, store, clock, _, _ = env
     client.on_snapshot(*signed(snapshot_bytes(13)))
@@ -166,7 +193,8 @@ def test_a_lease_is_written_to_disk_only_when_it_moved_forward_five_minutes(env)
     assert client.on_lease(*lease()) is True
     assert store.lease().trusted_until == stored
     clock.now += 300
-    assert client.on_lease(*lease()) is True
+    client.tick()
+    assert client.on_lease(*lease(nonce=f"{1:032x}")) is True
     assert store.lease().trusted_until == clock.now + 86400
 
 

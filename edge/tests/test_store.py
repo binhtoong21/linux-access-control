@@ -230,3 +230,72 @@ def test_corrupt_db_is_quarantined_and_identity_restored(tmp_path):
         assert s.apply_snapshot(*signed(snapshot_bytes(key_version=2)), NOW)[0] is ApplyResult.APPLIED
     finally:
         s.close()
+
+
+def test_recovered_outbox_preserves_sequence_numbers(tmp_path):
+    path = tmp_path / "edge.db"
+    s, _ = Store.open(path, IDENT, "boot-1", clock=lambda: NOW)
+    s.record_alert("security_alert", {"kind": "first"})
+    s.record_alert("security_alert", {"kind": "second"})
+    s.record_alert("security_alert", {"kind": "third"})
+    assert [r["outbox_seq"] for r in s.outbox_batch()] == [1, 2, 3]
+    # Advance seq: ack row 1 so the remaining rows have seq > 1
+    assert s.ack_outbox(1) == 1
+    assert [r["outbox_seq"] for r in s.outbox_batch()] == [2, 3]
+    s.close()
+
+    # Corrupt a non-outbox table page so quick_check fails and triggers quarantine & salvage
+    data = bytearray(path.read_bytes())
+    data[4096 : 4096 + len(b"this is not a sqlite database")] = b"this is not a sqlite database"
+    path.write_bytes(data)
+
+    s2, report = Store.open(path, IDENT, "boot-2", clock=lambda: NOW)
+    try:
+        assert report is not None and report.salvaged_outbox_entries == 2
+        batch = s2.outbox_batch()
+        # Restored rows keep their original seq
+        assert [r["outbox_seq"] for r in batch[:2]] == [2, 3]
+        # The alert row is recorded after the restore and gets a seq above the restored ones
+        assert batch[2]["outbox_seq"] > 3
+        assert batch[2]["payload"]["kind"] == "edge_db_recovered"
+
+        # ack_outbox with a seq below the restored ones deletes nothing restored
+        assert s2.ack_outbox(1) == 0
+        assert [r["outbox_seq"] for r in s2.outbox_batch()] == [2, 3, batch[2]["outbox_seq"]]
+
+        # New rows continue after the highest restored seq
+        s2.record_alert("security_alert", {"kind": "fourth"})
+        assert s2.outbox_batch()[-1]["outbox_seq"] == batch[2]["outbox_seq"] + 1
+    finally:
+        s2.close()
+
+
+def test_recovered_outbox_preserves_high_water_mark_when_outbox_empty(tmp_path):
+    path = tmp_path / "edge.db"
+    s, _ = Store.open(path, IDENT, "boot-1", clock=lambda: NOW)
+    s.record_alert("security_alert", {"kind": "first"})
+    s.record_alert("security_alert", {"kind": "second"})
+    s.record_alert("security_alert", {"kind": "third"})
+    assert s.ack_outbox(3) == 3
+    assert s.outbox_batch() == []
+    s.close()
+
+    # Corrupt a non-outbox table page so quick_check fails and triggers quarantine & salvage
+    data = bytearray(path.read_bytes())
+    data[4096 : 4096 + len(b"this is not a sqlite database")] = b"this is not a sqlite database"
+    path.write_bytes(data)
+
+    s2, report = Store.open(path, IDENT, "boot-2", clock=lambda: NOW)
+    try:
+        assert report is not None and report.salvaged_outbox_entries == 0
+        batch = s2.outbox_batch()
+        assert len(batch) == 1
+        # The alert gets seq > 3
+        alert = batch[0]
+        assert alert["outbox_seq"] > 3
+        assert alert["payload"]["kind"] == "edge_db_recovered"
+        # Stale ACK for old db (seq <= 3) deletes nothing
+        assert s2.ack_outbox(3) == 0
+        assert [r["outbox_seq"] for r in s2.outbox_batch()] == [alert["outbox_seq"]]
+    finally:
+        s2.close()
