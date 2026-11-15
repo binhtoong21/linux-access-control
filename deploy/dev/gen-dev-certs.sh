@@ -37,7 +37,8 @@ extendedKeyUsage = clientAuth
 basicConstraints = CA:FALSE
 keyUsage = digitalSignature, keyAgreement
 extendedKeyUsage = serverAuth
-subjectAltName = DNS:localhost, DNS:mosquitto, IP:127.0.0.1
+# 10.0.2.2: how a VirtualBox NAT guest (the E2E workstation vm2) reaches this host's loopback.
+subjectAltName = DNS:localhost, DNS:mosquitto, IP:127.0.0.1, IP:10.0.2.2
 EOF
 
 openssl ecparam -name prime256v1 -genkey -noout -out "$OUT/ca/ca.key"
