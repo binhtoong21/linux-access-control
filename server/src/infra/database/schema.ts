@@ -27,6 +27,7 @@ export interface AdminAuditLogsTable {
 
 export type UserStatus = 'active' | 'inactive';
 export type CardStatus = 'unbound' | 'active' | 'disabled';
+export type ScheduleStatus = 'enabled' | 'disabled';
 
 export interface UsersTable {
   id: Generated<string>;
@@ -75,20 +76,32 @@ export interface ZonesTable {
   updated_at: ColumnType<Date, Date | undefined, Date>;
 }
 
-// Only the columns the zone endpoints read; the full type lands with the workstation endpoints.
+// Only the columns the zone and schedule endpoints read; the full type lands with the workstation endpoints.
 export interface WorkstationsTable {
   id: Generated<string>;
+  mqtt_identity: string;
   zone_id: string | null;
 }
 
-// Only the columns the deletion guards read (BR-017); the full type lands with the schedule endpoints.
 export interface SchedulesTable {
   id: Generated<string>;
   name: string;
+  subject_type: 'user' | 'group';
   subject_user_id: string | null;
   subject_group_id: string | null;
+  target_type: 'workstation' | 'zone';
   target_workstation_id: string | null;
   target_zone_id: string | null;
+  // DATE columns are written as 'YYYY-MM-DD' strings and read through to_char: pg would turn them into a Date in the local timezone.
+  valid_from: ColumnType<Date, string, string>;
+  valid_to: ColumnType<Date | null, string | null, string | null>;
+  days_of_week: string[];
+  start_minute: number;
+  end_minute: number;
+  target_os_username: string | null;
+  status: ColumnType<ScheduleStatus, ScheduleStatus | undefined, ScheduleStatus>;
+  created_at: Generated<Date>;
+  updated_at: ColumnType<Date, Date | undefined, Date>;
 }
 
 export interface ServerOutboxTable {

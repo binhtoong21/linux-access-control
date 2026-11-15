@@ -15,10 +15,12 @@ export type IdentityEventType =
 
 export type DeviceEventType = 'ZoneDeleted';
 
+export type SchedulingEventType = 'ScheduleCreated' | 'ScheduleUpdated' | 'ScheduleEnabled' | 'ScheduleDisabled' | 'ScheduleDeleted';
+
 export interface DomainEvent {
-  aggregateType: 'user' | 'group' | 'card' | 'zone';
+  aggregateType: 'user' | 'group' | 'card' | 'zone' | 'schedule';
   aggregateId: string;
-  eventType: IdentityEventType | DeviceEventType;
+  eventType: IdentityEventType | DeviceEventType | SchedulingEventType;
   payload: Record<string, unknown>;
 }
 
