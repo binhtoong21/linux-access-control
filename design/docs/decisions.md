@@ -147,6 +147,14 @@ Admin được tắt profile đang là mặc định, hoặc để máy không c
 Yêu cầu cho Dashboard (M4): profile mặc định là nút chọn một (không bỏ chọn được); tắt profile đang là mặc định phải qua hộp xác nhận nêu rõ hệ quả.
 **Nguồn:** [08-api/api.md](08-api/api.md) "Zone và Máy trạm", FR-007, D-009, D-019.
 
+### D-028: Sửa ba lỗ của Edge tìm ra khi review chéo bằng Codex (sau M3)
+1. **Lượt quẹt trong lúc một đăng nhập đang diễn ra không được làm mồ côi đăng nhập đó** (làm rõ D-027.6). "Đang đăng nhập" là phiên `pending` mà PAM đã dùng quyền: `AuthGate` nhớ mục đã giao cho PAM và trả nó ra ngay trong lúc thu hồi quyền chưa dùng (cùng một khóa). Trước khi đánh giá, Agent đối chiếu phiên trước; nếu vẫn đang đăng nhập thì CR-001 bước 8 coi phiên đó là phiên hiện tại còn sống: cùng người dùng thì `noop(already_active)`, người khác thì `workstation_busy`. Chỉ quyền PAM chưa dùng mới bị lượt quẹt mới thay (D-027.6 giữ nguyên). Desktop lên sau khi khung giờ đã hết vẫn được nhận phiên rồi đăng xuất đúng hạn (session-expiry EF-5), không bị bỏ mà không báo; teardown kẹt thì giữ phiên `pending` (INV-017). Lỗi cũ: lượt quẹt thứ hai trong khoảng ~1 s giữa lúc PAM dùng quyền và nhịp theo dõi phiên xóa phiên đang lên, desktop chạy không có hạn giờ.
+2. **Nonce của lease chỉ dùng một lần và mất theo kết nối** (làm rõ D-018.4). Danh sách nonce bị xóa khi mất kết nối và trước Hello lúc kết nối lại; lease được nhận thì nonce của nó bị bỏ. Lỗi cũ: trong lúc mất kết nối không sinh nonce mới nên nonce cũ còn hiệu lực mãi; broker bị chiếm có thể cắt máy cho lease hết hạn rồi phát lại lease cũ ngay sau khi nối lại để gia hạn thêm 24 h mà không cần Server.
+3. **Phục hồi `edge.db` giữ số thứ tự outbox** (làm rõ D-017.2). Mục cứu được chèn lại với `outbox_seq` gốc, và `sqlite_sequence` của `audit_outbox` được đặt tối thiểu bằng mốc cao nhất của tệp hỏng (kể cả khi outbox cũ đã trống), trước khi ghi cảnh báo `edge_db_recovered`. Lỗi cũ: đánh số lại từ 1, nên một ACK cũ còn xếp hàng ở broker (phiên MQTT `clean_start=False`) hoặc ACK lặp của lô gửi lại xóa mất mục chưa gửi và chính cảnh báo phục hồi.
+
+Bằng chứng: test đơn vị Edge (150 passed); chưa chạy lại E2E trên vm2. Cả ba lỗi do Codex review tìm ra trên code đã qua review và E2E M3.
+**Nguồn:** D-017, D-018, D-027, ADR-008, [session-expiry.md](05-behavior/sequences/session-expiry.md), [09-security](09-security/).
+
 ### D-027: Agent tự đăng ký, đồng bộ MQTT và kết quả E2E của M3 (M3.4–M3.6)
 1. **Đăng ký chặn khởi động Agent** khi chưa có định danh và có `[server] url`: máy chưa có `K_m` thì không làm được gì khác; trong lúc chờ duyệt, PAM và greeter rơi về mật khẩu (BR-004). Khóa riêng và yêu cầu đang chờ (`request_id`, `fetch_code`) được giữ trên đĩa, khởi động lại thì tiếp tục đúng yêu cầu đó.
 2. **Bị từ chối thì đứng chờ, không thoát:** Agent ghi tệp `enroll-stopped` và ngủ. Thoát sẽ làm systemd khởi động lại mỗi giây và mỗi lần gửi một yêu cầu mới. `nfc-agent reenroll` xóa tệp này.
