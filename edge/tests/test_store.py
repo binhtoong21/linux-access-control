@@ -135,21 +135,40 @@ class TestWriteAhead:
         assert rec["payload"]["user"]["external_id"] == "SV001"
 
     def test_failed_session_insert_rolls_back_audit(self, store):
-        """INV-014 + D-005: a second pending session is impossible, and its audit entry must not survive alone."""
+        """INV-014 + D-005: when the session cannot be written, its audit entry must not survive alone."""
         d = _granted(store)
         store.record_swipe(
             d, occurred_at=NOW, card_uid=UID, data_version=13, pending=PendingSession("sess-1", "boot-1", 1000.0)
         )
         before = store.outbox_count()
-        with pytest.raises(sqlite3.IntegrityError):
+        with pytest.raises(sqlite3.IntegrityError):  # same session id twice
             store.record_swipe(
                 d,
                 occurred_at=NOW + 1,
                 card_uid=UID,
                 data_version=13,
-                pending=PendingSession("sess-2", "boot-1", 1001.0),
+                pending=PendingSession("sess-1", "boot-1", 1001.0),
             )
         assert store.outbox_count() == before
+        assert store.pending_session().session_id == "sess-1"
+
+    def test_a_second_granted_swipe_replaces_the_unused_pending_session(self, store):
+        """Found in the M3 E2E on vm2: a card tapped twice before PAM used the first permission crashed the
+        second swipe (one pending session only) and lost its audit entry (BR-007)."""
+        d = _granted(store)
+        first = store.record_swipe(
+            d, occurred_at=NOW, card_uid=UID, data_version=13, pending=PendingSession("sess-1", "boot-1", 1000.0)
+        )
+        second = store.record_swipe(
+            d, occurred_at=NOW + 1, card_uid=UID, data_version=13, pending=PendingSession("sess-2", "boot-1", 1001.0)
+        )
+        pending = store.pending_session()
+        assert (pending.session_id, pending.entry_id) == ("sess-2", second)
+        old = store._db.execute("SELECT status, ended_at FROM local_sessions WHERE session_id = 'sess-1'").fetchone()
+        assert (old["status"], old["ended_at"]) == ("discarded", NOW + 1)
+        entries = [r["entry_id"] for r in store.outbox_batch() if r["event_type"] == "swipe_decision"]
+        assert entries[-2:] == [first, second]
+        assert not any(r["event_type"] == "session_ended" for r in store.outbox_batch())
 
     def test_session_lifecycle_reports_events(self, store):
         d = _granted(store)

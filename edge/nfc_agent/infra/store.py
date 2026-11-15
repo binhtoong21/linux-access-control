@@ -388,6 +388,12 @@ class Store:
         with self._tx() as db:
             entry_id = self._outbox_insert("swipe_decision", payload, occurred_at)
             if decision.granted:
+                # A new granted swipe replaces a permission PAM has not used yet (the gate is cleared too): the older
+                # pending session never reached the OS, so it is discarded, not reported. Its audit entry stays (D-005).
+                db.execute(
+                    "UPDATE local_sessions SET status = 'discarded', ended_at = ? WHERE status = 'pending'",
+                    (occurred_at,),
+                )
                 db.execute(
                     "INSERT INTO local_sessions (session_id, entry_id, user_id, card_id, os_username, boot_id,"
                     " decided_at, expires_at, boottime_limit, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')",
