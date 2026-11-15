@@ -49,6 +49,27 @@ export interface ScheduleFilter {
   status?: ScheduleStatus;
 }
 
+export interface WorkstationRef {
+  id: string;
+  mqtt_identity: string;
+}
+
+// Never blocks saving (D-019.4): the configuration is valid data and is only refused at the workstation, at swipe time.
+export interface ScheduleWarning {
+  code: 'ambiguous_profile' | 'missing_profile';
+  message: string;
+  workstations: WorkstationRef[];
+  /** ambiguous_profile: the other schedule. */
+  schedule?: { id: string; name: string };
+  /** missing_profile: the profile this schedule asks for; null = the workstation's default profile. */
+  target_os_username?: string | null;
+}
+
+export interface ScheduleValidation {
+  errors: FieldError[];
+  warnings: ScheduleWarning[];
+}
+
 // The stored columns an admin can change (everything but id, status and timestamps).
 type Fields = {
   name: string;
@@ -154,6 +175,26 @@ function toInput(v: ScheduleView): ScheduleInput {
   };
 }
 
+// An enrolled workstation with its usable profiles, as far as warnings need it.
+interface Machine extends WorkstationRef {
+  zone_id: string | null;
+  default_profile: string | null;
+  profiles: string[];
+}
+
+const covers = (s: Fields, m: Machine): boolean =>
+  s.target_type === 'workstation' ? s.target_workstation_id === m.id : m.zone_id !== null && s.target_zone_id === m.zone_id;
+
+/** True when both schedules are in force at some common minute of some common day. */
+const sameTime = (a: Fields, b: Fields): boolean =>
+  a.start_minute < b.end_minute &&
+  b.start_minute < a.end_minute &&
+  a.days_of_week.some((day) => b.days_of_week.includes(day)) &&
+  (a.valid_to === null || a.valid_to >= b.valid_from) &&
+  (b.valid_to === null || b.valid_to >= a.valid_from);
+
+const refOf = (m: Machine): WorkstationRef => ({ id: m.id, mqtt_identity: m.mqtt_identity });
+
 // What the Distribution worker needs to find the affected workstations once the row has changed or is gone.
 const targetOf = (f: Fields) => ({ target_type: f.target_type, target_workstation_id: f.target_workstation_id, target_zone_id: f.target_zone_id });
 
@@ -207,8 +248,13 @@ export class SchedulesService {
     return this.view(trx, id);
   }
 
-  /** VR-003, VR-004 and existence of subject and target (VR-005); shape rules are checked by the DTOs. */
   private async check(db: Db, f: Fields): Promise<void> {
+    const errors = await this.problems(db, f);
+    if (errors.length > 0) throw invalid(errors);
+  }
+
+  /** VR-003, VR-004 and existence of subject and target (VR-005); shape rules are checked by the DTOs. */
+  private async problems(db: Db, f: Fields): Promise<FieldError[]> {
     const errors: FieldError[] = [];
     if (f.start_minute >= f.end_minute) errors.push({ field: 'end_time', constraints: ['end_time must be after start_time'] });
     if (f.valid_to !== null && f.valid_to < f.valid_from) errors.push({ field: 'valid_to', constraints: ['valid_to must not be before valid_from'] });
@@ -222,7 +268,7 @@ export class SchedulesService {
         ? await db.selectFrom('workstations').select('id').where('id', '=', f.target_workstation_id as string).executeTakeFirst()
         : await db.selectFrom('zones').select('id').where('id', '=', f.target_zone_id as string).executeTakeFirst();
     if (!target) errors.push({ field: 'target.id', constraints: [`${f.target_type} not found`] });
-    if (errors.length > 0) throw invalid(errors);
+    return errors;
   }
 
   /** FR-022. `workstationId` also matches schedules on the workstation's zone; `userId` also matches schedules on the user's groups. */
@@ -249,6 +295,110 @@ export class SchedulesService {
 
   get(id: string): Promise<ScheduleView> {
     return this.view(this.db, id);
+  }
+
+  /** FR-023: what saving this input would answer, plus warnings. `scheduleId` = the schedule being edited. Writes nothing. */
+  async validate(input: ScheduleInput, scheduleId?: string): Promise<ScheduleValidation> {
+    const fields = toFields(input);
+    const errors = await this.problems(this.db, fields);
+    return { errors, warnings: errors.length > 0 ? [] : await this.warnings(fields, scheduleId) };
+  }
+
+  /**
+   * BR-016 and D-009, as the Agent will evaluate them (03-domain "LoginEvaluationService" step 6): schedules matching one
+   * swipe must resolve to one profile, and that profile must be enabled on the workstation. Works on the current zones,
+   * group members and profiles; about 40 workstations, so the comparison is done in memory.
+   */
+  private async warnings(f: Fields, scheduleId?: string): Promise<ScheduleWarning[]> {
+    const machines = (
+      await sql<Machine>`
+        SELECT w.id, w.mqtt_identity, w.zone_id,
+          (SELECT p.os_username FROM workstation_profiles p
+            WHERE p.workstation_id = w.id AND p.is_default AND p.status = 'enabled') AS default_profile,
+          coalesce((SELECT array_agg(p.os_username::text) FROM workstation_profiles p
+            WHERE p.workstation_id = w.id AND p.status = 'enabled'), '{}') AS profiles
+        FROM workstations w
+        WHERE w.status = 'enrolled'
+        ORDER BY w.mqtt_identity
+      `.execute(this.db)
+    ).rows;
+
+    let query = this.db
+      .selectFrom('schedules')
+      .select([
+        'id',
+        'name',
+        'subject_type',
+        'subject_user_id',
+        'subject_group_id',
+        'target_type',
+        'target_workstation_id',
+        'target_zone_id',
+        sql<string>`to_char(valid_from, 'YYYY-MM-DD')`.as('valid_from'),
+        sql<string | null>`to_char(valid_to, 'YYYY-MM-DD')`.as('valid_to'),
+        'days_of_week',
+        'start_minute',
+        'end_minute',
+        'target_os_username',
+      ])
+      .where('status', '=', 'enabled');
+    if (scheduleId) query = query.where('id', '!=', scheduleId);
+    const others: (Fields & { id: string })[] = (await query.orderBy('name').orderBy('id').execute()).filter((o) => sameTime(f, o));
+
+    const groupIds = [...new Set([f, ...others].map((s) => s.subject_group_id).filter((g): g is string => g !== null))];
+    const members =
+      groupIds.length > 0 ? await this.db.selectFrom('group_members').select(['group_id', 'user_id']).where('group_id', 'in', groupIds).execute() : [];
+    const usersOf = (s: Fields): string[] =>
+      s.subject_user_id !== null ? [s.subject_user_id] : members.filter((m) => m.group_id === s.subject_group_id).map((m) => m.user_id);
+    const mine = usersOf(f);
+    // The same group counts even while it has no members: it will conflict as soon as someone joins.
+    const sharesUser = (o: Fields): boolean =>
+      (f.subject_group_id !== null && f.subject_group_id === o.subject_group_id) || usersOf(o).some((user) => mine.includes(user));
+
+    const warnings: ScheduleWarning[] = [];
+    for (const other of others) {
+      if (!sharesUser(other)) continue;
+      const shared = machines.filter((m) => covers(f, m) && covers(other, m));
+      const clashing = shared.filter((m) => {
+        const a = f.target_os_username ?? m.default_profile;
+        const b = other.target_os_username ?? m.default_profile;
+        return a !== null && b !== null && a !== b;
+      });
+      // The same zone without workstations yet: only two explicit, different names are certain to clash later.
+      const emptyZoneClash =
+        shared.length === 0 &&
+        f.target_zone_id !== null &&
+        f.target_zone_id === other.target_zone_id &&
+        f.target_os_username !== null &&
+        other.target_os_username !== null &&
+        f.target_os_username !== other.target_os_username;
+      if (clashing.length > 0 || emptyZoneClash) {
+        warnings.push({
+          code: 'ambiguous_profile',
+          message: `Overlaps with schedule "${other.name}" for the same user with a different profile; such swipes are denied (ambiguous_profile)`,
+          workstations: clashing.map(refOf),
+          schedule: { id: other.id, name: other.name },
+        });
+      }
+    }
+
+    const lacking = machines.filter((m) => {
+      if (!covers(f, m)) return false;
+      const wanted = f.target_os_username ?? m.default_profile;
+      return wanted === null || !m.profiles.includes(wanted);
+    });
+    if (lacking.length > 0) {
+      warnings.push({
+        code: 'missing_profile',
+        message:
+          f.target_os_username === null
+            ? 'Some workstations have no enabled default profile'
+            : `Some workstations have no enabled profile "${f.target_os_username}"`,
+        workstations: lacking.map(refOf),
+        target_os_username: f.target_os_username,
+      });
+    }
+    return warnings;
   }
 
   async create(input: ScheduleInput, actorId: string): Promise<ScheduleView> {

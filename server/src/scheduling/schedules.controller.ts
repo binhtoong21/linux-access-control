@@ -3,7 +3,7 @@ import { Type } from 'class-transformer';
 import { ArrayMinSize, IsArray, IsDefined, IsIn, IsISO8601, IsOptional, IsString, IsUUID, Matches, MaxLength, ValidateNested } from 'class-validator';
 import { ScheduleStatus } from '../infra/database/schema';
 import { AuthenticatedAdmin, CurrentAdmin } from '../shared/http/auth.decorators';
-import { DATE_PATTERN, DAYS, OS_USERNAME_PATTERN, SchedulesService, ScheduleView, TIME_PATTERN } from './schedules.service';
+import { DATE_PATTERN, DAYS, OS_USERNAME_PATTERN, SchedulesService, ScheduleValidation, ScheduleView, TIME_PATTERN } from './schedules.service';
 
 const DATE_MESSAGE = { message: '$property must be a date YYYY-MM-DD' };
 const TIME_MESSAGE = { message: '$property must be HH:MM between 00:00 and 24:00' };
@@ -64,6 +64,13 @@ class CreateScheduleDto {
   @IsOptional()
   @Matches(OS_USERNAME_PATTERN, OS_USERNAME_MESSAGE)
   target_os_username?: string | null;
+}
+
+class ValidateScheduleDto extends CreateScheduleDto {
+  // The schedule being edited, so that it is not compared with itself; absent when validating a new schedule.
+  @IsOptional()
+  @IsUUID()
+  schedule_id?: string | null;
 }
 
 class UpdateScheduleDto {
@@ -154,6 +161,13 @@ export class SchedulesController {
   @Post()
   create(@Body() dto: CreateScheduleDto, @CurrentAdmin() actor: AuthenticatedAdmin): Promise<ScheduleView> {
     return this.schedules.create(dto, actor.id);
+  }
+
+  @Post('validate')
+  @HttpCode(200)
+  validate(@Body() dto: ValidateScheduleDto): Promise<ScheduleValidation> {
+    const { schedule_id, ...input } = dto;
+    return this.schedules.validate(input, schedule_id ?? undefined);
   }
 
   @Get(':id')
