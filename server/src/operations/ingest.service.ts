@@ -237,7 +237,7 @@ export class IngestService {
 
   /** D-015.2: kept verbatim for the admin. The same record of a resent batch is stored once. */
   private async reject(db: Db, workstationId: string, record: unknown, error: string): Promise<void> {
-    const raw = JSON.stringify(record ?? null);
+    const raw = JSON.stringify(this.redact(record ?? null));
     const entryId = isObject(record) && typeof record.entry_id === 'string' ? record.entry_id.slice(0, 64) : null;
     const seq = isObject(record) && Number.isInteger(record.outbox_seq) ? (record.outbox_seq as number) : null;
     await sql`
@@ -247,6 +247,18 @@ export class IngestService {
         SELECT 1 FROM ingest_rejects WHERE workstation_id = ${workstationId}::uuid AND raw_record = ${raw}::jsonb
       )
     `.execute(db);
+  }
+
+  /** NFR-SEC03: no card UID is stored in the clear, rejected records included; the blind index keeps it searchable. */
+  private redact(record: unknown): unknown {
+    if (!isObject(record) || !isObject(record.payload) || typeof record.payload.card_uid !== 'string') return record;
+    let index: string | null = null;
+    try {
+      index = this.vault.index(normalizeUid(record.payload.card_uid));
+    } catch {
+      index = null;
+    }
+    return { ...record, payload: { ...record.payload, card_uid: '[redacted]', card_uid_index: index } };
   }
 
   /** events.md §4.3: cumulative, so a lost ACK is repaired by the next one (INV-013). */
