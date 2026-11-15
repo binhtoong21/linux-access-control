@@ -13,10 +13,12 @@ export type IdentityEventType =
   | 'CardDisabled'
   | 'CardEnabled';
 
+export type DeviceEventType = 'ZoneDeleted';
+
 export interface DomainEvent {
-  aggregateType: 'user' | 'group' | 'card';
+  aggregateType: 'user' | 'group' | 'card' | 'zone';
   aggregateId: string;
-  eventType: IdentityEventType;
+  eventType: IdentityEventType | DeviceEventType;
   payload: Record<string, unknown>;
 }
 

@@ -66,12 +66,29 @@ export interface CardsTable {
   updated_at: ColumnType<Date, Date | undefined, Date>;
 }
 
-// Only the columns Identity reads (BR-017); the full type lands with Scheduling (M2.4).
+export interface ZonesTable {
+  id: Generated<string>;
+  name: string;
+  location: string;
+  description: ColumnType<string | null, string | null | undefined, string | null>;
+  created_at: Generated<Date>;
+  updated_at: ColumnType<Date, Date | undefined, Date>;
+}
+
+// Only the columns the zone endpoints read; the full type lands with the workstation endpoints.
+export interface WorkstationsTable {
+  id: Generated<string>;
+  zone_id: string | null;
+}
+
+// Only the columns the deletion guards read (BR-017); the full type lands with the schedule endpoints.
 export interface SchedulesTable {
   id: Generated<string>;
   name: string;
   subject_user_id: string | null;
   subject_group_id: string | null;
+  target_workstation_id: string | null;
+  target_zone_id: string | null;
 }
 
 export interface ServerOutboxTable {
@@ -105,6 +122,8 @@ export interface Database {
   groups: GroupsTable;
   group_members: GroupMembersTable;
   cards: CardsTable;
+  zones: ZonesTable;
+  workstations: WorkstationsTable;
   schedules: SchedulesTable;
   server_outbox: ServerOutboxTable;
   audit_logs: AuditLogsTable;
