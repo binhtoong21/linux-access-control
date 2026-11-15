@@ -81,6 +81,22 @@ export interface WorkstationsTable {
   id: Generated<string>;
   mqtt_identity: string;
   zone_id: string | null;
+  updated_at: ColumnType<Date, Date | undefined, Date>;
+}
+
+export type ProfileStatus = 'enabled' | 'disabled';
+
+export interface WorkstationProfilesTable {
+  id: Generated<string>;
+  workstation_id: string;
+  os_username: string;
+  display_name: string;
+  profile_type: ColumnType<'shared', 'shared' | undefined, 'shared'>;
+  is_default: ColumnType<boolean, boolean | undefined, boolean>;
+  status: ColumnType<ProfileStatus, ProfileStatus | undefined, ProfileStatus>;
+  description: ColumnType<string | null, string | null | undefined, string | null>;
+  discovered_at: Generated<Date>;
+  updated_at: ColumnType<Date, Date | undefined, Date>;
 }
 
 export interface SchedulesTable {
@@ -137,6 +153,7 @@ export interface Database {
   cards: CardsTable;
   zones: ZonesTable;
   workstations: WorkstationsTable;
+  workstation_profiles: WorkstationProfilesTable;
   schedules: SchedulesTable;
   server_outbox: ServerOutboxTable;
   audit_logs: AuditLogsTable;

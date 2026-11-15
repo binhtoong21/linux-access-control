@@ -13,12 +13,12 @@ export type IdentityEventType =
   | 'CardDisabled'
   | 'CardEnabled';
 
-export type DeviceEventType = 'ZoneDeleted';
+export type DeviceEventType = 'ZoneDeleted' | 'WorkstationZoneChanged' | 'WorkstationProfileConfigured';
 
 export type SchedulingEventType = 'ScheduleCreated' | 'ScheduleUpdated' | 'ScheduleEnabled' | 'ScheduleDisabled' | 'ScheduleDeleted';
 
 export interface DomainEvent {
-  aggregateType: 'user' | 'group' | 'card' | 'zone' | 'schedule';
+  aggregateType: 'user' | 'group' | 'card' | 'zone' | 'schedule' | 'workstation';
   aggregateId: string;
   eventType: IdentityEventType | DeviceEventType | SchedulingEventType;
   payload: Record<string, unknown>;
