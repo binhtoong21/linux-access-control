@@ -77,6 +77,8 @@ def main(argv: list[str] | None = None) -> int:
 
         def stop(*_):
             agent.sessions.planned_shutdown()  # planned shutdown: reported workstation_rebooted
+            if agent.link is not None:
+                agent.link.stop()  # unsent records stay in the outbox and go out after the next start
             agent.store.close()
             sys.exit(0)
 

@@ -28,6 +28,7 @@ from ..infra.ipc import AuthGate, GreeterHub, PamServer, _bind_unix, peer_uid
 from ..infra.reader import CardSwiped, ReaderUnavailable, SwipeDetector, SwipeError
 from ..infra.store import OutboxFull, PendingSession, Store
 from .sessions import SessionManager
+from .sync import SyncClient
 
 log = logging.getLogger("nfc_agent")
 
@@ -77,10 +78,13 @@ class Agent:
         greeter: GreeterHub | None,
         boot_id: str,
         wall=time.time,
+        sync: SyncClient | None = None,
     ):
         self.store, self.identity, self.sessions, self.gate = store, identity, sessions, gate
         self.greeter, self.boot_id, self.wall = greeter, boot_id, wall
         self.events: queue.Queue = queue.Queue()
+        self.sync = sync  # None: no MQTT credentials (dev-provisioned identity), the agent runs offline
+        self.link = None  # infra.mqtt.MqttLink once started by build()
 
     # ------------------------------------------------------------------ one swipe
     def handle_swipe(self, uid: str) -> Decision:
@@ -161,6 +165,8 @@ class Agent:
             now = time.monotonic()
             if now >= next_tick:
                 self._safe(self.sessions.tick)
+                if self.sync is not None:
+                    self._safe(self.sync.tick)
                 next_tick = now + 1.0
             if now >= next_alive:
                 self._safe(lambda: self.store.touch_liveness(self.boot_id, self.wall()))
@@ -236,6 +242,7 @@ class Agent:
                 "outbox": self.store.outbox_count(),
                 "active_session": s and s.session_id,
                 "profiles": discover_profiles(),
+                "mqtt_connected": self.sync.connected if self.sync is not None else None,
             }
         return {"ok": False, "error": f"unknown cmd {req['cmd']}"}
 
@@ -273,4 +280,41 @@ def build(config: AgentConfig) -> Agent:
     agent.start_control(config.control_socket)
     backend = SimulatedBackend() if config.reader == "sim" else PcscBackend()
     agent.start_reader(SwipeDetector(backend))
+    start_sync(agent, config)
     return agent
+
+
+def start_sync(agent: Agent, config: AgentConfig) -> None:
+    """Connects to the broker when the identity came from enrollment; a dev-provisioned one stays offline (M1)."""
+    from ..infra.identity import IdentityMissing, load_credentials
+    from ..infra.mqtt import MqttLink
+    from .bootstrap import agent_version
+
+    try:
+        credentials = load_credentials(config.identity_dir)
+    except IdentityMissing:
+        log.warning("identity has no MQTT credentials: running offline")
+        return
+
+    def later(fn) -> None:  # paho's thread -> the agent's worker thread, which owns the store
+        agent.events.put(("call", fn))
+
+    sync = SyncClient(
+        agent.store,
+        agent.identity,
+        agent.boot_id,
+        publish=lambda message: link.publish(message),
+        profiles=discover_profiles,
+        wall=agent.wall,
+        agent_version=agent_version(),
+    )
+    link = MqttLink(
+        agent.identity,
+        credentials,
+        config.ca_file,
+        on_connected=lambda: later(sync.on_connected),
+        on_disconnected=lambda: later(sync.on_disconnected),
+        on_message=lambda topic, payload, signature: later(lambda: sync.on_message(topic, payload, signature)),
+    )
+    agent.sync, agent.link = sync, link
+    link.start()
