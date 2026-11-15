@@ -41,9 +41,13 @@ class SessionManager:
         self._warned: set[str] = set()
 
     # ------------------------------------------------------------------ queries
-    def current(self) -> CurrentSession | None:
+    def current(self, consumed_entry: str | None = None) -> CurrentSession | None:
         s = self._store.active_session()
         if s is None:
+            p = self._store.pending_session()
+            if p is not None and p.entry_id == consumed_entry:
+                # PAM is starting this desktop even if logind has not published it yet.
+                return CurrentSession(p.session_id, p.user_id, self._deadline_utc(p), True)
             return None
         return CurrentSession(
             s.session_id, s.user_id, self._deadline_utc(s), self._os.gui_session(s.os_username) is not None
@@ -84,14 +88,12 @@ class SessionManager:
         if p is None:
             return
         gui = self._os.gui_session(p.os_username)
-        if self._expired(p):  # the window closed before the desktop came up (session-expiry EF-5)
-            if gui is not None:
-                self._os.teardown(p.os_username)
-            self._store.discard_pending(p.session_id, self._wall())
-        elif gui is not None and gui.created_at > p.decided_at - CREATED_AFTER_TOLERANCE:
+        if gui is not None and gui.created_at > p.decided_at - CREATED_AFTER_TOLERANCE:
+            # Track even an expired desktop: _watch_active enforces its deadline and keeps it tracked if stuck.
             self._store.activate_session(p.session_id, gui.session_id, gui.created_at)
-            self._maybe_warn(self._store.active_session())
-        elif self._wall() > p.decided_at + PENDING_TIMEOUT:
+        elif self._expired(p) or self._wall() > p.decided_at + PENDING_TIMEOUT:
+            if gui is not None and not self._os.teardown(p.os_username).clean:
+                return  # never discard the only tracking while a GUI session remains (INV-017)
             self._store.discard_pending(p.session_id, self._wall())
 
     def _watch_active(self) -> None:

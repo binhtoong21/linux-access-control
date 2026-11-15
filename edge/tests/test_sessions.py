@@ -145,6 +145,29 @@ def test_stuck_teardown_keeps_session_active(env):
     assert store.active_session() is not None
 
 
+@pytest.mark.parametrize("stuck", [False, True])
+def test_expired_pending_desktop_is_tracked_until_teardown_succeeds(env, stuck):
+    store, os_, clock, mgr, _ = env
+    grant(store, mgr, clock)
+    pending = store.pending_session()
+    clock.advance(2)
+    os_.sessions["student"] = OsSession("c12", "student", clock.wall)
+    clock.boot = pending.boottime_limit + 1
+    os_.stuck = stuck
+
+    mgr.tick()
+
+    assert store.pending_session() is None
+    assert os_.teardowns == ["student"]
+    if stuck:
+        assert store.active_session().session_id == pending.session_id
+        os_.stuck = False
+        mgr.tick()
+    assert store.active_session() is None
+    assert os_.gui_session("student") is None
+    assert store.outbox_batch()[-1]["payload"]["end_reason"] == "schedule_expired"
+
+
 class TestReplacement:
     def test_make_room_superseded(self, env):
         store, os_, clock, mgr, _ = env

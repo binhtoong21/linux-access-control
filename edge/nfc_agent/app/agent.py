@@ -88,14 +88,15 @@ class Agent:
 
     # ------------------------------------------------------------------ one swipe
     def handle_swipe(self, uid: str) -> Decision:
-        self.gate.clear()  # a new swipe supersedes any permission not yet used by PAM
+        consumed_entry = self.gate.clear()  # revoke unused permission before PAM can race this decision
+        self.sessions.tick()  # reconcile a desktop that appeared since the last periodic watch
         now = self.wall()
         decision = evaluate(
             crypto.card_match_key(self.identity.km, uid),
             now,
             self.store.snapshot_view(),
             self.store.lease(),
-            self.sessions.current(),
+            self.sessions.current(consumed_entry),
         )
         version = self.store.meta()["version"]
         pending = None

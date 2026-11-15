@@ -39,15 +39,18 @@ class AuthGate:
     def __init__(self, clock: Callable[[], float] = time.monotonic):
         self._lock = threading.Lock()
         self._staged: _Staged | None = None
+        self._consumed_entry: str | None = None
         self._clock = clock
 
     def stage(self, entry_id: str, os_username: str) -> None:
         with self._lock:
             self._staged = _Staged(entry_id, os_username, self._clock() + LOGIN_PERMISSION_TTL)
 
-    def clear(self) -> None:
+    def clear(self) -> str | None:
+        """Revoke unused permission and atomically report the last entry handed to PAM."""
         with self._lock:
             self._staged = None
+            return self._consumed_entry
 
     def consume(self, pam_user: str) -> tuple[bool, str]:
         """Return (granted, os_username|reason). Consumed on success; a mismatching user does not consume it."""
@@ -61,6 +64,7 @@ class AuthGate:
             if pam_user and pam_user != s.os_username:
                 return False, "user_mismatch"
             self._staged = None
+            self._consumed_entry = s.entry_id
             return True, s.os_username
 
     @property

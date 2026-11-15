@@ -24,6 +24,15 @@ def test_permission_is_single_use():
     gate.stage("e1", "student")
     assert gate.consume("student") == (True, "student")
     assert gate.consume("student") == (False, "no_pending_login")
+    assert gate.clear() == "e1"
+    assert gate.clear() == "e1"
+
+
+def test_clear_revokes_unused_permission_without_remembering_it_as_consumed():
+    gate = AuthGate()
+    gate.stage("e1", "student")
+    assert gate.clear() is None
+    assert gate.consume("student") == (False, "no_pending_login")
 
 
 def test_permission_expires():
@@ -32,6 +41,7 @@ def test_permission_expires():
     gate.stage("e1", "student")
     clock.t += LOGIN_PERMISSION_TTL + 0.1
     assert gate.consume("student") == (False, "expired")
+    assert gate.clear() is None
 
 
 def test_pam_user_must_match_target_profile():
