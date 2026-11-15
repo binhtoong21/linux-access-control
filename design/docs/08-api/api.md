@@ -131,7 +131,7 @@ UID chỉ đi vào API, không bao giờ được trả ra trong danh sách; ch�
 | POST | `/schedules` | Tạo | `ScheduleInput` | 201; 400 `VALIDATION_ERROR` (VR-003…005, VR-009) |
 | GET · PATCH · DELETE | `/schedules/{id}` | Chi tiết / sửa / xóa | `ScheduleInput` (một phần) | 200 / 200 / 204 |
 | POST | `/schedules/{id}/enable` · `/disable` | Bật / tắt (FR-021) | — | 200 |
-| POST | `/schedules/validate` | Kiểm tra trước khi lưu: lỗi hợp lệ, cảnh báo xung đột profile (`ambiguous_profile` có thể xảy ra, BR-016) và máy thiếu profile (D-009) | `ScheduleInput` | 200 `{errors: [], warnings: []}` |
+| POST | `/schedules/validate` | Kiểm tra trước khi lưu: lỗi hợp lệ, cảnh báo xung đột profile (`ambiguous_profile` có thể xảy ra, BR-016) và máy thiếu profile (D-009) | `ScheduleInput` + `schedule_id?` | 200 `{errors: [], warnings: []}` |
 
 `ScheduleInput`:
 ```json
@@ -150,6 +150,14 @@ UID chỉ đi vào API, không bao giờ được trả ra trong danh sách; ch�
 Lọc `GET /schedules` (FR-022, trả lời "ai được vào đâu"): `workstation_id` trả cả lịch gán thẳng cho máy lẫn lịch gán cho zone hiện tại của máy; `user_id` trả cả lịch gán thẳng cho user lẫn lịch gán cho nhóm user đang thuộc; `zone_id`, `group_id` khớp chính xác. Không phân trang, sắp theo tên.
 
 `PATCH` chỉ đổi các trường gửi lên; `valid_to: null` và `target_os_username: null` xóa giá trị. `PATCH`, `enable`, `disable` không làm đổi gì trả 200, không ghi nhật ký, không phát event. Subject hoặc target không tồn tại trả 400 `VALIDATION_ERROR` (`subject.id`, `target.id`).
+
+`POST /schedules/validate` không ghi gì. `schedule_id` (tùy chọn) là lịch đang sửa, để lịch đó không bị so với chính nó. Body sai định dạng vẫn trả 400; còn lại luôn 200:
+
+- `errors`: đúng các lỗi mà `POST /schedules` sẽ trả 400 (`[{field, constraints}]`: giờ bắt đầu ≥ kết thúc, ngày hiệu lực ngược, subject/target không tồn tại). Có lỗi thì `warnings` rỗng.
+- `warnings` (không chặn lưu, D-019.4), mỗi mục `{code, message, workstations: [{id, mqtt_identity}], …}`, theo thứ tự:
+  - `ambiguous_profile` kèm `schedule: {id, name}`: một mục cho mỗi lịch **đang bật** khác có thể khớp cùng lần quẹt (giao nhau về ngày hiệu lực, thứ, giờ; chung user trực tiếp hoặc qua nhóm; chung máy) mà ra profile khác trên máy đó. Lịch không chỉ định `target_os_username` tính theo profile mặc định đang bật của máy, như Agent đánh giá. Hai lịch cùng một zone chưa có máy chỉ bị cảnh báo khi cả hai chỉ định hai profile khác nhau (`workstations` rỗng).
+  - `missing_profile` kèm `target_os_username` (`null` = profile mặc định), tối đa một mục: các máy thuộc target không có profile cần dùng ở trạng thái bật.
+- Chỉ xét máy `enrolled`; tính trên zone, thành viên nhóm và profile ở thời điểm gọi.
 
 `end_time` cho phép `24:00`; `start_time < end_time` trong cùng ngày (D-011). Cảnh báo xung đột profile không chặn lưu: đó là cấu hình hợp lệ, chỉ từ chối tại máy khi hai lịch cùng khớp một lúc (BR-016).
 
