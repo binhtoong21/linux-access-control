@@ -29,6 +29,8 @@ export class OutboxWorker implements OnApplicationBootstrap, OnApplicationShutdo
   private current: Promise<void> | null = null;
   private lastFullAt = 0;
   private failing: string[] = [];
+  /** Called with the workstations that just got a new snapshot version; the MQTT gateway publishes them. */
+  onIssued: ((issued: ReconcileResult[]) => Promise<void>) | undefined;
 
   constructor(
     @Inject(KYSELY) private readonly db: Db,
@@ -75,12 +77,13 @@ export class OutboxWorker implements OnApplicationBootstrap, OnApplicationShutdo
   async reconcileNow(): Promise<ReconcileResult[]> {
     const results = await this.snapshots.reconcileAll();
     this.remember(results);
+    await this.notify(results);
     return results;
   }
 
   /** Claims the pending events, reconciles when there are any, marks them processed. */
   async runOnce(): Promise<OutboxRun> {
-    return this.db.transaction().execute(async (trx) => {
+    const run: OutboxRun = await this.db.transaction().execute(async (trx) => {
       // The row locks are held until commit; reconcile runs on other connections and never touches server_outbox.
       const claimed = (
         await sql<{ id: string }>`
@@ -97,6 +100,20 @@ export class OutboxWorker implements OnApplicationBootstrap, OnApplicationShutdo
       `.execute(trx);
       return { events: claimed.length, results };
     });
+    // After the events are committed as processed; the snapshots themselves were committed by reconcile.
+    await this.notify(run.results);
+    return run;
+  }
+
+  /** Publishing is best effort: a failure is logged, the snapshot stays stored and a Hello fetches it (reconnect.md). */
+  private async notify(results: ReconcileResult[]): Promise<void> {
+    const issued = results.filter((r) => r.version !== null);
+    if (issued.length === 0 || !this.onIssued) return;
+    try {
+      await this.onIssued(issued);
+    } catch (err) {
+      this.logger.error(`publishing new snapshots failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   private remember(results: ReconcileResult[]): void {
