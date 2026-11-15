@@ -3,7 +3,16 @@ import os from 'node:os';
 import path from 'node:path';
 import { loadConfig, loadKeyConfig } from '../../src/config';
 import { blindIndex } from '../../src/shared/crypto/crypto-v1';
-import { encKeyFile, initKeys, isRandomUid, loadUidVault, UID_INDEX_KEY_FILE, UidVault } from '../../src/shared/crypto/uid-vault';
+import {
+  encKeyFile,
+  initKeys,
+  isRandomUid,
+  loadMasterKey,
+  loadUidVault,
+  MASTER_KEY_FILE,
+  UID_INDEX_KEY_FILE,
+  UidVault,
+} from '../../src/shared/crypto/uid-vault';
 
 const key = (byte: number) => Buffer.alloc(32, byte);
 const vault = (active = 'k1') => new UidVault(key(1), new Map([['k1', key(2)], ['k2', key(3)]]), active);
@@ -67,7 +76,7 @@ describe('key files', () => {
 
   it('initKeys creates missing files once and never overwrites', () => {
     const keysDir = path.join(dir, 'keys');
-    expect(initKeys(keysDir, 'k1')).toEqual([UID_INDEX_KEY_FILE, 'uid-enc-k1.key']);
+    expect(initKeys(keysDir, 'k1')).toEqual([UID_INDEX_KEY_FILE, 'uid-enc-k1.key', MASTER_KEY_FILE]);
     const before = readFileSync(path.join(keysDir, UID_INDEX_KEY_FILE), 'utf8');
     expect(before.trim()).toMatch(/^[0-9a-f]{64}$/);
     expect(initKeys(keysDir, 'k1')).toEqual([]);
@@ -100,6 +109,17 @@ describe('key files', () => {
     expect(() => loadUidVault(dir, 'k1')).toThrow(/chmod 600/);
   });
 
+  it('loadMasterKey reads the 32-byte master key and fails fast when it is missing or malformed', () => {
+    expect(() => loadMasterKey(dir)).toThrow(/km-master\.key is missing/);
+    initKeys(dir, 'k1');
+    const key = loadMasterKey(dir);
+    expect(key).toHaveLength(32);
+    initKeys(dir, 'k1');
+    expect(loadMasterKey(dir).equals(key)).toBe(true);
+    writeFileSync(path.join(dir, MASTER_KEY_FILE), 'short\n', { mode: 0o600 });
+    expect(() => loadMasterKey(dir)).toThrow(/64 hex characters/);
+  });
+
   it('rejects key ids that could escape the directory', () => {
     expect(() => encKeyFile('../x')).toThrow();
   });
@@ -111,6 +131,13 @@ describe('key config', () => {
   it('defaults KEYS_DIR and UID_ENC_KEY_ID', () => {
     expect(loadConfig(base)).toMatchObject({ keysDir: '/etc/nfc-server/keys', uidEncKeyId: 'k1' });
     expect(loadKeyConfig({})).toEqual({ keysDir: '/etc/nfc-server/keys', uidEncKeyId: 'k1' });
+  });
+
+  it('reads SNAPSHOT_WORKER as on (default) or off', () => {
+    expect(loadConfig(base).snapshotWorkerEnabled).toBe(true);
+    expect(loadConfig({ ...base, SNAPSHOT_WORKER: 'on' }).snapshotWorkerEnabled).toBe(true);
+    expect(loadConfig({ ...base, SNAPSHOT_WORKER: 'off' }).snapshotWorkerEnabled).toBe(false);
+    expect(() => loadConfig({ ...base, SNAPSHOT_WORKER: 'maybe' })).toThrow(/SNAPSHOT_WORKER/);
   });
 
   it('rejects an invalid UID_ENC_KEY_ID', () => {

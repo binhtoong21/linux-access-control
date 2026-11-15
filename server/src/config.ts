@@ -11,6 +11,8 @@ export interface AppConfig extends KeyConfig {
   port: number;
   databaseUrl: string;
   jwtSecret: string;
+  /** SNAPSHOT_WORKER=off stops the timers of the Distribution worker (tests, maintenance); default on. */
+  snapshotWorkerEnabled: boolean;
 }
 
 export const APP_CONFIG = Symbol('APP_CONFIG');
@@ -41,8 +43,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (!Number.isInteger(port) || port < 0 || port > 65535) errors.push('PORT must be an integer 0-65535');
   const jwtSecret = env.JWT_SECRET ?? '';
   if (jwtSecret.length < 32) errors.push('JWT_SECRET must be at least 32 characters');
+  const snapshotWorker = env.SNAPSHOT_WORKER || 'on';
+  if (snapshotWorker !== 'on' && snapshotWorker !== 'off') errors.push('SNAPSHOT_WORKER must be on or off');
   if (errors.length) throw new Error(`invalid configuration: ${errors.join('; ')}`);
-  return { port, databaseUrl, jwtSecret, ...keys };
+  return { port, databaseUrl, jwtSecret, snapshotWorkerEnabled: snapshotWorker === 'on', ...keys };
 }
 
 @Global()

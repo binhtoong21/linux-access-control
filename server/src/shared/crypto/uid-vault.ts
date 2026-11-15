@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
-import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { KEY_ID_PATTERN } from '../../config';
 import { blindIndex } from './crypto-v1';
@@ -8,8 +8,10 @@ import { blindIndex } from './crypto-v1';
 // plus an HMAC blind index. Keys are files in KEYS_DIR, 32 random bytes written as 64 hex characters, mode 0600:
 //   uid-index.key         K_index of the blind index (not rotated in the MVP)
 //   uid-enc-<key_id>.key  AES key; UID_ENC_KEY_ID picks the one for new rows, every file is loaded for decryption.
+//   km-master.key         master_key: every workstation key K_m is derived from it (ADR-007); not rotated in the MVP.
 
 export const UID_INDEX_KEY_FILE = 'uid-index.key';
+export const MASTER_KEY_FILE = 'km-master.key';
 const ENC_KEY_FILE = /^uid-enc-([A-Za-z0-9_-]{1,32})\.key$/;
 const KEY_HEX = /^[0-9a-fA-F]{64}$/;
 const AAD = Buffer.from('uid-enc-v1');
@@ -110,7 +112,7 @@ export function initKeys(keysDir: string, activeKeyId: string): string[] {
   const dir = path.resolve(keysDir);
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   const created: string[] = [];
-  for (const name of [UID_INDEX_KEY_FILE, encKeyFile(activeKeyId)]) {
+  for (const name of [UID_INDEX_KEY_FILE, encKeyFile(activeKeyId), MASTER_KEY_FILE]) {
     try {
       writeFileSync(path.join(dir, name), `${randomBytes(32).toString('hex')}\n`, { flag: 'wx', mode: 0o600 });
       created.push(name);
@@ -120,3 +122,11 @@ export function initKeys(keysDir: string, activeKeyId: string): string[] {
   }
   return created;
 }
+
+/** master_key of ADR-007. Losing it means re-enrolling every workstation, so a missing file stops the server at startup. */
+export function loadMasterKey(keysDir: string): Buffer {
+  const file = path.join(path.resolve(keysDir), MASTER_KEY_FILE);
+  if (!existsSync(file)) throw new Error(`${file} is missing; create it with pnpm keys:init`);
+  return readKeyFile(file);
+}
+
