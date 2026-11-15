@@ -25,6 +25,7 @@
     "@nestjs/platform-express": "^11.0.0",
     "@node-rs/argon2": "^2.2.2",
     "@peculiar/x509": "1.14.3",
+    "ajv": "^8.17.1",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "cookie-parser": "^1.4.7",
@@ -40,7 +41,6 @@
     "@types/jest": "^29.5.12",
     "@types/node": "^20.14.0",
     "@types/pg": "^8.23.1",
-    "ajv": "^8.17.1",
     "jest": "^29.7.0",
     "ts-jest": "^29.2.5",
     "typescript": "^5.6.3"
