@@ -235,8 +235,9 @@ Bản đầy đủ theo từng máy, không delta (INV-012). Server lưu nguyên
 
 | Quy tắc nhận (Edge) | Nguồn |
 |---|---|
+| `workstation_id` là máy mình nhưng `key_version` khác `identity/` → bỏ, `last_apply_error = key_version_mismatch`, **không** cảnh báo. Xét **trước** chữ ký (chỉ đọc trường này, không dùng nội dung): snapshot retained từ trước khi cài lại máy được broker giao lại mang chữ ký khóa cũ, không phải tấn công (D-027) | D-017 |
 | Chữ ký sai → bỏ, `security_alert(snapshot_signature_invalid)` | ADR-003 §4 |
-| `workstation_id` khác máy mình, hoặc `key_version` khác `identity/` → bỏ, `last_apply_error` | D-017 |
+| `workstation_id` khác máy mình → bỏ, `last_apply_error = schema_invalid` | D-017 |
 | `version` bằng bản đang dùng → bỏ qua lặng lẽ (retained giao lại); nhỏ hơn → bỏ, `last_apply_error = older_version` | ADR-002 §4 |
 | `version` lớn hơn → thay nguyên tử mọi bảng `snapshot_*` và cờ profile, đặt `trusted_until = max(cũ, giờ máy + lease_duration_sec)`, `last_sync_local_time = max(cũ, giờ máy)`, rồi gửi heartbeat ngay | INV-011, D-018 |
 

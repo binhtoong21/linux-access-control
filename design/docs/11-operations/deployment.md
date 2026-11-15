@@ -157,7 +157,8 @@ Một nơi duy nhất cho mọi tham số trước đây ghi "chốt sau". Giá 
 | Địa chỉ broker trả cho máy khi duyệt đăng ký | `BROKER_HOST`, `BROKER_PORT` | `localhost`, `8883` | Tên phải khớp SAN trong chứng chỉ broker |
 | Worker dựng snapshot | `SNAPSHOT_WORKER` | `on` | `off` tắt vòng lặp đọc `server_outbox` (bảo trì, test); event dồn lại và hiện ở `outbox_backlog` |
 | Tham số nghiệp vụ | bảng `Bảng Tham Số` | như trên | Đọc lúc khởi động |
-| Agent | `/etc/nfc-agent/agent.conf` | — | Địa chỉ server/broker, đường dẫn `ca.pem`, tham số cục bộ |
+| Agent | `/etc/nfc-agent/agent.conf` (INI) | — | `[server] url` (HTTPS của Server, chỉ dùng lúc đăng ký) và `ca_file` (mặc định `/etc/nfc-agent/ca.pem`, neo tin cậy duy nhất, D-014.3). Thiếu `url` thì máy không tự đăng ký. Địa chỉ broker không nằm ở đây: Server trả về khi duyệt và Agent lưu trong `identity/identity.json` (mẫu: `edge/packaging/agent.conf.example`) |
+| Thư viện Agent | `cryptography>=3.4` (apt `python3-cryptography` 3.4.8 dùng được), `paho-mqtt>=2.0,<3` | — | Ubuntu 22.04 chỉ có `python3-paho-mqtt` 1.5 nên paho cài bằng pip vào venv `/opt/nfc-agent/venv` (venv dùng `include-system-site-packages = true`) |
 
 ## Health Checks
 

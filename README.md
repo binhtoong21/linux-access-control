@@ -79,6 +79,11 @@ cd server && pnpm install && pnpm test && pnpm build
 #   DATABASE_URL=... JWT_SECRET=<≥ 32 ký tự> KEYS_DIR=../deploy/dev/keys \
 #   CA_CERT_FILE=../deploy/dev/certs/ca.crt CA_KEY_FILE=../deploy/dev/certs/ca/ca.key CRL_FILE=../deploy/dev/certs/crl.pem pnpm start
 
+# E2E với máy trạm thật (vm2, VirtualBox NAT; host = 10.0.2.2): xem design/docs/decisions.md D-027.
+#   deploy/dev: bash gen-dev-certs.sh (SAN broker có 10.0.2.2) && docker compose up -d && node https-proxy.js  (HTTPS :8443 -> :8000)
+#   server: thêm MQTT_URL=mqtts://localhost:8883 MQTT_CA/MQTT_CERT/MQTT_KEY=deploy/dev/certs/{ca,nfc-server}.* BROKER_HOST=10.0.2.2 BROKER_RESTART_CMD="docker restart dev-mosquitto-1"
+#   vm2: /etc/nfc-agent/ca.pem + agent.conf ([server] url = https://10.0.2.2:8443), pip install edge vào /opt/nfc-agent/venv, nfc-agent reenroll
+
 # Hạ tầng dev (Docker): PostgreSQL + Mosquitto mTLS
 cd deploy/dev && bash gen-dev-certs.sh && docker compose up -d   # PG_PORT=15432 nếu máy đã có PostgreSQL ở 5432
 ```
