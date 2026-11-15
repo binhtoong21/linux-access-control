@@ -3,7 +3,7 @@ import { createAdmin } from '../../src/identity/admin-accounts';
 import { startApp, TestApp } from './app';
 import { kyselyOn, resetDatabase } from './db';
 
-const ENV_KEYS = ['DATABASE_URL', 'JWT_SECRET', 'KEYS_DIR', 'UID_ENC_KEY_ID'] as const;
+const ENV_KEYS = ['DATABASE_URL', 'JWT_SECRET', 'KEYS_DIR', 'UID_ENC_KEY_ID', 'SNAPSHOT_WORKER'] as const;
 
 export interface ApiContext {
   pool: Pool;

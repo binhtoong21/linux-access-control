@@ -18,6 +18,8 @@ export async function startApp(databaseUrl: string): Promise<TestApp> {
   process.env.JWT_SECRET = TEST_JWT_SECRET;
   process.env.KEYS_DIR = testKeysDir();
   process.env.UID_ENC_KEY_ID = 'k1';
+  // No timers in tests: they call OutboxWorker.runOnce() themselves.
+  process.env.SNAPSHOT_WORKER = 'off';
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
   const app = moduleRef.createNestApplication();
   configureApp(app);
