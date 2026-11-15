@@ -35,7 +35,7 @@ Cần một quyết định kiến trúc chuẩn hóa lựa chọn Display Manag
 
 ### Option 1: Sử dụng GDM3 (GNOME Display Manager) mặc định của Ubuntu
 - **Ưu điểm:** Tích hợp sẵn với Ubuntu Desktop.
-- **Nhược điểm:** GDM3 cực kỳ đóng kín, chạy trên Wayland/Xwayland với sandbox bảo mật khắt khe; không hỗ trợ viết Custom Greeter độc lập bằng Python/GTK; không cho phép nhận sự kiện đẩy từ bên ngoài để tự động kích hoạt phiên mà không chạm chuột.
+- **Nhược điểm:** GDM3 không cho thay greeter bằng chương trình độc lập: giao diện đăng nhập là một phần của GNOME Shell, muốn tùy biến phải viết GNOME Shell extension (JavaScript) gắn chặt từng phiên bản GNOME. Về nguyên lý GDM có chạy song song nhiều PAM service (`gdm-password`, `gdm-fingerprint`, `gdm-smartcard`), nên đăng nhập không chạm là khả thi, nhưng chi phí tùy biến và bảo trì theo phiên bản cao hơn, và chưa có spike nào kiểm chứng trên GDM. (SDDM tương tự: theme QML đổi được giao diện nhưng logic xác thực vẫn là của SDDM, muốn nhận sự kiện đẩy phải viết plugin C++.)
 
 ### Option 2: Giữ nguyên LightDM với `lightdm-gtk-greeter` mặc định và PAM chặn (Blocking PAM)
 - **Ưu điểm:** Không cần viết giao diện Custom Greeter.
