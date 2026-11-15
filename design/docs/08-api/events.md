@@ -251,6 +251,21 @@ Bản đầy đủ theo từng máy, không delta (INV-012). Server lưu nguyên
 
 `days_mask`: Thứ Hai = 1, Thứ Ba = 2, Thứ Tư = 4, Thứ Năm = 8, Thứ Sáu = 16, Thứ Bảy = 32, Chủ Nhật = 64. `match_key = hex(HMAC-SHA256(K_m, "uid-match-v1" ‖ UID chuẩn hóa))` (ADR-007).
 
+**Xử lý Hello / heartbeat phía Server (D-025):**
+
+| Bước | Quy tắc |
+|---|---|
+| Kiểm tra | JSON hợp lệ theo `contracts/schemas`; `workstation_id` trong payload phải trùng định danh trên topic; máy phải tồn tại và `enrolled`. Sai thì bỏ qua, không trả lời, ghi log |
+| Ghi trạng thái | `workstation_statuses`: `online`, `last_heartbeat_at`, `boot_id`; heartbeat ghi thêm `trust_state`, `clock_skew_detected`, `last_apply_error` do máy báo; Hello không mang các trường này nên giữ giá trị cũ và tự tính lệch giờ từ `local_time` (> 60s) |
+| Version | `sync_states.acked_version` = đúng version máy báo, kể cả khi nhỏ hơn trước (máy dựng lại `edge.db`) |
+| Profile | Tên mới trong `profiles` được thêm vào `workstation_profiles` (`enabled`; tên đầu tiên thành mặc định nếu máy chưa có mặc định) kèm event `WorkstationProfilesDiscovered {added}`. Profile đã biết giữ nguyên cờ của Admin; profile máy không còn báo **không** bị xóa |
+| Reboot | `boot_id` khác giá trị đang lưu ⇒ `reconcile_state = Draining` (XINV-008) |
+| Hello | Vô hiệu hóa `fetch_code` của các yêu cầu đăng ký đã duyệt của máy (D-014.4); `key_version` khác Server thì ghi log cảnh báo |
+| Trả lời | Version máy báo = `desired_version` (≥ 1) ⇒ lease. Khác ⇒ reconcile (cấp bản đầu, hoặc nhảy qua version máy đang đi trước, D-016) rồi publish snapshot mới nhất (retained). Heartbeat lệch version chỉ được gửi lại snapshot tối đa 1 lần/60s mỗi máy; Hello luôn được trả lời |
+| Offline | Mỗi 30s Server chuyển `offline` các máy `online` quá 90s không có heartbeat (BR-019) |
+
+Snapshot version mới do worker cấp được publish ngay (retained). Publish thất bại hoặc broker đang đứt thì bỏ qua, không xếp hàng: Hello kế tiếp của máy sẽ nhận lại.
+
 ### 4.2. Lease (`lease-v1`)
 Chỉ gửi khi `snapshot_version` máy báo bằng `desired_version`, trả lời từng Hello/heartbeat.
 

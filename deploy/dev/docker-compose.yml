@@ -15,7 +15,9 @@ services:
       retries: 10
 
   mosquitto:
-    image: eclipse-mosquitto:2.0.18
+    # The -openssl variant: the default image links LibreSSL, which does not accept Ed25519 client certificates,
+    # so no workstation could connect (found 2026-11-16; production uses Ubuntu's Mosquitto with OpenSSL, spike S8).
+    image: eclipse-mosquitto:2.0.18-openssl
     ports: ["127.0.0.1:8883:8883"]
     volumes:
       - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro

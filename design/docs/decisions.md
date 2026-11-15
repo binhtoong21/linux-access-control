@@ -147,6 +147,17 @@ Admin được tắt profile đang là mặc định, hoặc để máy không c
 Yêu cầu cho Dashboard (M4): profile mặc định là nút chọn một (không bỏ chọn được); tắt profile đang là mặc định phải qua hộp xác nhận nêu rõ hệ quả.
 **Nguồn:** [08-api/api.md](08-api/api.md) "Zone và Máy trạm", FR-007, D-009, D-019.
 
+### D-025: Cổng MQTT phía Server và quy tắc trả lời Hello / heartbeat (M3.2)
+1. **Server kiểm bản tin nhận được bằng chính `contracts/schemas` lúc chạy** (Ajv), không viết lại luật ở mã nguồn; `contracts/` là nguồn sự thật thật sự cho cả hai phía.
+2. **`acked_version` lưu đúng giá trị máy báo, không lấy max.** Máy dựng lại `edge.db` báo version 0 phải được gửi lại snapshot; nếu giữ max thì Server tưởng máy đã đồng bộ và chỉ gửi lease (máy sẽ từ chối vì version không khớp).
+3. **Gửi lại snapshot có giới hạn:** heartbeat lệch version tối đa 1 lần/60s mỗi máy (máy đang từ chối snapshot sẽ không bị dội bản 1 MB mỗi 30s); Hello luôn được trả lời.
+4. **Không xếp hàng bản tin khi broker đứt.** Snapshot là retained và Hello tự sửa lệch; lease chỉ có giá trị tức thời.
+5. **Profile do máy báo chỉ được thêm, không bị xóa hay đổi cờ**: cờ bật/tắt, mặc định là quyết định của Admin (D-022).
+6. **Broker phải liên kết OpenSSL.** Image `eclipse-mosquitto:2.0.18` mặc định liên kết LibreSSL 3.7 và không yêu cầu thuật toán chữ ký Ed25519 khi bắt tay mTLS, nên chứng chỉ máy trạm Ed25519 không dùng được (broker báo "peer did not return a certificate"). Dev đổi sang `eclipse-mosquitto:2.0.18-openssl`; production dùng Mosquitto của Ubuntu (OpenSSL), đã kiểm ở S8.
+
+Bằng chứng: test tích hợp với Mosquitto dev (2026-11-16): Server kết nối bằng chứng chỉ `nfc-server`, máy trạm giả `ws-dev-01` (Ed25519) gửi Hello và nhận snapshot retained có chữ ký đúng, gửi heartbeat và nhận lease có chữ ký đúng. Giới hạn: chưa nhận outbox (M3.3); chưa kiểm với Agent thật (M3.6).
+**Nguồn:** [08-api/events.md](08-api/events.md) §4, ADR-002 §1–§4, D-014, D-016, D-018, S8.
+
 ### D-024: Các quy tắc chốt khi hiện thực đăng ký máy và thu hồi chứng chỉ (M3.1)
 1. **Không có thao tác xóa máy (sửa D-019.3).** Mọi máy đã vô hiệu hóa đều có dòng trong `revoked_certificates` (phải nằm trong CRL mãi) và thường có nhật ký, phiên tham chiếu tới nó; các bảng đó không cho xóa (nhật ký append-only), nên `DELETE /workstations/{id}` luôn thất bại. `disabled` là trạng thái cuối; máy vẫn nằm trong CSDL để giữ lịch sử, Dashboard mặc định ẩn máy `disabled`. Bình chốt 2026-11-15.
 2. **Thu hồi chứng chỉ chạy trực tiếp, không qua `server_outbox`.** Sau khi giao dịch vô hiệu hóa hoặc duyệt cài lại commit, Server ghi lại tệp CRL rồi chạy lệnh khởi động lại broker (`BROKER_RESTART_CMD`). Lệnh rỗng hoặc lỗi không làm hỏng thao tác: thu hồi đã lưu, CRL đã ghi, log cảnh báo; lưới an toàn là sinh lại CRL lúc khởi động và hằng ngày (D-014.5). Không phát event `WorkstationDisabled`, vì worker outbox chỉ dựng snapshot.

@@ -41,7 +41,7 @@ Một máy chủ là đủ cho ~40 máy: tải là vài heartbeat/giây và vài
 |---|---|---|---|
 | Máy chủ | Ubuntu 22.04 LTS, 2 vCPU, 4 GB RAM, 40 GB đĩa | NTP bật | Đặt IP tĩnh hoặc tên DNS nội bộ cố định (máy trạm cần biết địa chỉ) |
 | PostgreSQL | 15 | Chỉ nghe `localhost` | Migration theo `07-data/migrations.md` |
-| Mosquitto | 2.0.x | `listener 8883`, `require_certificate true`, `use_identity_as_username true`, `acl_file`, `crlfile`, `persistence true` | Tệp CRL luôn tồn tại (S9) |
+| Mosquitto (phải là bản liên kết **OpenSSL**: bản liên kết LibreSSL, ví dụ image `eclipse-mosquitto` mặc định, không nhận chứng chỉ client Ed25519, D-025) | 2.0.x | `listener 8883`, `require_certificate true`, `use_identity_as_username true`, `acl_file`, `crlfile`, `persistence true` | Tệp CRL luôn tồn tại (S9) |
 | NestJS | Node.js 20 LTS | systemd service, user riêng `nfcsrv` | Đọc khóa từ `/etc/nfc-server/keys` |
 | Nginx | bản Ubuntu | TLS, reverse proxy `/api`, phục vụ build Dashboard | Chứng chỉ TLS do CA nội bộ ký |
 | Máy trạm | Ubuntu 22.04 Desktop, LightDM, đầu đọc ACR122U | Theo Master Image bên dưới | |
@@ -143,11 +143,12 @@ Một nơi duy nhất cho mọi tham số trước đây ghi "chốt sau". Giá 
 | Kết nối CSDL | `DATABASE_URL` | — | PostgreSQL cục bộ |
 | Khóa ký JWT Admin | `JWT_SECRET` | — | ≥ 32 ký tự ngẫu nhiên, trong `EnvironmentFile` quyền `0600`. Đổi hoặc mất khóa chỉ làm mọi Admin phải đăng nhập lại, nên không cần sao lưu |
 | Cổng HTTP | `PORT` | `8000` | Chỉ nghe `127.0.0.1`, sau Nginx |
-| Broker | `MQTT_URL`, `MQTT_CERT`, `MQTT_KEY`, `MQTT_CA` | `mqtts://localhost:8883` | Chứng chỉ `CN = nfc-server` |
+| Broker (kết nối của chính Server) | `MQTT_URL` | rỗng | `mqtts://localhost:8883` khi triển khai. Rỗng thì Server không kết nối broker (test, CI) và health báo `mqtt: "disabled"` |
+| mTLS của Server tới broker | `MQTT_CA`, `MQTT_CERT`, `MQTT_KEY` | `CA_CERT_FILE`, `KEYS_DIR/nfc-server.crt`, `KEYS_DIR/nfc-server.key` | Chứng chỉ `CN = nfc-server` (ACL của broker cấp quyền theo CN) |
+| Thư mục hợp đồng bản tin | `CONTRACTS_DIR` | `contracts/` cạnh `server/` | Server kiểm Hello/heartbeat theo `contracts/schemas` lúc chạy; đặt biến này khi đóng gói ra chỗ khác |
 | Thư mục khóa | `KEYS_DIR` | `/etc/nfc-server/keys` | `0700`, chủ `nfcsrv` |
 | Tệp khóa UID thẻ | `KEYS_DIR/uid-index.key`, `KEYS_DIR/uid-enc-<key_id>.key` | — | Mỗi tệp 32 byte ngẫu nhiên dạng 64 ký tự hex, quyền `0600` (Server từ chối khởi động nếu tệp đọc được bởi group/others). `uid-index.key` là `K_index` của blind index (không xoay trong MVP); `uid-enc-*` là khóa AES-256-GCM, mọi tệp đều được nạp để giải mã. Tạo bằng `pnpm keys:init`: chỉ tạo tệp còn thiếu, không bao giờ ghi đè. Thiếu khóa thì Server dừng ngay lúc khởi động |
 | Khóa AES đang dùng để mã hóa UID | `UID_ENC_KEY_ID` | `k1` | `^[A-Za-z0-9_-]{1,32}$`. Xoay khóa: đặt id mới rồi chạy `pnpm keys:init` để tạo tệp, giữ tệp cũ để đọc bản ghi cũ |
-| Tệp CRL | `CRL_PATH` | `/etc/mosquitto/nfc/crl.pem` | Server ghi, Mosquitto đọc |
 | Lệnh khởi động lại broker | `BROKER_RESTART_CMD` | `systemctl restart mosquitto` | Được phép qua sudoers giới hạn đúng lệnh này |
 | Khóa chủ `master_key` | `KEYS_DIR/km-master.key` | — | 32 byte dạng 64 ký tự hex, quyền `0600`, tạo bằng `pnpm keys:init` (không ghi đè). Mọi `K_m` dẫn xuất từ đây (ADR-007); thiếu tệp thì Server từ chối khởi động; mất hoặc đổi khóa thì phải đăng ký lại mọi máy |
 | CA ký chứng chỉ máy trạm | `CA_CERT_FILE`, `CA_KEY_FILE` | `KEYS_DIR/ca.crt`, `KEYS_DIR/ca.key` | Khóa EC P-256, quyền `0600`. Thiếu hoặc sai thì Server từ chối khởi động (D-024.6) |

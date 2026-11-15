@@ -71,6 +71,7 @@ cd edge && python -m venv .venv && .venv/bin/pip install -e ".[dev]" && .venv/bi
 cd server && pnpm install && pnpm test && pnpm build
 # Test DB thật (migration, health; DB bị xóa sạch mỗi lần chạy, tạo một lần: docker compose exec postgres createdb -U nfclab nfclab_test):
 #   TEST_DATABASE_URL=postgres://nfclab:nfclab-dev@127.0.0.1:5432/nfclab_test pnpm test
+# Thêm test tích hợp với Mosquitto dev (docker compose up -d mosquitto): TEST_MQTT_URL=mqtts://localhost:8883 TEST_MQTT_CERTS=<đường dẫn tuyệt đối tới deploy/dev/certs>
 # Áp migration: DATABASE_URL=postgres://nfclab:nfclab-dev@127.0.0.1:5432/nfclab pnpm db:migrate
 # Admin đầu tiên (mật khẩu qua stdin): read -rs PW; printf "%s" "$PW" | DATABASE_URL=... pnpm admin:create --username root --display-name "Quản trị"
 # Khóa UID thẻ và khóa chủ km-master.key (không ghi đè khóa có sẵn; chạy lại khi có loại khóa mới): KEYS_DIR=../deploy/dev/keys pnpm keys:init
