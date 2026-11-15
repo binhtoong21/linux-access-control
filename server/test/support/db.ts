@@ -9,7 +9,7 @@ export const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL;
 /** Wipes the disposable test database and applies all migrations. Caller ends the returned pool. */
 export async function resetDatabase(url: string): Promise<Pool> {
   const pool = new Pool({ connectionString: url });
-  await pool.query('DROP SCHEMA public CASCADE');
+  await pool.query('DROP SCHEMA IF EXISTS public CASCADE');
   await pool.query('CREATE SCHEMA public');
   await migrateUp(pool, path.resolve(__dirname, '../../migrations'));
   return pool;
