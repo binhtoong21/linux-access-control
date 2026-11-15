@@ -284,6 +284,8 @@ Payload mang đủ dữ liệu để worker tìm máy bị ảnh hưởng cả k
 - `ScheduleUpdated`: `{before, after}` chỉ gồm các cột đã đổi (target không đổi thì worker đọc target hiện tại từ bảng `schedules`).
 - `ScheduleEnabled`, `ScheduleDisabled`: `{}`.
 - `ZoneDeleted`: `{workstation_ids: [...]}` (các máy vừa bị gỡ zone); zone không có máy thì không phát event.
+- `WorkstationZoneChanged`: `{before: {zone_id}, after: {zone_id}}` (`null` = không thuộc zone).
+- `WorkstationProfileConfigured`: `{os_username, before, after}`, `before`/`after` chỉ gồm `status` và/hoặc `is_default` đã đổi.
 - Thao tác không làm đổi dữ liệu (PATCH cùng giá trị, bật lịch đang bật) không phát event.
 
 Khung bản ghi `server_outbox`:

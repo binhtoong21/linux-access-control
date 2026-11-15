@@ -101,6 +101,16 @@ UID chỉ đi vào API, không bao giờ được trả ra trong danh sách; ch�
   "flags": ["overdue_session"]
 }
 ```
+`GET /workstations/{id}` trả `WorkstationSummary` thêm `machine_id`, `mac_address`, `key_version`, `cert_expires_at`, `last_apply_error`, `created_at`, `updated_at` và `profiles: Profile[]`. `Profile`: `{os_username, display_name, profile_type, is_default, status, description, discovered_at, updated_at}`.
+
+- `zone` là `null` khi máy chưa thuộc zone; `PATCH` với `zone_id: null` gỡ máy khỏi zone, zone không tồn tại trả 400 `VALIDATION_ERROR`. Bảng `workstations` không có cột ghi chú nên `PATCH` chỉ đổi zone.
+- Máy chưa từng kết nối (chưa có dòng trạng thái/đồng bộ) hiện `connectivity: "offline"`, `trust_state: null`, `sync` = `in_sync` ở version 0.
+- `sync.state`: `in_sync` khi `acked_version ≥ desired_version`; `stuck` khi còn lệch quá 10 phút trong lúc máy online; còn lại là `pending`.
+- Chọn một profile làm mặc định sẽ bỏ mặc định ở profile kia (mỗi máy tối đa một). Tắt profile mặc định hoặc bỏ mặc định không bị chặn; hệ quả hiện qua cờ `missing_profile`.
+- `PATCH` máy hoặc profile không làm đổi gì trả 200, không ghi nhật ký, không phát event. `disable` và `DELETE` máy thuộc M3 (cần thu hồi chứng chỉ, CRL).
+
+`flags` luôn theo thứ tự liệt kê dưới đây. `missing_profile` bật khi có Schedule đang bật trỏ tới máy hoặc zone của máy mà profile cần dùng không có hoặc đang tắt trên máy (Schedule không chỉ định `target_os_username` thì xét profile mặc định). `security_alert` xét cảnh báo nhận trong 7 ngày; `ingest_rejects` xét mục chưa đánh dấu đã xem.
+
 `flags` có thể gồm: `overdue_session` (phiên quá `expires_at` mà chưa báo kết thúc, `session-expiry.md` EF-7), `stuck_sync`, `apply_error`, `missing_profile` (Schedule yêu cầu profile máy không có, D-009), `ingest_rejects`, `security_alert`.
 
 ### Đăng ký máy: phía Admin (FR-040, D-014)
