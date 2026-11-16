@@ -77,6 +77,7 @@ cd server && pnpm install && pnpm test && pnpm build
 # Khóa UID thẻ và khóa chủ km-master.key (không ghi đè khóa có sẵn; chạy lại khi có loại khóa mới): KEYS_DIR=../deploy/dev/keys pnpm keys:init
 # Chạy server dev: cp .env.example .env (điền JWT_SECRET; .env không vào git) rồi pnpm start:dev
 #   (mọi biến server đọc đều liệt kê trong server/.env.example; production dùng cùng định dạng làm EnvironmentFile)
+# Dashboard (cần server chạy ở 127.0.0.1:8000): cd dashboard && pnpm install && pnpm dev   # http://localhost:5173
 
 # E2E với máy trạm thật (vm2, VirtualBox NAT; host = 10.0.2.2): xem design/docs/decisions.md D-027.
 #   deploy/dev: bash gen-dev-certs.sh (SAN broker có 10.0.2.2) && docker compose up -d && node https-proxy.js  (HTTPS :8443 -> :8000)
