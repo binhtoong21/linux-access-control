@@ -10,29 +10,29 @@
 ```mermaid
 flowchart TB
     subgraph ACTORS["👤 Người dùng & Quản trị (Actors)"]
-        User["👨‍🎓 Người dùng (User / Sinh viên)\n(Người dùng phòng lab được cấp quyền)"]
-        Admin["👨‍💻 Quản trị viên (Admin)\n(Quản trị hệ thống, lịch, thẻ, audit)"]
-        Tech["🛠️ Kỹ thuật viên (Technician)\n(Bảo trì phần cứng, dùng tài khoản cục bộ dự phòng)"]
+        User["👨‍🎓 Người dùng (User / Sinh viên)<br>(Người dùng phòng lab được cấp quyền)"]
+        Admin["👨‍💻 Quản trị viên (Admin)<br>(Quản trị hệ thống, lịch, thẻ, audit)"]
+        Tech["🛠️ Kỹ thuật viên (Technician)<br>(Bảo trì phần cứng, dùng tài khoản cục bộ dự phòng)"]
     end
 
     subgraph SYSTEM["🖥️ HỆ THỐNG XÁC THỰC PHÒNG LAB NFC (DATN)"]
-        MainSystem["Hệ thống Xác thực Phòng Lab NFC\n- Cụm Máy chủ Trung tâm (Server API, Database, MQTT Broker, Dashboard)\n- Phần mềm Máy trạm Biên (NFC Edge Agent, pam_nfc, Custom Greeter)"]
+        MainSystem["Hệ thống Xác thực Phòng Lab NFC<br>- Cụm Máy chủ Trung tâm (Server API, Database, MQTT Broker, Dashboard)<br>- Phần mềm Máy trạm Biên (NFC Edge Agent, pam_nfc, Custom Greeter)"]
     end
 
     subgraph PERIPHERALS["🔌 Phần cứng Ngoại vi & Hạ tầng (Physical Environment)"]
-        NFCReader["📶 Đầu đọc NFC ACR122U (USB CCID) & Thẻ NFC vật lý\n(Hạ tầng phần cứng phòng máy)"]
-        NTPService["⏰ Dịch vụ NTP của Hệ điều hành\n(Hạ tầng mạng chuẩn giờ OS)"]
+        NFCReader["📶 Đầu đọc NFC ACR122U (USB CCID) & Thẻ NFC vật lý<br>(Hạ tầng phần cứng phòng máy)"]
+        NTPService["⏰ Dịch vụ NTP của Hệ điều hành<br>(Hạ tầng mạng chuẩn giờ OS)"]
     end
 
     subgraph EXTENSIONS["🏢 Hệ thống Mở rộng (Extensions - Làm sau)"]
-        UnivPortal["🎓 Cổng Thông tin Đào tạo / SIS\n(Đồng bộ danh sách người dùng & thời khóa biểu)"]
+        UnivPortal["🎓 Cổng Thông tin Đào tạo / SIS<br>(Đồng bộ danh sách người dùng & thời khóa biểu)"]
         LecturerRole["👨‍🏫 Giảng viên (Phân quyền theo ca & Sơ đồ phòng lab)"]
     end
 
-    User -->|"1. Quẹt thẻ NFC vật lý\n2. Sử dụng Desktop PC học tập"| NFCReader
+    User -->|"1. Quẹt thẻ NFC vật lý<br>2. Sử dụng Desktop PC học tập"| NFCReader
     NFCReader -->|"Sự kiện thẻ qua USB PC/SC"| MainSystem
-    Admin -->|"1. Cấu hình máy trạm, zone, enrollment\n2. Nhập người dùng, gán UID thẻ\n3. Lập Schedule (ai + ở đâu + khi nào)\n4. Giám sát & tra cứu Audit Log"| MainSystem
-    Tech -->|"Đăng nhập tài khoản quản trị cục bộ\nkhi đầu đọc hỏng / bảo trì (Fallback)"| MainSystem
+    Admin -->|"1. Cấu hình máy trạm, zone, enrollment<br>2. Nhập người dùng, gán UID thẻ<br>3. Lập Schedule (ai + ở đâu + khi nào)<br>4. Giám sát & tra cứu Audit Log"| MainSystem
+    Tech -->|"Đăng nhập tài khoản quản trị cục bộ<br>khi đầu đọc hỏng / bảo trì (Fallback)"| MainSystem
     
     MainSystem -.->|"Đọc mốc giờ hệ thống (không làm cổng chặn)"| NTPService
     MainSystem -.->|"Import CSV / API tích hợp (Extension D-003)"| UnivPortal

@@ -54,7 +54,7 @@ sequenceDiagram
     alt Lệch trong ngưỡng (<= 60s)
         Note over A: Fresh, quẹt thẻ bình thường
     else Lệch quá ngưỡng (> 60s)
-        Note over A: Vẫn áp dụng gia hạn; gửi cờ cảnh báo clock_skew_detected lên Dashboard qua Heartbeat
+        Note over A: Vẫn áp dụng gia hạn, gửi cờ cảnh báo clock_skew_detected lên Dashboard qua Heartbeat
     end
 ```
 

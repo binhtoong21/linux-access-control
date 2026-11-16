@@ -16,13 +16,13 @@
 flowchart LR
     subgraph LAN["Mạng phòng lab"]
         subgraph SRV["Máy chủ trung tâm (Ubuntu 22.04)"]
-            Nginx["Nginx :443\nTLS, phục vụ Dashboard + /api"]
-            API["NestJS API + workers\n(systemd service)"]
+            Nginx["Nginx :443<br>TLS, phục vụ Dashboard + /api"]
+            API["NestJS API + workers<br>(systemd service)"]
             PG[("PostgreSQL 15")]
-            MQ["Mosquitto 2.x :8883\nmTLS, acl_file, crlfile"]
-            Keys["/etc/nfc-server/keys\nmaster_key, K_index, AES, CA (0600)"]
+            MQ["Mosquitto 2.x :8883<br>mTLS, acl_file, crlfile"]
+            Keys["/etc/nfc-server/keys<br>master_key, K_index, AES, CA (0600)"]
         end
-        WS["~40 máy trạm\nAgent + pam_nfc.so + Lab Greeter\n+ đầu đọc ACR122U"]
+        WS["~40 máy trạm<br>Agent + pam_nfc.so + Lab Greeter<br>+ đầu đọc ACR122U"]
     end
     Admin["Trình duyệt Admin"] -->|HTTPS| Nginx
     Nginx --> API
