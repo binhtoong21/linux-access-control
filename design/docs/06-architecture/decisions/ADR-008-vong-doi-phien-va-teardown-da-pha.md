@@ -76,11 +76,11 @@ Khi phiên kết thúc (do hết giờ ca học hoặc do thay thế phiên hợ
 
 ```mermaid
 flowchart TD
-    Start["Hết hạn ca học / Thay phiên hợp lệ"] --> Step1["1. loginctl disable-linger <username>"]
-    Step1 --> Step2["2. loginctl terminate-user <username> (Gửi SIGTERM)"]
-    Step2 --> Poll1{"user-<UID>.slice biến mất?<br>(Timeout Pha 1: 2.0s)"}
+    Start["Hết hạn ca học / Thay phiên hợp lệ"] --> Step1["1. loginctl disable-linger {username}"]
+    Step1 --> Step2["2. loginctl terminate-user {username} (Gửi SIGTERM)"]
+    Step2 --> Poll1{"user-{UID}.slice biến mất?<br>(Timeout Pha 1: 2.0s)"}
     Poll1 -- "Đã giải phóng (< 2.0s)" --> Handshake["Chuyển sang Startup Handshake"]
-    Poll1 -- "Vẫn còn sau 2.0s" --> Step3["3. loginctl kill-user <username> -s SIGKILL"]
+    Poll1 -- "Vẫn còn sau 2.0s" --> Step3["3. loginctl kill-user {username} -s SIGKILL"]
     Step3 --> Poll2{"Polling chờ slice giải phóng<br>(Timeout Pha 2: thêm 1.0s, Tổng = 3.0s)"}
     Poll2 -- "Slice sạch" --> Handshake
     Poll2 -- "Quá 3.0s (Kẹt tài nguyên)" --> Retry{"Retry kiểm tra (tối đa 2 lần x 1.0s)<br>Hiển thị banner vàng chờ dọn dẹp"}

@@ -16,6 +16,7 @@ class FakeClient:
     def __init__(self):
         self.calls = []
         self.published = []
+        self.properties = []
         self.rc = 0
 
     def tls_set(self, **kw):
@@ -42,8 +43,9 @@ class FakeClient:
     def subscribe(self, topics):
         self.calls.append(("subscribe", topics))
 
-    def publish(self, topic, payload, qos, retain):
+    def publish(self, topic, payload, qos, retain, properties=None):
         self.published.append((topic, payload, qos, retain))
+        self.properties.append(properties)
         return SimpleNamespace(rc=self.rc)
 
 
@@ -130,6 +132,17 @@ def test_messages_carry_the_signature_user_property(env):
         ("message", P + "snapshot", b"raw2", None),
         ("message", P + "command/ack", b"raw3", None),
     ]
+
+
+def test_a_signed_message_carries_the_signature_user_property(env):
+    link, fake, _, _ = env
+    link._handle_connect(fake, None, None, OK, None)
+    fake.published.clear()
+    fake.properties.clear()
+    assert link.publish(SimpleNamespace(topic=P + "outbox", payload=b"{}", qos=1, retain=False, signature="ab" * 32))
+    assert fake.properties[-1].UserProperty == [("signature", "ab" * 32)]
+    assert link.publish(SimpleNamespace(topic=P + "outbox", payload=b"{}", qos=1, retain=False))
+    assert fake.properties[-1] is None
 
 
 def test_stop_says_shutdown_when_connected(env):

@@ -172,7 +172,7 @@ Kết quả là LoginDecision, luôn kèm phát `LoginDecided`. Ghi bền vững
 - Cảnh báo trước hạn W (phút) và tự đăng xuất khi chạm hạn (`schedule_expired`), không phụ thuộc server. Dọn sạch toàn bộ tiến trình của phiên OS (`loginctl terminate-user` theo user slice, chờ 2s, cưỡng chế `kill-user -s SIGKILL`). **Tuyệt đối không xóa thư mục home hay file dữ liệu cục bộ** sau phiên (BR-009, D-006). Cấu hình Master Image yêu cầu SSHD `DenyGroups labstudent` và tắt linger (`loginctl disable-linger`).
 - LocalSession chỉ chuyển sang trạng thái kết thúc khi phiên OS tương ứng đã thật sự kết thúc hoặc không còn (INV-017).
 - Khi người dùng đăng xuất, phát `SessionEnded` (`user_logout`, `end_source = reported`).
-- Tắt máy có kế hoạch: đóng `LocalSession active` với `abandoned(workstation_rebooted, end_source = reported, ended_at = now)`.
+- Dừng Agent (tắt máy có kế hoạch hoặc chỉ khởi động lại dịch vụ): không đóng LocalSession, chỉ ghi `last_alive_at`. Lần khởi động sau phân biệt bằng `boot_id` như dưới đây (D-031).
 - Khởi động Agent & Recovery sau reboot/sập: nạp `boot_id` cũ, `last_alive_at`, `LocalSession`, `AuditOutbox`.
   * Khác `boot_id` (máy reboot): `LocalSession active` chuyển thành `abandoned(workstation_rebooted, end_source = reconstructed, ended_at = max(started_at, last_alive_at))`; `pending` chuyển `discarded`. Phát `SessionEnded` đưa vào outbox TRƯỚC khi gửi `Hello`.
   * Trùng `boot_id` (Agent restart): đối chiếu LocalSession (`active`, `pending`) với phiên OS thực tế:

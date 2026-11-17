@@ -7,6 +7,7 @@
     "schema",
     "command",
     "workstation_id",
+    "batch_id",
     "acked_seq"
   ],
   "properties": {
@@ -19,6 +20,11 @@
     "workstation_id": {
       "type": "string",
       "pattern": "^[A-Za-z0-9_-]{3,64}$"
+    },
+    "batch_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
     },
     "acked_seq": {
       "type": "integer",

@@ -13,17 +13,17 @@ Service máy chủ trung tâm được tổ chức theo kiến trúc Ports and A
 flowchart TD
     subgraph SERVER_CONTAINER["⚙️ Server API & Distribution Service"]
         subgraph INTERFACE_LAYER["Interface Layer (Inbound Adapters)"]
-            RESTController["🌐 Admin REST API Controller\n(Endpoints quản lý máy trạm, thẻ, Schedule)\nHTTP Polling 3-5s (NFR-P03)"]
-            MQTTInbound["📡 MQTT Inbound Adapter\n(Lắng nghe heartbeat, outbox audit từ PC)"]
+            RESTController["🌐 Admin REST API Controller<br>(Endpoints quản lý máy trạm, thẻ, Schedule)<br>HTTP Polling 3-5s (NFR-P03)"]
+            MQTTInbound["📡 MQTT Inbound Adapter<br>(Lắng nghe heartbeat, outbox audit từ PC)"]
         end
 
         subgraph APPLICATION_LAYER["Application & Domain Services"]
-            IdentityService["🪪 Identity Service\nQuản lý User, Card\nMã hóa AES-256-GCM + Blind Index (ADR-007)"]
-            DeviceService["🖥️ Device Service\nQuản lý Workstation, Zone, EnrollmentRequest\nSinh K_m = HKDF(master_key, mqtt_identity:key_version) (ADR-007)\nSinh lại CRL khi thu hồi (D-014)\nDeletionGuard (BR-017)"]
-            SchedulingService["📅 Scheduling Service\nQuản lý Schedule 3D (ai + ở đâu + khi nào)\nBR-016: Hợp quyền (ràng buộc ambiguous_profile P2-6)"]
-            DistributionEngine["🔄 Distribution Engine (Snapshot Builder)\nDựng snapshot chứa TOÀN BỘ Schedule liên quan (INV-012)\nReconcile Worker định kỳ (EF-4)"]
-            LeaseRenewalService["⏳ Lease Renewal Service\nGia hạn Lease CHỈ KHI acked_version == desired_version\nĐề xuất mặc định D = 24h (chờ duyệt)"]
-            OperationsService["📊 Operations & Ingestion Service\nNhận Heartbeat (nguồn sự thật BR-019)\nLưu Audit Log mã hóa, giải mã khi Admin xem"]
+            IdentityService["🪪 Identity Service<br>Quản lý User, Card<br>Mã hóa AES-256-GCM + Blind Index (ADR-007)"]
+            DeviceService["🖥️ Device Service<br>Quản lý Workstation, Zone, EnrollmentRequest<br>Sinh K_m = HKDF(master_key, mqtt_identity:key_version) (ADR-007)<br>Sinh lại CRL khi thu hồi (D-014)<br>DeletionGuard (BR-017)"]
+            SchedulingService["📅 Scheduling Service<br>Quản lý Schedule 3D (ai + ở đâu + khi nào)<br>BR-016: Hợp quyền (ràng buộc ambiguous_profile P2-6)"]
+            DistributionEngine["🔄 Distribution Engine (Snapshot Builder)<br>Dựng snapshot chứa TOÀN BỘ Schedule liên quan (INV-012)<br>Reconcile Worker định kỳ (EF-4)"]
+            LeaseRenewalService["⏳ Lease Renewal Service<br>Gia hạn Lease CHỈ KHI acked_version == desired_version<br>Đề xuất mặc định D = 24h (chờ duyệt)"]
+            OperationsService["📊 Operations & Ingestion Service<br>Nhận Heartbeat (nguồn sự thật BR-019)<br>Lưu Audit Log mã hóa, giải mã khi Admin xem"]
         end
 
         subgraph PORTS_LAYER["Ports (Outbound Interfaces)"]
@@ -95,39 +95,39 @@ NFC Edge Agent Daemon là tiến trình nền chạy dưới quyền `root` trê
 flowchart TB
     subgraph EDGE_AGENT["🛡️ NFC Edge Agent Daemon (Python Systemd Service - root)"]
         subgraph STATE_COORDINATOR["State & Concurrency Control"]
-            StateCoordinator["🔒 Agent State Coordinator\nQuản lý bộ khóa 3 trạng thái độc quyền:\nWaiting ➔ Processing ➔ Authorizing"]
+            StateCoordinator["🔒 Agent State Coordinator<br>Quản lý bộ khóa 3 trạng thái độc quyền:<br>Waiting ➔ Processing ➔ Authorizing"]
         end
 
         subgraph HARDWARE_INTERFACE["Hardware Interface"]
-            ReaderWorker["📶 Card Reader Worker (PC/SC)\nTheo dõi SCardGetStatusChange (thẻ xuất hiện/rời - BR-007c)\nChuẩn hóa VR-007, tính CardMatchKey, giữ UID gốc cho audit"]
+            ReaderWorker["📶 Card Reader Worker (PC/SC)<br>Theo dõi SCardGetStatusChange (thẻ xuất hiện/rời - BR-007c)<br>Chuẩn hóa VR-007, tính CardMatchKey, giữ UID gốc cho audit"]
         end
 
         subgraph CORE_ENGINE["Core Decision & Recovery Engine"]
-            RuleEvaluator["⚖️ Rule Evaluator (CR-001 Engine)\nĐánh giá độc lập tại PC, KHÔNG CÓ BUFFER 15 PHÚT\nResolve profile tại Agent, cấm ambiguous_profile (P2-1, P2-6)"]
-            ClockValidator["⏱️ Clock Validator (D-012, Point 8)\nCLOCK_BOOTTIME cho timer phiên\nFloor = last_sync_local_time - 60s"]
-            BootRecovery["🔄 Boot & Recovery Worker\nSo sánh boot_id kernel, đối chiếu LocalSession lúc khởi động\nĐánh giá phiên dở dang: abandoned(workstation_rebooted)"]
-            SessionReplacer["🛡️ Session Replacement Controller (D-006, BR-008, P1-1, P1-3)\nKiểm tra logind trước khi busy; os_session_lost -> rảnh\nGreeter / hết giờ: Write-Ahead & Two-Phase Teardown thay phiên"]
-            StagedAuthMgr["📦 Staged Auth Manager\nQuản lý lượt quẹt đang chờ (PENDING_TIMEOUT = 12s, Spike S6)\nTự động hủy discarded nếu quá hạn"]
+            RuleEvaluator["⚖️ Rule Evaluator (CR-001 Engine)<br>Đánh giá độc lập tại PC, KHÔNG CÓ BUFFER 15 PHÚT<br>Resolve profile tại Agent, cấm ambiguous_profile (P2-1, P2-6)"]
+            ClockValidator["⏱️ Clock Validator (D-012, Point 8)<br>CLOCK_BOOTTIME cho timer phiên<br>Floor = last_sync_local_time - 60s"]
+            BootRecovery["🔄 Boot & Recovery Worker<br>So sánh boot_id kernel, đối chiếu LocalSession lúc khởi động<br>Đánh giá phiên dở dang: abandoned(workstation_rebooted)"]
+            SessionReplacer["🛡️ Session Replacement Controller (D-006, BR-008, P1-1, P1-3)<br>Kiểm tra logind trước khi busy; os_session_lost -> rảnh<br>Greeter / hết giờ: Write-Ahead & Two-Phase Teardown thay phiên"]
+            StagedAuthMgr["📦 Staged Auth Manager<br>Quản lý lượt quẹt đang chờ (PENDING_TIMEOUT = 12s, Spike S6)<br>Tự động hủy discarded nếu quá hạn"]
         end
 
         subgraph LOCAL_STORAGE["Local Storage Subsystem"]
-            LocalStorageMgr["🗄️ Local Storage Manager (SQLite WAL - 0600)\nWrite-Ahead nguyên tử: audit_outbox + local_session (status='pending')\nQuản lý allowlist profiles, trusted_until, metadata"]
+            LocalStorageMgr["🗄️ Local Storage Manager (SQLite WAL - 0600)<br>Write-Ahead nguyên tử: audit_outbox + local_session (status='pending')<br>Quản lý allowlist profiles, trusted_until, metadata"]
         end
 
         subgraph IPC_SUBSYSTEM["IPC Communication Subsystem"]
-            PamSocketServer["🔑 PAM Socket Server (/run/nfc-agent.sock - 0660 root:root)\nSO_PEERCRED check (root), trả về target_os_user, Timeout 3s"]
-            ControlSocketServer["🤝 Control & Handshake Server (/run/nfc-control.sock - 0770 root:lightdm)\nSO_PEERCRED check (root hoặc lightdm), nhận 'greeter_ready' bàn giao staged_auth"]
-            GreeterPushClient["📢 Greeter Push Client\nMở kết nối tới /run/nfc/greeter-push.sock (do Greeter mở)\nBắn sự kiện card_swiped / card_denied"]
+            PamSocketServer["🔑 PAM Socket Server (/run/nfc-agent.sock - 0660 root:root)<br>SO_PEERCRED check (root), trả về target_os_user, Timeout 3s"]
+            ControlSocketServer["🤝 Control & Handshake Server (/run/nfc-control.sock - 0770 root:lightdm)<br>SO_PEERCRED check (root hoặc lightdm), nhận 'greeter_ready' bàn giao staged_auth"]
+            GreeterPushClient["📢 Greeter Push Client<br>Mở kết nối tới /run/nfc/greeter-push.sock (do Greeter mở)<br>Bắn sự kiện card_swiped / card_denied"]
         end
 
         subgraph SESSION_LIFECYCLE["Session Lifecycle Management"]
-            SessionWatcher["👁️ GUI Session Watcher\n(loginctl list-sessions liên tục)\nBắt GUI ID seat0 active, phát hiện user_logout/os_session_lost"]
-            SessionTimer["⏳ Session Timer Worker\nGửi D-Bus pop-up trước khi hết ca học\nQuản lý đếm ngược kết thúc phiên"]
-            TwoPhaseTeardown["🧹 Two-Phase Teardown Controller (D-006, BR-009, A6)\n1. loginctl terminate-user (chờ 2s, S4)\n2. kill-user -s SIGKILL theo user slice\nĐợi sạch cgroup slice <= 3s (P1-2)"]
+            SessionWatcher["👁️ GUI Session Watcher<br>(loginctl list-sessions liên tục)<br>Bắt GUI ID seat0 active, phát hiện user_logout/os_session_lost"]
+            SessionTimer["⏳ Session Timer Worker<br>Gửi D-Bus pop-up trước khi hết ca học<br>Quản lý đếm ngược kết thúc phiên"]
+            TwoPhaseTeardown["🧹 Two-Phase Teardown Controller (D-006, BR-009, A6)<br>1. loginctl terminate-user (chờ 2s, S4)<br>2. kill-user -s SIGKILL theo user slice<br>Đợi sạch cgroup slice <= 3s (P1-2)"]
         end
 
         subgraph NETWORK_SUBSYSTEM["Server Sync & Message Queue"]
-            MqttSyncWorker["📡 MQTT Edge Sync Worker (mTLS 1.3)\nHeartbeat / Lease Renewal, nhận Snapshot mới\nOutbox theo lô ≤ 50, ACK lũy tiến theo outbox_seq"]
+            MqttSyncWorker["📡 MQTT Edge Sync Worker (mTLS 1.3)<br>Heartbeat / Lease Renewal, nhận Snapshot mới<br>Outbox theo lô ≤ 50, ACK lũy tiến theo outbox_seq"]
         end
     end
 
@@ -186,10 +186,10 @@ flowchart LR
     LightDMProcess["🖥️ LightDM (root)"] -->|"pam_sm_authenticate()"| PAMModule["🔑 pam_nfc.so"]
     
     subgraph PAM_INTERNAL["Bên trong pam_nfc.so"]
-        SocketConnector["🔌 Socket Connector\nKết nối /run/nfc-agent.sock\nNon-blocking POSIX socket"]
-        TimeoutWatchdog["⏱️ Poll Timeout Watchdog\npoll() với timeout cố định 3000ms\nChống treo chuỗi PAM"]
-        ResponseParser["📄 JSON Response Parser\nTrích xuất result và target_os_user"]
-        PAMContextInjector["💉 PAM Context Injector\npam_set_item(PAM_USER, target_os_user)\nTrả về PAM_SUCCESS hoặc PAM_IGNORE"]
+        SocketConnector["🔌 Socket Connector<br>Kết nối /run/nfc-agent.sock<br>Non-blocking POSIX socket"]
+        TimeoutWatchdog["⏱️ Poll Timeout Watchdog<br>poll() với timeout cố định 3000ms<br>Chống treo chuỗi PAM"]
+        ResponseParser["📄 JSON Response Parser<br>Trích xuất result và target_os_user"]
+        PAMContextInjector["💉 PAM Context Injector<br>pam_set_item(PAM_USER, target_os_user)<br>Trả về PAM_SUCCESS hoặc PAM_IGNORE"]
     end
 
     PAMModule --> SocketConnector
@@ -215,11 +215,11 @@ Custom Lab Greeter là ứng dụng GUI chạy dưới quyền user `lightdm`, �
 ```mermaid
 flowchart TD
     subgraph CUSTOM_GREETER["🎨 Custom Lab Greeter (/usr/local/bin/lab_greeter.py)"]
-        UIWindow["🖼️ Greeter Window (GTK3)\nGiao diện: Xin mời quẹt thẻ, logo, trạng thái màu sắc"]
-        LightDMBridge["🔗 LightDM Client Bridge\n(LightDM.Greeter API)\nauthenticate(), start_session_sync('ubuntu')"]
-        PushSocketServer["📢 Push Socket Server (/run/nfc/greeter-push.sock)\nQuyền 0770 root:lightdm, SO_PEERCRED check (UID 0)\nNhận card_swiped / card_denied từ Agent"]
-        HandshakeClient["🤝 Handshake Client\nGửi 'greeter_ready' qua /run/nfc-control.sock\nĐón bắt staged_auth khi vừa nạp"]
-        FallbackForm["⌨️ Local Fallback Form\nĐẦY ĐỦ 2 Ô: Username & Password\nDành riêng cho Kỹ thuật viên / IT Admin (D-007)"]
+        UIWindow["🖼️ Greeter Window (GTK3)<br>Giao diện: Xin mời quẹt thẻ, logo, trạng thái màu sắc"]
+        LightDMBridge["🔗 LightDM Client Bridge<br>(LightDM.Greeter API)<br>authenticate(), start_session_sync('ubuntu')"]
+        PushSocketServer["📢 Push Socket Server (/run/nfc/greeter-push.sock)<br>Quyền 0770 root:lightdm, SO_PEERCRED check (UID 0)<br>Nhận card_swiped / card_denied từ Agent"]
+        HandshakeClient["🤝 Handshake Client<br>Gửi 'greeter_ready' qua /run/nfc-control.sock<br>Đón bắt staged_auth khi vừa nạp"]
+        FallbackForm["⌨️ Local Fallback Form<br>ĐẦY ĐỦ 2 Ô: Username & Password<br>Dành riêng cho Kỹ thuật viên / IT Admin (D-007)"]
     end
 
     UIWindow --> FallbackForm

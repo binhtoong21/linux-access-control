@@ -26,9 +26,9 @@ sequenceDiagram
     O->>A: Khởi động Agent (trước greeter, có thời gian chờ tối đa)
     A->>K: Nạp snapshot, LocalSession, outbox, last_alive_at, boot_id cũ
     A->>A: So boot_id: khác thì là reboot
-    A->>K: LocalSession active thành abandoned (workstation_rebooted), reconstructed, ended_at = max(started_at, last_alive_at); pending thành discarded
+    A->>K: LocalSession active thành abandoned (workstation_rebooted), reconstructed, ended_at = max(started_at, last_alive_at), pending thành discarded
     A->>K: Đưa SessionEnded vào outbox (trước khi gửi Hello)
-    A->>A: Tính trạng thái tin cậy (UTC trusted_until; kiểm tra local_time >= floor)
+    A->>A: Tính trạng thái tin cậy (UTC trusted_until, kiểm tra local_time >= floor)
     A->>L: Sẵn sàng nhận quẹt thẻ
     A->>S: Hello (boot_id mới, version, số mục outbox)
     Note over A,S: Từ đây là luồng reconnect: gia hạn hoặc snapshot, rồi đẩy outbox

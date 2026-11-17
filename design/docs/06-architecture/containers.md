@@ -18,10 +18,10 @@ flowchart TB
     end
 
     subgraph SERVER["🖥️ Cụm Máy Chủ Trung Tâm (Server Side)"]
-        Dashboard["🌐 Web Dashboard\n(React + Vite SPA - ADR-006)\nQuản lý phòng lab, lịch, thẻ, tra cứu audit\n(HTTP Polling 3-5s - NFR-P03)"]
-        APIService["⚙️ Server API & Distribution Service\n(NestJS / TypeScript - ADR-006)\nIdentity, Device, Scheduling, Distribution Engine,\nLeaseRenewalService, Operations & Audit Ingestion"]
-        ServerDB[("🗄️ PostgreSQL Database\nNguồn sự thật: User, Schedule (INV-012),\nThẻ (AES-256-GCM + Blind Index), Máy trạm, Audit")]
-        MQTTBroker["📨 Mosquitto Message Broker\n(MQTT 5 + mTLS 1.3, Port 8883)\nPer-machine ACL, QoS 1, Retained Snapshot, LWT"]
+        Dashboard["🌐 Web Dashboard<br>(React + Vite SPA - ADR-006)<br>Quản lý phòng lab, lịch, thẻ, tra cứu audit<br>(HTTP Polling 3-5s - NFR-P03)"]
+        APIService["⚙️ Server API & Distribution Service<br>(NestJS / TypeScript - ADR-006)<br>Identity, Device, Scheduling, Distribution Engine,<br>LeaseRenewalService, Operations & Audit Ingestion"]
+        ServerDB[("🗄️ PostgreSQL Database<br>Nguồn sự thật: User, Schedule (INV-012),<br>Thẻ (AES-256-GCM + Blind Index), Máy trạm, Audit")]
+        MQTTBroker["📨 Mosquitto Message Broker<br>(MQTT 5 + mTLS 1.3, Port 8883)<br>Per-machine ACL, QoS 1, Retained Snapshot, LWT"]
         
         Dashboard -->|"HTTPS / REST API (JSON)"| APIService
         APIService -->|"SQL (TLS, Port 5432)"| ServerDB
@@ -29,26 +29,26 @@ flowchart TB
     end
 
     subgraph WORKSTATION["💻 Máy Trạm Phòng Lab (Ubuntu 22.04 LTS x N máy)"]
-        NFCReader["📶 Đầu đọc NFC ACR122U\n(USB CCID)"]
+        NFCReader["📶 Đầu đọc NFC ACR122U<br>(USB CCID)"]
         
         subgraph OS_LAYER["Display & Session Layer"]
-            LightDM["🖥️ Display Manager\n(LightDM Service)"]
-            Greeter["🎨 Custom Lab Greeter\n(Python 3 + GTK3, user: lightdm)\n0-chạm + Khung Fallback (User/Pass)\nMở socket push /run/nfc/greeter-push.sock"]
-            UserDesktop["🖥️ User Desktop Session\n(GNOME / X11 Session 'target_os_user'\nShared Workstation Profile, ví dụ 'student')"]
-            SystemdLogind["⚙️ systemd-logind\nQuản lý cgroup & session slice"]
+            LightDM["🖥️ Display Manager<br>(LightDM Service)"]
+            Greeter["🎨 Custom Lab Greeter<br>(Python 3 + GTK3, user: lightdm)<br>0-chạm + Khung Fallback (User/Pass)<br>Mở socket push /run/nfc/greeter-push.sock"]
+            UserDesktop["🖥️ User Desktop Session<br>(GNOME / X11 Session 'target_os_user'<br>Shared Workstation Profile, ví dụ 'student')"]
+            SystemdLogind["⚙️ systemd-logind<br>Quản lý cgroup & session slice"]
         end
 
         subgraph AGENT_LAYER["Edge Authentication Subsystem (Root)"]
-            AgentDaemon["🛡️ NFC Edge Agent Daemon\n(Python systemd service - root)\nCR-001 Evaluator (Target Profile Resolution, cấm mơ hồ),\nDual Clock, Session Timer, Outbox Sync Worker"]
-            PAMModule["🔑 pam_nfc.so\n(C PAM Module - root)\nInject PAM_USER target_os_user, Timeout 3s"]
-            LocalDB[("🗄️ Local Storage (SQLite WAL - 0600)\n/var/lib/nfc-agent/edge.db\nSnapshot, Profile Allowlist, Session, AuditOutbox, AgentMeta")]
+            AgentDaemon["🛡️ NFC Edge Agent Daemon<br>(Python systemd service - root)<br>CR-001 Evaluator (Target Profile Resolution, cấm mơ hồ),<br>Dual Clock, Session Timer, Outbox Sync Worker"]
+            PAMModule["🔑 pam_nfc.so<br>(C PAM Module - root)<br>Inject PAM_USER target_os_user, Timeout 3s"]
+            LocalDB[("🗄️ Local Storage (SQLite WAL - 0600)<br>/var/lib/nfc-agent/edge.db<br>Snapshot, Profile Allowlist, Session, AuditOutbox, AgentMeta")]
         end
 
         NFCReader -->|"PC/SC SCardGetStatusChange"| AgentDaemon
         LightDM -->|"PAM Stack"| PAMModule
-        PAMModule -->|"Unix Socket (0660 root:root)\n/run/nfc-agent.sock"| AgentDaemon
-        AgentDaemon -->|"Unix Socket Client (Push event)\n/run/nfc/greeter-push.sock"| Greeter
-        Greeter -->|"Unix Socket Handshake (0770 root:lightdm)\n/run/nfc-control.sock"| AgentDaemon
+        PAMModule -->|"Unix Socket (0660 root:root)<br>/run/nfc-agent.sock"| AgentDaemon
+        AgentDaemon -->|"Unix Socket Client (Push event)<br>/run/nfc/greeter-push.sock"| Greeter
+        Greeter -->|"Unix Socket Handshake (0770 root:lightdm)<br>/run/nfc-control.sock"| AgentDaemon
         Greeter -->|"liblightdm-gobject"| LightDM
         AgentDaemon -->|"ACID Transactions (WAL)"| LocalDB
         AgentDaemon -->|"loginctl / D-Bus (root)"| SystemdLogind
@@ -60,7 +60,7 @@ flowchart TB
     Student -->|"Quẹt thẻ vật lý"| NFCReader
     AdminUser -->|"Truy cập quản trị"| Dashboard
     TechUser -->|"Gõ Username/Password cục bộ"| Greeter
-    AgentDaemon <-->|"MQTTS (TLS 1.3, Port 8883)\nSnapshot, Lease, Heartbeat, Outbox"| MQTTBroker
+    AgentDaemon <-->|"MQTTS (TLS 1.3, Port 8883)<br>Snapshot, Lease, Heartbeat, Outbox"| MQTTBroker
 ```
 
 ---

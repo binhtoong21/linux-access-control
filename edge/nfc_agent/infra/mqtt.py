@@ -86,10 +86,17 @@ class MqttLink:
         self._client.loop_stop()
 
     def publish(self, message: Any) -> bool:
-        """`message` has topic, payload, qos, retain (sync.Outgoing). False when not connected: nothing is queued."""
+        """`message` has topic, payload, qos, retain and maybe signature (sync.Outgoing). False when not connected."""
         if not self._connected:
             return False
-        info = self._client.publish(message.topic, message.payload, qos=message.qos, retain=message.retain)
+        properties = None
+        signature = getattr(message, "signature", None)
+        if signature:
+            properties = Properties(PacketTypes.PUBLISH)
+            properties.UserProperty = ("signature", signature)
+        info = self._client.publish(
+            message.topic, message.payload, qos=message.qos, retain=message.retain, properties=properties
+        )
         return info.rc == mqtt.MQTT_ERR_SUCCESS
 
     # ------------------------------------------------------------------ paho callbacks (paho's thread)

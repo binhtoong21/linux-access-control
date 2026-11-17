@@ -34,7 +34,7 @@
 | Sinh viên (người dùng không đặc quyền) | Vào máy ngoài ca, dùng máy của người khác, xóa dấu vết | Quyền `student` (không sudo), có điện thoại đọc/ghi NFC, đọc được UID thẻ người khác ở cự ly gần, có thể rút điện/rút mạng máy |
 | Người trong mạng LAN | Nghe lén, giả server/broker, cướp định danh máy khi đăng ký | Bắt và chèn gói tin trong LAN, giả mạo ARP/MAC |
 | Người chiếm được root một máy trạm | Mở rộng sang máy khác, giả nhật ký | Đọc `edge.db`, `identity/` của **máy đó** |
-| Người chiếm được broker | Giả snapshot/lease, chặn hoặc phát lại bản tin | Đọc/ghi mọi topic, không có `K_m` |
+| Người chiếm được broker | Giả snapshot/lease/lô outbox, chặn hoặc phát lại bản tin | Đọc/ghi mọi topic, không có `K_m` |
 | Admin dùng sai quyền / lộ mật khẩu admin | Sửa lịch, cấp thẻ trái phép | Toàn quyền Dashboard; **không** sửa/xóa được nhật ký |
 
 ## Permission Matrix
@@ -64,12 +64,13 @@ MVP có một vai trò quản trị (D-007). Ma trận ghi cả các tác nhân 
 | **S** | Dùng chứng chỉ cũ (ổ đĩa máy cài lại, máy bị vô hiệu hóa) để mạo danh máy | Broker | CRL + khởi động lại broker (D-014.5) | ✅ S9 |
 | **S** | Tiến trình thường giả làm PAM để lấy quyền đăng nhập | Socket PAM | `SO_PEERCRED` chỉ nhận UID 0; socket `0660 root:root` | ✅ S2 |
 | **T** | Sửa snapshot trên broker hoặc chép snapshot máy khác | MQTT | HMAC theo `K_m` trên toàn byte payload, có `workstation_id` và `version` bên trong (ADR-003) | ✅ Thiết kế, S8 (parity) |
-| **T** | Phát lại lease cũ để kéo dài thời hạn tin cậy | MQTT | Lease phải nhắc lại `lease_nonce` vừa gửi (D-018.4); snapshot cũ/cùng version không gia hạn | ✅ Thiết kế |
+| **T** | Phát lại lease cũ để kéo dài thời hạn tin cậy | MQTT | Lease phải nhắc lại `lease_nonce` vừa gửi, dùng một lần, mất theo kết nối (D-018.4, D-028.2); snapshot cũ/cùng version không gia hạn | ✅ Thiết kế |
+| **T** | Giả lô outbox (`records` rỗng, `to_seq` lớn) để Server ký ACK, khiến máy xóa nhật ký chưa gửi; phát lại ACK cũ | MQTT | Lô outbox ký HMAC theo `K_m` (tag `outbox-v1`), Server kiểm trước khi đọc; ACK nhắc lại `batch_id` ngẫu nhiên, máy chỉ xóa theo ACK của lô đang chờ (D-030) | ✅ Thiết kế, test đơn vị |
 | **T** | Lùi giờ máy để vào ca đã qua; tiến giờ để vào ca sau | Đồng hồ máy | Lùi giờ: mốc sàn theo giờ máy (D-018). Tiến giờ lúc offline: chấp nhận, chỉ trong quyền sẵn có và trước `trusted_until` (ADR-001); khuyến nghị mật khẩu BIOS. Thời lượng phiên dùng `CLOCK_BOOTTIME` nên đổi giờ không kéo dài phiên | Chấp nhận có kiểm soát |
 | **T** | Sửa `edge.db` để thêm thẻ hoặc xóa nhật ký | Máy trạm | Tệp `0600 root` trong thư mục `0700`; sinh viên không có root. Người đã có root một máy nằm ngoài phạm vi bảo vệ của máy đó (D-013.2) | ✅ Thiết kế |
 | **R** | Chối đã dùng máy | Nhật ký | Mỗi lần quẹt đúng một bản ghi, ghi bền trước khi trả quyết định, có UID thật, ảnh chụp danh tính và version dữ liệu (BR-007); `audit_logs` chỉ ghi thêm (trigger) | ✅ Thiết kế |
 | **R** | Rút điện ngay sau khi quẹt để mất dấu | Edge | Ghi nguyên tử nhật ký + phiên `pending` với `synchronous=FULL` trước khi trả quyết định (D-005) | ✅ S5 (giới hạn: 1 lần cắt điện trên VM) |
-| **R** | Mất nhật ký khi `edge.db` hỏng | Edge | Cứu outbox từ tệp hỏng; phần mất được báo `edge_db_recovered` kèm số mục (D-017) | ✅ Thiết kế |
+| **R** | Mất nhật ký khi `edge.db` hỏng | Edge | Cứu outbox từ tệp hỏng, giữ `outbox_seq` (D-017, D-028.3); báo `edge_db_recovered` kèm số mục cứu được; ACK cũ không xóa được mục mới (D-030) | ✅ Thiết kế |
 | **I** | Đọc snapshot để lấy danh sách UID | Máy trạm | Snapshot chỉ có `CardMatchKey` theo máy, không có UID; chỉ chứa user liên quan tới máy (INV-012, ADR-007) | ✅ Thiết kế |
 | **I** | Lộ bản sao CSDL server | Server | UID mã hóa AES-256-GCM + blind index; mật khẩu admin băm; `master_key`/khóa AES/khóa CA không nằm trong CSDL | ✅ Thiết kế |
 | **I** | Nghe lén LAN | Mạng | TLS cho REST, mTLS cho MQTT (NFR-SEC01) | ✅ S8 |
@@ -89,7 +90,7 @@ MVP có một vai trò quản trị (D-007). Ma trận ghi cả các tác nhân 
 | Xác thực Admin | API | Username/password (băm Argon2id/bcrypt), JWT trong cookie `HttpOnly; Secure; SameSite=Strict`, kiểm tra trạng thái admin mỗi request | Thiết kế (`api.md`) |
 | Xác thực máy | MQTT | mTLS, chứng chỉ Ed25519 theo máy, CN = `mqtt_identity`, CRL | S8, S9 |
 | Phân quyền | API / MQTT | Một vai trò Admin; ACL đọc/ghi theo `%u` | S8 |
-| Toàn vẹn dữ liệu xuống máy | Ứng dụng | HMAC-SHA256 theo `K_m` cho snapshot/lease/ACK, nonce cho lease | Thiết kế, S8 |
+| Toàn vẹn bản tin | Ứng dụng | HMAC-SHA256 theo `K_m`: xuống máy cho snapshot/lease/ACK (nonce cho lease), lên Server cho lô outbox (D-030); Hello/heartbeat chưa ký | Thiết kế, S8 |
 | Mã hóa khi lưu | Dữ liệu | UID AES-256-GCM + blind index ở Server; `edge.db`/`identity/` dựa vào quyền tệp root | Thiết kế |
 | Mã hóa đường truyền | Mạng | TLS 1.2+ (REST), mTLS (MQTT 8883) | S8 |
 | Kiểm tra đầu vào | Ứng dụng | VR-001…012; regex `mqtt_identity` chống chèn ký tự wildcard vào ACL | Thiết kế |

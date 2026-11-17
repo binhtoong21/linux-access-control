@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { IngestService } from '../../src/operations/ingest.service';
 import { validateMessage } from '../../src/shared/contracts';
-import { deriveKm, verify } from '../../src/shared/crypto/crypto-v1';
+import { deriveKm, sign, verify } from '../../src/shared/crypto/crypto-v1';
 import { loadMasterKey, loadUidVault } from '../../src/shared/crypto/uid-vault';
 import { ApiContext, startSignedIn } from '../support/api';
 import { TEST_DATABASE_URL } from '../support/db';
@@ -21,6 +21,9 @@ const T0 = 1793048000;
 
   const q = async (text: string, values: unknown[] = []) => (await api.pool.query(text, values)).rows;
   const count = async (table: string): Promise<number> => (await q(`SELECT count(*)::int AS n FROM ${table}`))[0].n;
+  const masterKey = loadMasterKey(testKeysDir());
+  const signBatch = (identity: string, raw: Buffer, keyVersion = 1): string =>
+    sign(deriveKm(masterKey, identity, keyVersion), 'outbox-v1', raw);
   /** Wraps records into a batch; outbox_seq is assigned in order. */
   const batch = (records: Record<string, unknown>[], change: Record<string, unknown> = {}): Buffer => {
     const numbered = records.map((r) => ({ outbox_seq: (seq += 1), ...r }));
@@ -80,29 +83,58 @@ const T0 = 1793048000;
 
   it('ignores a batch it cannot trust and sends no ACK', async () => {
     const good = batch([swipe()]);
-    const attempts: [string, Buffer][] = [
-      ['lab-a-01', Buffer.from('not json')],
-      ['lab-a-01', Buffer.from('[1, 2]')],
-      ['lab-a-01', batch([swipe()], { to_seq: undefined })],
-      ['lab-a-01', batch([swipe()], { records: 'none' })],
-      ['lab-a-01', batch([swipe()], { workstation_id: 'lab-a-02' })],
-      ['lab-a-02', good],
-      ['lab-zz-99', batch([swipe()], { workstation_id: 'lab-zz-99' })],
+    const attempts: [string, Buffer, (string | undefined)?][] = [
+      ['lab-a-01', Buffer.from('not json'), signBatch('lab-a-01', Buffer.from('not json'))],
+      ['lab-a-01', Buffer.from('[1, 2]'), signBatch('lab-a-01', Buffer.from('[1, 2]'))],
+      ['lab-a-01', batch([swipe()], { to_seq: undefined }), signBatch('lab-a-01', batch([swipe()], { to_seq: undefined }))],
+      ['lab-a-01', batch([swipe()], { records: 'none' }), signBatch('lab-a-01', batch([swipe()], { records: 'none' }))],
+      ['lab-a-01', batch([swipe()], { workstation_id: 'lab-a-02' }), signBatch('lab-a-01', batch([swipe()], { workstation_id: 'lab-a-02' }))],
+      ['lab-a-02', good, signBatch('lab-a-02', good)],
+      ['lab-zz-99', batch([swipe()], { workstation_id: 'lab-zz-99' }), signBatch('lab-zz-99', batch([swipe()], { workstation_id: 'lab-zz-99' }))],
+      ['lab-a-01', good, undefined],
+      ['lab-a-01', good, signBatch('lab-a-01', good, 2)],
+      ['lab-a-01', batch([swipe()], { batch_id: undefined }), signBatch('lab-a-01', batch([swipe()], { batch_id: undefined }))],
     ];
-    for (const [identity, raw] of attempts) expect(await ingest.handleOutbox(identity, raw)).toEqual({ ack: null, applied: 0, duplicates: 0, rejected: 0 });
+    for (const [identity, raw, sig] of attempts) expect(await ingest.handleOutbox(identity, raw, sig)).toEqual({ ack: null, applied: 0, duplicates: 0, rejected: 0 });
     expect([await count('audit_logs'), await count('ingest_rejects')]).toEqual([0, 0]);
+  });
+
+  it('a forged empty batch gets no ACK', async () => {
+    const forged = Buffer.from(
+      JSON.stringify({ schema: 'outbox-v1', workstation_id: 'lab-a-01', batch_id: 'b-forged', from_seq: 1, to_seq: 1000000, records: [] }),
+    );
+    expect(await ingest.handleOutbox('lab-a-01', forged, undefined)).toEqual({ ack: null, applied: 0, duplicates: 0, rejected: 0 });
+  });
+
+  it('drops a batch signed with a key replaced by a reinstall committed while the batch was being checked', async () => {
+    const raw = batch([swipe()]);
+    const reinstall = await api.pool.connect();
+    try {
+      await reinstall.query('BEGIN');
+      await reinstall.query("UPDATE workstations SET key_version = 2 WHERE mqtt_identity = 'lab-a-01'");
+      // The signature check reads key_version 1 (the update is not committed); the ingest then waits on the row lock.
+      const pending = ingest.handleOutbox('lab-a-01', raw, signBatch('lab-a-01', raw, 1));
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await reinstall.query('COMMIT');
+      expect(await pending).toEqual({ ack: null, applied: 0, duplicates: 0, rejected: 0 });
+      expect(await count('audit_logs')).toBe(0);
+    } finally {
+      await reinstall.query("UPDATE workstations SET key_version = 1 WHERE mqtt_identity = 'lab-a-01'");
+      reinstall.release();
+    }
   });
 
   it('stores a swipe as an audit record with the UID encrypted and acknowledges the batch with a signed ACK', async () => {
     const record = swipe();
     const raw = batch([record]);
-    const result = await ingest.handleOutbox('lab-a-01', raw);
+    const expectedBatchId = `b-${seq}`;
+    const result = await ingest.handleOutbox('lab-a-01', raw, signBatch('lab-a-01', raw));
     expect(result).toMatchObject({ applied: 1, duplicates: 0, rejected: 0 });
     const ack = result.ack;
     expect(ack?.topic).toBe('lab/workstation/lab-a-01/command/ack');
     expect(ack?.retain).toBe(false);
     const ackBody = JSON.parse((ack?.payload as Buffer).toString('utf8'));
-    expect(ackBody).toEqual({ schema: 'ack-v1', command: 'ack_outbox', workstation_id: 'lab-a-01', acked_seq: seq });
+    expect(ackBody).toEqual({ schema: 'ack-v1', command: 'ack_outbox', workstation_id: 'lab-a-01', batch_id: expectedBatchId, acked_seq: seq });
     expect(validateMessage('ack-v1', ackBody)).toBeNull();
     const km = deriveKm(loadMasterKey(testKeysDir()), 'lab-a-01', 1);
     expect(verify(km, 'ack-v1', ack?.payload as Buffer, ack?.signature as string)).toBe(true);
@@ -128,7 +160,7 @@ const T0 = 1793048000;
     expect(JSON.stringify(row.user_snapshot) + JSON.stringify(row.workstation_snapshot)).not.toContain('1F0820CF');
 
     // The same batch again (lost ACK): nothing new, acknowledged again.
-    const again = await ingest.handleOutbox('lab-a-01', raw);
+    const again = await ingest.handleOutbox('lab-a-01', raw, signBatch('lab-a-01', raw));
     expect(again).toMatchObject({ applied: 0, duplicates: 1, rejected: 0 });
     expect(again.ack?.payload.equals(ack?.payload as Buffer)).toBe(true);
     expect(await count('audit_logs')).toBe(1);
@@ -137,7 +169,8 @@ const T0 = 1793048000;
   it('stores records without a card UID or without a user as they are', async () => {
     const unknown = swipe({ outcome: 'denied', reason: 'unknown_card', card_uid: '04A32B1C5D6E80', user: null, card: null, target_os_username: null, matched_schedule_ids: [] });
     const failed = swipe({ outcome: 'error', reason: 'reader_error', card_uid: null, reader_raw: 'SCARD_E_NO_SMARTCARD', user: null, card: null, target_os_username: null, matched_schedule_ids: [] });
-    expect(await ingest.handleOutbox('lab-a-01', batch([unknown, failed]))).toMatchObject({ applied: 2, rejected: 0 });
+    const raw = batch([unknown, failed]);
+    expect(await ingest.handleOutbox('lab-a-01', raw, signBatch('lab-a-01', raw))).toMatchObject({ applied: 2, rejected: 0 });
     const rows = await q('SELECT outcome, reason, card_uid_index IS NOT NULL AS has_uid, reader_raw, user_snapshot, matched_schedule_ids FROM audit_logs WHERE entry_id = ANY($1) ORDER BY outcome', [
       [unknown.entry_id, failed.entry_id],
     ]);
@@ -150,17 +183,20 @@ const T0 = 1793048000;
   it('opens and closes a session from the reports of the workstation', async () => {
     const decision = swipe({}, T0 + 100);
     const id = randomUUID();
-    const result = await ingest.handleOutbox('lab-a-01', batch([decision, started(id, decision.entry_id, T0 + 105)]));
+    const raw1 = batch([decision, started(id, decision.entry_id, T0 + 105)]);
+    const result = await ingest.handleOutbox('lab-a-01', raw1, signBatch('lab-a-01', raw1));
     expect(result).toMatchObject({ applied: 2, rejected: 0 });
     expect(await session(id)).toEqual({ status: 'active', end_reason: null, end_source: null, started: T0 + 105, ended: null });
     const list = (await (await api.call('GET', '/workstations')).json()) as { current_session: { user: { external_id: string } } | null }[];
     expect(list[0].current_session?.user.external_id).toBe('SV001');
 
     const close = ended(id, T0 + 900, { status: 'forced_logout', end_reason: 'schedule_expired' });
-    expect(await ingest.handleOutbox('lab-a-01', batch([close]))).toMatchObject({ applied: 1 });
+    const rawClose = batch([close]);
+    expect(await ingest.handleOutbox('lab-a-01', rawClose, signBatch('lab-a-01', rawClose))).toMatchObject({ applied: 1 });
     expect(await session(id)).toEqual({ status: 'forced_logout', end_reason: 'schedule_expired', end_source: 'reported', started: T0 + 105, ended: T0 + 900 });
     // A second report for a session that was really reported is not applied (INV-007).
-    expect(await ingest.handleOutbox('lab-a-01', batch([ended(id, T0 + 950)]))).toMatchObject({ applied: 0, duplicates: 1, rejected: 0 });
+    const rawEnded = batch([ended(id, T0 + 950)]);
+    expect(await ingest.handleOutbox('lab-a-01', rawEnded, signBatch('lab-a-01', rawEnded))).toMatchObject({ applied: 0, duplicates: 1, rejected: 0 });
     expect((await session(id)).ended).toBe(T0 + 900);
   });
 
@@ -169,29 +205,37 @@ const T0 = 1793048000;
     const b = randomUUID();
     const da = swipe({}, T0 + 1000);
     const db = swipe({}, T0 + 2000);
-    await ingest.handleOutbox('lab-a-01', batch([da, started(a, da.entry_id, T0 + 1005)]));
+    const rawA = batch([da, started(a, da.entry_id, T0 + 1005)]);
+    await ingest.handleOutbox('lab-a-01', rawA, signBatch('lab-a-01', rawA));
     const startB = started(b, db.entry_id, T0 + 2005);
-    expect(await ingest.handleOutbox('lab-a-01', batch([db, startB]))).toMatchObject({ applied: 2, rejected: 0 });
+    const rawB = batch([db, startB]);
+    expect(await ingest.handleOutbox('lab-a-01', rawB, signBatch('lab-a-01', rawB))).toMatchObject({ applied: 2, rejected: 0 });
     expect(await session(a)).toEqual({ status: 'abandoned', end_reason: 'os_session_lost', end_source: 'inferred', started: T0 + 1005, ended: T0 + 2005 });
     expect((await session(b)).status).toBe('active');
 
     // The start of B resent later must not close anything.
-    expect(await ingest.handleOutbox('lab-a-01', batch([startB]))).toMatchObject({ applied: 0, duplicates: 1 });
+    const rawStartB = batch([startB]);
+    expect(await ingest.handleOutbox('lab-a-01', rawStartB, signBatch('lab-a-01', rawStartB))).toMatchObject({ applied: 0, duplicates: 1 });
     expect((await session(b)).status).toBe('active');
 
     // The real end of A arrives late: it replaces the inferred one, once.
-    expect(await ingest.handleOutbox('lab-a-01', batch([ended(a, T0 + 1500)]))).toMatchObject({ applied: 1 });
+    const rawEndA1 = batch([ended(a, T0 + 1500)]);
+    expect(await ingest.handleOutbox('lab-a-01', rawEndA1, signBatch('lab-a-01', rawEndA1))).toMatchObject({ applied: 1 });
     expect(await session(a)).toEqual({ status: 'completed', end_reason: 'user_logout', end_source: 'reported', started: T0 + 1005, ended: T0 + 1500 });
-    expect(await ingest.handleOutbox('lab-a-01', batch([ended(a, T0 + 1600)]))).toMatchObject({ applied: 0, duplicates: 1 });
+    const rawEndA2 = batch([ended(a, T0 + 1600)]);
+    expect(await ingest.handleOutbox('lab-a-01', rawEndA2, signBatch('lab-a-01', rawEndA2))).toMatchObject({ applied: 0, duplicates: 1 });
     expect((await session(a)).ended).toBe(T0 + 1500);
-    await ingest.handleOutbox('lab-a-01', batch([ended(b, T0 + 2500)]));
+    const rawEndB = batch([ended(b, T0 + 2500)]);
+    await ingest.handleOutbox('lab-a-01', rawEndB, signBatch('lab-a-01', rawEndB));
   });
 
   it('stores alerts from the workstation', async () => {
     const alert = { entry_id: randomUUID(), occurred_at: T0 + 3000, event_type: 'security_alert', payload: { kind: 'edge_db_recovered', detail: { lost_outbox_entries: 3 } } };
     const bare = { entry_id: randomUUID(), occurred_at: T0 + 3001, event_type: 'security_alert', payload: { kind: 'snapshot_signature_invalid', detail: null } };
-    expect(await ingest.handleOutbox('lab-a-01', batch([alert, bare]))).toMatchObject({ applied: 2, rejected: 0 });
-    expect(await ingest.handleOutbox('lab-a-01', batch([alert]))).toMatchObject({ applied: 0, duplicates: 1 });
+    const rawAlerts = batch([alert, bare]);
+    expect(await ingest.handleOutbox('lab-a-01', rawAlerts, signBatch('lab-a-01', rawAlerts))).toMatchObject({ applied: 2, rejected: 0 });
+    const rawAlertSingle = batch([alert]);
+    expect(await ingest.handleOutbox('lab-a-01', rawAlertSingle, signBatch('lab-a-01', rawAlertSingle))).toMatchObject({ applied: 0, duplicates: 1 });
     expect(await q('SELECT kind, detail FROM workstation_alerts ORDER BY occurred_at')).toEqual([
       { kind: 'edge_db_recovered', detail: { lost_outbox_entries: 3 } },
       { kind: 'snapshot_signature_invalid', detail: null },
@@ -215,9 +259,13 @@ const T0 = 1793048000;
     // The fifth bad record names a user that does not exist.
     (bad[4].payload as Record<string, unknown>).user_id = randomUUID();
     const raw = batch([good1, ...bad, good2]);
-    const result = await ingest.handleOutbox('lab-a-01', raw);
+    const expectedBatchId = `b-${seq}`;
+    const result = await ingest.handleOutbox('lab-a-01', raw, signBatch('lab-a-01', raw));
     expect(result).toMatchObject({ applied: 2, duplicates: 0, rejected: bad.length });
-    expect(JSON.parse((result.ack?.payload as Buffer).toString('utf8')).acked_seq).toBe(seq);
+    const ackPayload = JSON.parse((result.ack?.payload as Buffer).toString('utf8'));
+    expect(ackPayload.acked_seq).toBe(seq);
+    expect(ackPayload.batch_id).toBe(expectedBatchId);
+    expect(validateMessage('ack-v1', ackPayload)).toBeNull();
     expect(await count('audit_logs')).toBe(before.audit + 2);
     const rejects = await q('SELECT entry_id, outbox_seq::int AS outbox_seq, raw_record, error FROM ingest_rejects ORDER BY outbox_seq');
     expect(rejects).toHaveLength(before.rejects + bad.length);
@@ -228,7 +276,7 @@ const T0 = 1793048000;
     for (const reject of rejects) expect(reject.error.length).toBeGreaterThan(0);
 
     // The batch again: applied records are duplicates, rejects are not stored twice.
-    expect(await ingest.handleOutbox('lab-a-01', raw)).toMatchObject({ applied: 0, duplicates: 2, rejected: bad.length });
+    expect(await ingest.handleOutbox('lab-a-01', raw, signBatch('lab-a-01', raw))).toMatchObject({ applied: 0, duplicates: 2, rejected: bad.length });
     expect(await count('ingest_rejects')).toBe(before.rejects + bad.length);
     const flags = ((await (await api.call('GET', '/workstations')).json()) as { flags: string[] }[])[0].flags;
     expect(flags).toEqual(expect.arrayContaining(['ingest_rejects', 'security_alert']));

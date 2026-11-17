@@ -216,4 +216,15 @@ const NONCE = '7f3a9c1e5b2d4f60a8e1c3b5d7f90214';
     await sync.handleHeartbeat('lab-a-01', heartbeat({ snapshot_version: 51, boot_id: BOOT_2 }));
     expect((await status()).connectivity).toBe('online');
   });
+
+  it('does not invalidate the fetch code on a Hello with an old key version, but invalidates on the new key version', async () => {
+    await q('UPDATE enrollment_requests SET fetch_code_invalidated_at = NULL WHERE workstation_id = $1', [ws]);
+    await q('UPDATE workstations SET key_version = 2 WHERE id = $1', [ws]);
+
+    await sync.handleHello('lab-a-01', hello({ key_version: 1 }));
+    expect((await q('SELECT fetch_code_invalidated_at IS NOT NULL AS done FROM enrollment_requests WHERE workstation_id = $1', [ws]))[0].done).toBe(false);
+
+    await sync.handleHello('lab-a-01', hello({ key_version: 2 }));
+    expect((await q('SELECT fetch_code_invalidated_at IS NOT NULL AS done FROM enrollment_requests WHERE workstation_id = $1', [ws]))[0].done).toBe(true);
+  });
 });

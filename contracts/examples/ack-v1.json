@@ -2,5 +2,6 @@
   "schema": "ack-v1",
   "command": "ack_outbox",
   "workstation_id": "ws-01",
+  "batch_id": "b-68192a",
   "acked_seq": 103
 }

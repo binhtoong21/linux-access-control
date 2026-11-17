@@ -220,3 +220,58 @@ class TestRecovery:
         os_.sessions["student"] = OsSession("c30", "student", clock.wall - 50)
         mgr.recover("boot-1", ("boot-1", clock.wall), ["student"])
         assert os_.teardowns == ["student"]
+
+    def test_orphan_is_ended_when_liveness_is_missing(self, env):
+        """A2: edge.db rebuilt during a running desktop -> previous is None, the desktop must still be ended."""
+        store, os_, clock, mgr, _ = env
+        os_.sessions["student"] = OsSession("c31", "student", clock.wall - 50)
+        mgr.recover("boot-1", None, ["student"])
+        assert os_.teardowns == ["student"] and os_.gui_session("student") is None
+
+    def test_orphan_teardown_is_retried_on_tick(self, env):
+        store, os_, clock, mgr, _ = env
+        os_.sessions["student"] = OsSession("c32", "student", clock.wall - 50)
+        os_.stuck = True
+        mgr.recover("boot-1", ("boot-1", clock.wall), ["student"])
+        assert os_.teardowns == ["student"] and os_.gui_session("student") is not None
+        os_.stuck = False
+        mgr.tick()
+        assert os_.gui_session("student") is None
+        mgr.tick()
+        assert os_.teardowns == ["student", "student"]  # gone: no further attempt
+
+    def test_stale_pending_desktop_is_ended_once(self, env):
+        """A desktop older than the pending decision is not promoted; it is ended as an orphan exactly once."""
+        store, os_, clock, mgr, _ = env
+        grant(store, mgr, clock)
+        os_.sessions["student"] = OsSession("c33", "student", clock.wall - 500)
+        mgr.recover("boot-1", ("boot-1", clock.wall), ["student"])
+        assert store.pending_session() is None and store.active_session() is None
+        assert os_.teardowns == ["student"]
+
+    def test_tracked_session_is_not_an_orphan(self, env):
+        store, os_, clock, mgr, _ = env
+        _active(env)
+        mgr.recover("boot-1", ("boot-1", clock.wall), ["student"])
+        mgr.tick()
+        assert os_.teardowns == [] and store.active_session() is not None
+
+    def test_agent_has_no_planned_shutdown(self, env):
+        """A1: stopping the agent must not end the session (the restarted agent would log the student out)."""
+        _, _, _, mgr, _ = env
+        assert not hasattr(mgr, "planned_shutdown")
+
+    def test_orphan_retry_never_ends_a_new_desktop_of_the_same_profile(self, env):
+        store, os_, clock, mgr, _ = env
+        os_.sessions["student"] = OsSession("old", "student", clock.wall - 50)
+        os_.stuck = True
+        mgr.recover("boot-1", ("boot-1", clock.wall), ["student"])
+        os_.stuck = False
+        del os_.sessions["student"]  # the old desktop finally exits on its own
+        grant(store, mgr, clock)
+        clock.advance(2)
+        os_.sessions["student"] = OsSession("new", "student", clock.wall)
+        mgr.tick()  # promotes "new", then retries orphans
+        assert store.active_session().os_session_id == "new"
+        assert os_.gui_session("student") is not None
+        assert os_.teardowns == ["student"]  # only the first, failed attempt on "old"

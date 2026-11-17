@@ -14,6 +14,12 @@ const TOPIC = /^lab\/workstation\/([A-Za-z0-9_-]{3,64})\/(hello|heartbeat|outbox
 const OFFLINE_CHECK_MS = 30_000;
 const RECONNECT_MS = 2_000;
 
+/** The `signature` MQTT 5 user property; mqtt.js gives a string, or an array when the property is repeated. */
+function signatureOf(packet: { properties?: { userProperties?: Record<string, string | string[]> } }): string | undefined {
+  const value = packet.properties?.userProperties?.signature;
+  return Array.isArray(value) ? value[0] : value;
+}
+
 export type MqttState = 'ok' | 'down' | 'disabled';
 type MqttConfig = Pick<AppConfig, 'mqttUrl' | 'mqttCaFile' | 'mqttCertFile' | 'mqttKeyFile'>;
 
@@ -59,7 +65,7 @@ export class MqttGateway implements OnApplicationBootstrap, OnApplicationShutdow
         if (err) this.logger.error(`subscribe failed: ${err.message}`);
       });
     });
-    client.on('message', (topic, payload) => void this.receive(topic, payload));
+    client.on('message', (topic, payload, packet) => void this.receive(topic, payload, signatureOf(packet)));
     client.on('error', (err) => this.logger.error(`broker error: ${err.message}`));
     this.timer = setInterval(() => void this.housekeeping(), OFFLINE_CHECK_MS);
     this.timer.unref();
@@ -80,14 +86,14 @@ export class MqttGateway implements OnApplicationBootstrap, OnApplicationShutdow
   }
 
   /** Handles one received message and sends the replies. Never throws: one bad message must not stop the others. */
-  async receive(topic: string, payload: Buffer): Promise<OutgoingMessage[]> {
+  async receive(topic: string, payload: Buffer, signature?: string): Promise<OutgoingMessage[]> {
     const match = TOPIC.exec(topic);
     if (!match) return [];
     const [, identity, kind] = match;
     try {
       let replies: OutgoingMessage[];
       if (kind === 'outbox') {
-        const { ack } = await this.ingest.handleOutbox(identity, payload);
+        const { ack } = await this.ingest.handleOutbox(identity, payload, signature);
         replies = ack ? [ack] : [];
       } else {
         replies = kind === 'hello' ? await this.sync.handleHello(identity, payload) : await this.sync.handleHeartbeat(identity, payload);

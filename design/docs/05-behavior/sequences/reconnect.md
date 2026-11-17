@@ -17,7 +17,7 @@ sequenceDiagram
     Note over A,B: Mất kết nối
     A->>A: Phát hiện mất kênh, chuyển sang chế độ độc lập
     loop Trong lúc mất kết nối
-        Note over A,K: Quẹt thẻ, phiên, hết giờ vẫn chạy theo dữ liệu cục bộ; mọi bản ghi và sự kiện vào outbox
+        Note over A,K: Quẹt thẻ, phiên, hết giờ vẫn chạy theo dữ liệu cục bộ, mọi bản ghi và sự kiện vào outbox
         A-->>B: Thử kết nối lại (lùi dần, có ngẫu nhiên hóa)
     end
     Note over Ops: Bỏ lỡ quá số heartbeat quy định thì máy offline
@@ -41,7 +41,7 @@ sequenceDiagram
     end
     loop Đến khi outbox rỗng
         A->>Ops: Lô mục outbox (bản ghi nhật ký, sự kiện phiên), theo thứ tự thời gian
-        Ops->>Ops: Loại trùng theo entry_id, lưu received_at; mục không áp dụng được thì giữ nguyên văn để Admin xem (D-015)
+        Ops->>Ops: Loại trùng theo entry_id, lưu received_at, mục không áp dụng được thì giữ nguyên văn để Admin xem (D-015)
         Ops-->>A: Xác nhận đến mục cuối của lô (kể cả khi có mục lỗi)
         A->>K: Xóa các mục đã xác nhận khỏi outbox
     end

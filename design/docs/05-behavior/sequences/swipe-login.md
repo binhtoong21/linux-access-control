@@ -109,7 +109,9 @@ Mỗi LocalSession đánh giá độc lập; tổ hợp có cả `active` cũ v�
 | `pending` | có phiên OS tạo SAU `decided_at`, `expires_at` còn hạn | chuyển thành `active` (ghi nhận `os_session_id`, `started_at`); phiên cũ (nếu có) đóng `superseded` |
 | `pending` | có phiên OS tạo SAU `decided_at`, `expires_at` đã qua | kết thúc phiên OS, chuyển `pending` thành `discarded` |
 | `pending` | không có phiên OS mới (chỉ có phiên OS tạo trước `decided_at` hoặc không còn) | dọn phiên OS cũ (nếu có), chuyển `pending` thành `discarded` (phiên chưa từng bắt đầu hợp lệ) |
-| (không có LocalSession nào) | còn phiên OS của một profile `labstudent` | kết thúc phiên OS (Two-Phase Teardown): phiên không rõ nguồn gốc thì không có hạn để giám sát, không được để chạy tiếp. Xảy ra khi `edge.db` vừa được dựng lại (D-017) |
+| (không có LocalSession nào) | còn phiên OS của một profile `labstudent` | kết thúc phiên OS (Two-Phase Teardown): phiên không rõ nguồn gốc thì không có hạn để giám sát, không được để chạy tiếp. Xảy ra khi `edge.db` vừa được dựng lại (D-017), kể cả khi `edge.db` mới không còn mốc liveness. Teardown lỗi thì thử lại mỗi nhịp theo dõi, chỉ với đúng mã phiên logind đó (D-031) |
+
+Dừng Agent (SIGTERM) không đóng LocalSession nào, chỉ ghi `last_alive_at`; chỉ khởi động lại dịch vụ thì bảng trên giữ nguyên desktop đang chạy (D-031).
 
 Cách nhận biết "phiên OS tương ứng": Agent truy vấn logind lấy thời điểm tạo của GUI session trên `seat0` (`MonotonicTimestamp` hoặc `RealtimeTimestamp`), đối chiếu với `decided_at` của `LocalSession pending`. Nếu phiên OS được tạo trước `decided_at`, đó là phiên cũ của profile dùng chung chưa kịp dọn dẹp xong, tuyệt đối không promote lên `active` (P1-2).
 

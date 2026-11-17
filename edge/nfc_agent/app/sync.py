@@ -14,7 +14,7 @@ from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from ..domain.clock import renew, trust_state
+from ..domain.clock import reanchor, renew, trust_state
 from ..infra import crypto
 from ..infra.identity import Identity
 from ..infra.store import ApplyResult, Store
@@ -27,6 +27,7 @@ BATCH_SIZE = 50  # ADR-002 §5
 NONCES_KEPT = 3  # D-018
 CLOCK_SKEW_WARN = 60.0  # deployment.md "Bảng Tham Số" (warning only)
 LEASE_PERSIST_STEP = 300.0  # ADR-003 §5: write the lease when trusted_until moved forward by >= 5 minutes
+NONCE_MAX_AGE = 120.0  # D-029: a lease may re-anchor the clock floor only in answer to a nonce this recent (monotonic)
 
 
 @dataclass(frozen=True)
@@ -35,6 +36,7 @@ class Outgoing:
     payload: bytes
     qos: int
     retain: bool = False
+    signature: str | None = None  # MQTT 5 user property "signature" (outbox-v1)
 
 
 def _json(body: dict) -> bytes:
@@ -52,8 +54,10 @@ class SyncClient:
         publish: Callable[[Outgoing], bool],
         profiles: Callable[[], list[str]],
         wall: Callable[[], float] = time.time,
+        monotonic: Callable[[], float] = time.monotonic,
         agent_version: str = "0.1.0",
         new_nonce: Callable[[], str] = lambda: secrets.token_hex(16),
+        new_batch_id: Callable[[], str] = lambda: secrets.token_hex(16),
     ):
         self._store = store
         self._id = identity
@@ -61,13 +65,15 @@ class SyncClient:
         self._publish = publish
         self._profiles = profiles
         self._wall = wall
+        self._mono = monotonic
         self._version = agent_version
         self._new_nonce = new_nonce
+        self._new_batch_id = new_batch_id
         self._prefix = f"lab/workstation/{identity.mqtt_identity}/"
-        self._nonces: deque[str] = deque(maxlen=NONCES_KEPT)
+        self._nonces: deque[tuple[str, float]] = deque(maxlen=NONCES_KEPT)  # (nonce, issued at, monotonic)
         self._connected = False
         self._last_heartbeat = float("-inf")
-        self._inflight: tuple[int, float] | None = None  # (to_seq, sent at)
+        self._inflight: tuple[int, float, str] | None = None  # (to_seq, sent at, batch_id)
         self._skew = False
 
     # ------------------------------------------------------------------ connection
@@ -90,7 +96,7 @@ class SyncClient:
     def tick(self) -> None:
         if not self._connected:
             return
-        now = self._wall()
+        now = self._mono()
         if now - self._last_heartbeat >= HEARTBEAT_EVERY:
             self.heartbeat()
         if self._inflight is not None and now - self._inflight[1] >= ACK_TIMEOUT:
@@ -101,7 +107,7 @@ class SyncClient:
     # ------------------------------------------------------------------ messages to the server
     def _nonce(self) -> str:
         nonce = self._new_nonce()
-        self._nonces.append(nonce)
+        self._nonces.append((nonce, self._mono()))
         return nonce
 
     def _send(self, message: Outgoing) -> bool:
@@ -144,7 +150,7 @@ class SyncClient:
             "active_session_id": active.session_id if active else None,
             "profiles": sorted(self._profiles()),
         }
-        self._last_heartbeat = now
+        self._last_heartbeat = self._mono()
         self._send(Outgoing(self._prefix + "heartbeat", _json(body), qos=0))
 
     def push_outbox(self) -> None:
@@ -155,16 +161,19 @@ class SyncClient:
         if not records:
             return
         first, last = records[0]["outbox_seq"], records[-1]["outbox_seq"]
+        batch_id = self._new_batch_id()  # new for every send: an ACK for an older send can never match (D-030)
         body = {
             "schema": "outbox-v1",
             "workstation_id": self._id.mqtt_identity,
-            "batch_id": f"b-{first}-{last}",
+            "batch_id": batch_id,
             "from_seq": first,
             "to_seq": last,
             "records": records,
         }
-        if self._send(Outgoing(self._prefix + "outbox", _json(body), qos=1)):
-            self._inflight = (last, self._wall())
+        raw = _json(body)
+        message = Outgoing(self._prefix + "outbox", raw, qos=1, signature=crypto.sign(self._id.km, "outbox-v1", raw))
+        if self._send(message):
+            self._inflight = (last, self._mono(), batch_id)
 
     # ------------------------------------------------------------------ messages from the server
     def on_message(self, topic: str, payload: bytes, signature: str | None) -> None:
@@ -200,36 +209,46 @@ class SyncClient:
         return body
 
     def on_lease(self, payload: bytes, signature: str | None) -> bool:
-        """D-018: renews only this version, only in answer to one of our own recent nonces."""
+        """D-018: renews only this version, only in answer to one of our own recent nonces. D-029: may re-anchor."""
         body = self._verified("lease-v1", payload, signature)
         if body is None or body.get("schema") != "lease-v1":
             return False
         version = int(self._store.meta()["version"])
         duration = body.get("lease_duration_sec")
         nonce = body.get("nonce")
-        if body.get("desired_version") != version or version < 1 or nonce not in self._nonces:
+        issued = next((entry for entry in self._nonces if entry[0] == nonce), None)
+        if body.get("desired_version") != version or version < 1 or issued is None:
             return False
         if not isinstance(duration, int) or duration < 60:
             return False
-        self._nonces.remove(nonce)
+        self._nonces.remove(issued)
         now = self._wall()
         server_time = body.get("server_time")
+        in_step = isinstance(server_time, (int, float)) and abs(server_time - now) <= CLOCK_SKEW_WARN
         if isinstance(server_time, (int, float)):
-            self._skew = abs(server_time - now) > CLOCK_SKEW_WARN
+            self._skew = not in_step
         old = self._store.lease()
+        fresh = self._mono() - issued[1] <= NONCE_MAX_AGE
+        if in_step and fresh and now < old.last_sync_local_time:
+            log.warning(
+                "clock is %.0f s behind the last sync and agrees with the server: re-anchoring trust (D-029)",
+                old.last_sync_local_time - now,
+            )
+            self._store.save_lease(reanchor(now, duration))
+            return True
         new = renew(old, now, duration)
         if new.trusted_until - old.trusted_until >= LEASE_PERSIST_STEP:
             self._store.save_lease(new)
         return True
 
     def on_ack(self, payload: bytes, signature: str | None) -> int:
-        """INV-013: deletes up to acked_seq. Returns how many records were deleted."""
+        """INV-013 + D-030: only an ACK naming the batch in flight deletes, and never past that batch."""
         body = self._verified("ack-v1", payload, signature)
         if body is None or body.get("command") != "ack_outbox" or not isinstance(body.get("acked_seq"), int):
             return 0
-        acked = body["acked_seq"]
-        deleted = self._store.ack_outbox(acked)
-        if self._inflight is not None and acked >= self._inflight[0]:
-            self._inflight = None
+        if self._inflight is None or body.get("batch_id") != self._inflight[2]:
+            return 0  # late, replayed or from before a reconnect / an edge.db recovery
+        deleted = self._store.ack_outbox(min(body["acked_seq"], self._inflight[0]))
+        self._inflight = None
         self.push_outbox()
         return deleted

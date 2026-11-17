@@ -18,24 +18,24 @@
 | E2 | Custom Greeter | Crash lặp | Không có màn hình đăng nhập | Thấp | Cao | Wrapper rơi về `lightdm-gtk-greeter` sau 3 crash/60s; còn TTY/SSH cho kỹ thuật viên | ADR-005, **S10** |
 | E3 | Custom Greeter | Treo, không thoát | Màn hình đứng | Rất thấp | Trung bình | Wrapper không bắt được; kỹ thuật viên dùng TTY/SSH (`systemctl restart lightdm`) | S10 (giới hạn) |
 | E4 | Nguồn điện | Mất điện giữa lúc quẹt / giữa phiên | Phiên đứt | Trung bình | Thấp | Ghi nguyên tử nhật ký + `pending`; khởi động lại thì `pending` → `discarded`, `active` → `abandoned(workstation_rebooted)` với `ended_at = max(started_at, last_alive_at)` | D-005, `reboot.md`, S5 |
-| E5 | `edge.db` | Hỏng tệp | Máy về `NoData` | Rất thấp | Trung bình | Đổi tên tệp hỏng, dựng lại từ `identity/`, cứu outbox, báo `edge_db_recovered`; tự lấy snapshot khi online; phiên OS không rõ nguồn gốc bị kết thúc | D-017, `migrations.md` §3.2 |
+| E5 | `edge.db` | Hỏng tệp | Máy về `NoData` | Rất thấp | Trung bình | Đổi tên tệp hỏng, dựng lại từ `identity/`, cứu outbox, báo `edge_db_recovered`; tự lấy snapshot khi online; phiên OS không rõ nguồn gốc bị kết thúc, teardown lỗi thì thử lại đúng phiên đó (D-031) | D-017, D-031, `migrations.md` §3.2 |
 | E6 | `identity/` | Hỏng, mất | Máy không xác thực được với broker | Rất thấp | Trung bình | Kỹ thuật viên chạy `nfc-agent reenroll`; Admin duyệt cài lại | D-014.6 |
-| E7 | Đồng hồ máy | Pin CMOS chết, lùi giờ | Từ chối quẹt `data_stale(clock_invalid)` | Thấp | Trung bình | Mốc sàn theo giờ máy; cảnh báo lệch giờ lên Dashboard; sửa giờ/NTP là tự hết | D-018, `lease-expiration.md` |
+| E7 | Đồng hồ máy | Pin CMOS chết, lùi giờ; hoặc từng chạy nhanh rồi NTP chỉnh lùi | Từ chối quẹt `data_stale(clock_invalid)` | Thấp | Trung bình | Mốc sàn theo giờ máy; cảnh báo lệch giờ lên Dashboard. Online: lease mới xác nhận giờ máy đúng thì neo lại mốc sàn, hồi phục trong ≤ 30s. Offline: hết khi giờ thật vượt mốc sàn | D-018, D-029, `lease-expiration.md` |
 | E8 | Đồng hồ máy | Chạy lệch so với server | Lịch đánh giá lệch theo độ lệch | Trung bình | Thấp | Chỉ cảnh báo `clock_skew_detected`, không chặn (BR-012) | D-018 |
 | E9 | Teardown | Tiến trình không chịu thoát | Phiên mới chưa mở được | Thấp | Thấp | `SIGKILL` sau 2s; quá 3s hiện banner, thử thêm tới 5s rồi hủy lượt đăng nhập; phiên chỉ đóng khi OS thật sự hết (INV-017) | ADR-008, S7b |
 | E10 | Phiên | Sinh viên quên đăng xuất | Máy bận tới hết phiên | Trung bình | Thấp | Chấp nhận (A4); phiên tự kết thúc ở hạn; kỹ thuật viên đăng xuất thủ công | D-006.1 |
-| E11 | Outbox | Mất mạng rất lâu, outbox đầy | Từ chối quẹt thẻ để không mất nhật ký | Rất thấp | Trung bình | Hạn mức 50.000 mục (nhiều tuần với lưu lượng thực tế); Dashboard thấy `pending_outbox_count` | `swipe-login.md` EF-3 |
+| E11 | Outbox | Mất mạng rất lâu, outbox đầy | Từ chối quẹt thẻ để không mất nhật ký | Rất thấp | Trung bình | Hạn mức 50.000 mục (nhiều tuần với lưu lượng thực tế); máy báo `pending_outbox_count` trong Hello (Server chưa lưu, hiện trên Dashboard để M4) | `swipe-login.md` EF-3 |
 | E12 | Đầu đọc NFC | Rút ra, lỗi USB | Không quẹt được trên máy đó | Thấp | Trung bình | Bản ghi `error(reader_error)`; đường mật khẩu dự phòng | S1 (một phần) |
 
 ### Mạng và Broker
 | # | Thành phần | Hỏng thế nào | Ảnh hưởng | Khả năng | Mức độ | Xử lý | Nguồn |
 |---|---|---|---|---|---|---|---|
-| N1 | Mạng / broker | Mất kết nối < D | Không ảnh hưởng quẹt thẻ | Trung bình | Thấp | Edge quyết định cục bộ; outbox đẩy sau; kết nối lại có backoff + jitter | NFR-A01, `reconnect.md`, S6 |
+| N1 | Mạng / broker | Mất kết nối < D | Không ảnh hưởng quẹt thẻ | Trung bình | Thấp | Edge quyết định cục bộ; outbox đẩy sau; kết nối lại có backoff 1s → 60s (chưa có jitter, D-027.8) | NFR-A01, `reconnect.md`, S6 |
 | N2 | Mạng / broker | Mất kết nối > D (24h) | Máy từ chối mọi thẻ `data_stale(lease_expired)` | Thấp | Cao | Thiết kế có chủ đích (fail-closed, D-002); đường dự phòng vẫn dùng được; có mạng lại thì tự hồi phục ngay | ADR-001 |
-| N3 | Broker | 40 máy kết nối lại cùng lúc | Nghẽn broker | Trung bình | Thấp | Backoff mũ có jitter [0.8, 1.2], tối đa 60s | ADR-002 §6 |
+| N3 | Broker | 40 máy kết nối lại cùng lúc | Nghẽn broker | Trung bình | Thấp | Backoff mũ của paho 1s → 60s; jitter [0.8, 1.2] của ADR-002 §6 chưa hiện thực, chấp nhận ở quy mô ~40 máy (D-027.8) | ADR-002 §6, D-027 |
 | N4 | CRL | Hết hạn hoặc thiếu tệp | Broker từ chối **mọi** máy / không khởi động | Thấp | Cao | CRL hạn 10 năm, sinh lại khi Server khởi động và hằng ngày, cảnh báo < 30 ngày; tệp luôn tồn tại, ghi nguyên tử | **S9**, D-014.5 |
 | N5 | Broker | Khởi động lại sau thu hồi chứng chỉ | Mọi máy mất kết nối vài giây | Thấp (vài lần/học kỳ) | Thấp | Máy tự kết nối lại; quẹt thẻ không gián đoạn | S9 |
-| N6 | Broker | Bị chiếm | Có thể chặn/phát lại bản tin | Rất thấp | Trung bình | Không giả được snapshot/lease/ACK (HMAC + nonce); chặn bản tin thì máy hết lease sau D (fail-closed) | ADR-003, D-018 |
+| N6 | Broker | Bị chiếm | Có thể chặn/phát lại bản tin | Rất thấp | Trung bình | Không giả được snapshot/lease/ACK (HMAC + nonce); lô outbox do máy ký nên không khiến Server ký ACK cho lô giả, ACK chỉ xóa đúng lô nó nêu `batch_id` (D-030); chặn bản tin thì máy hết lease sau D (fail-closed). Còn hở: Hello/heartbeat chỉ dựa vào mTLS + ACL, broker có thể báo sai trạng thái máy | ADR-003, D-018, D-030 |
 
 ### Server
 | # | Thành phần | Hỏng thế nào | Ảnh hưởng | Khả năng | Mức độ | Xử lý | Nguồn |
@@ -93,7 +93,7 @@ Không làm chaos engineering có hệ thống; các tình huống hỏng hóc t
 |---|---|---|---|
 | Agent chết trên một máy | systemd tự khởi động lại; nếu không, kỹ thuật viên đăng nhập mật khẩu → `systemctl restart nfc-agent` | < 1 phút (tự động) | 0 (outbox trên đĩa) |
 | Custom Greeter hỏng | Tự rơi về greeter chuẩn; kỹ thuật viên sửa rồi `systemctl restart lightdm` | Tức thì (fallback) | — |
-| `edge.db` hỏng | Tự động khi Agent khởi động (D-017); kiểm tra cảnh báo `edge_db_recovered` | Tới khi máy online lại | Mục outbox không cứu được (được báo số lượng) |
+| `edge.db` hỏng | Tự động khi Agent khởi động (D-017); kiểm tra cảnh báo `edge_db_recovered` | Tới khi máy online lại | Mục outbox không cứu được; cảnh báo báo số mục cứu được (`salvaged_outbox_entries`), số mục mất không xác định được |
 | Máy mất `identity/`, cài lại máy, bật lại máy đã vô hiệu hóa | `sudo nfc-agent reenroll` → Admin duyệt "cài lại" | Vài phút | 0 (outbox giữ nguyên) |
 | Server sập | Khởi động lại dịch vụ; reconcile tự chạy | Trong thời hạn lease (< 24h) thì không ảnh hưởng quẹt thẻ | 0 |
 | Hỏng CSDL server | Khôi phục bản sao lưu gần nhất; khởi động; máy tự đồng bộ lại version (D-016) | Vài giờ | ≤ 24h nhật ký và thay đổi quản trị |

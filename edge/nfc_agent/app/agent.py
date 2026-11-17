@@ -83,6 +83,7 @@ class Agent:
         self.store, self.identity, self.sessions, self.gate = store, identity, sessions, gate
         self.greeter, self.boot_id, self.wall = greeter, boot_id, wall
         self.events: queue.Queue = queue.Queue()
+        self.stopping = threading.Event()  # set by SIGTERM; run_forever returns
         self.sync = sync  # None: no MQTT credentials (dev-provisioned identity), the agent runs offline
         self.link = None  # infra.mqtt.MqttLink once started by build()
 
@@ -149,7 +150,7 @@ class Agent:
     # ------------------------------------------------------------------ loop
     def run_forever(self) -> None:
         next_tick = next_alive = next_discovery = 0.0
-        while True:
+        while not self.stopping.is_set():
             try:
                 kind, payload = self.events.get(timeout=1.0)
             except queue.Empty:

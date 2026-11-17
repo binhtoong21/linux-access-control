@@ -366,7 +366,7 @@ erDiagram
 | `entry_id` | `UUID` | No | — | `UNIQUE`, loại trùng khi máy gửi lại (XINV-006) |
 | `workstation_id` | `UUID` | No | — | FK → `workstations(id)` |
 | `kind` | `VARCHAR(32)` | No | — | `CHECK (kind IN ('snapshot_signature_invalid', 'edge_db_recovered', 'key_version_mismatch', 'teardown_failed_stuck_resource'))` |
-| `detail` | `JSONB` | Yes | `NULL` | Ví dụ `{"lost_outbox_entries": 3}` |
+| `detail` | `JSONB` | Yes | `NULL` | Ví dụ `{"salvaged_outbox_entries": 3}` |
 | `occurred_at` | `TIMESTAMPTZ` | No | — | Giờ của máy |
 | `received_at` | `TIMESTAMPTZ` | No | `now()` | |
 

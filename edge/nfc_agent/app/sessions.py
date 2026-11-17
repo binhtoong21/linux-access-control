@@ -39,6 +39,9 @@ class SessionManager:
         self._store, self._os, self._wall, self._boot, self._push = store, os_port, wall, boottime, push
         self._warning_before = warning_before_sec
         self._warned: set[str] = set()
+        self._orphans: dict[
+            str, str
+        ] = {}  # profile -> logind session id of a desktop nobody accounts for (teardown failed)
 
     # ------------------------------------------------------------------ queries
     def current(self, consumed_entry: str | None = None) -> CurrentSession | None:
@@ -82,6 +85,7 @@ class SessionManager:
     def tick(self) -> None:
         self._watch_pending()
         self._watch_active()
+        self._retry_orphans()
 
     def _watch_pending(self) -> None:
         p = self._store.pending_session()
@@ -133,7 +137,11 @@ class SessionManager:
 
     # ------------------------------------------------------------------ startup recovery & planned shutdown
     def recover(self, boot_id: str, previous: tuple[str, float] | None, profiles: list[str]) -> None:
-        """swipe-login.md 'Recovery khi Agent khởi động lại' + D-017 (OS session with no LocalSession)."""
+        """swipe-login.md 'Recovery khi Agent khởi động lại' + D-017 (OS session with no LocalSession).
+
+        `previous is None` means edge.db has no liveness (first start or rebuilt): handled like a reboot for what the
+        store holds, but a desktop still running is never trusted blindly, it goes through the orphan check below.
+        """
         now = self._wall()
         active, pending = self._store.active_session(), self._store.pending_session()
         rebooted = previous is None or previous[0] != boot_id
@@ -145,7 +153,11 @@ class SessionManager:
                 )
             if pending:
                 self._store.discard_pending(pending.session_id, now)
-            return
+        else:
+            self._recover_same_boot(active, pending, now)
+        self._end_orphans(profiles)
+
+    def _recover_same_boot(self, active: SessionRow | None, pending: SessionRow | None, now: float) -> None:
         if active:
             gui = self._os.gui_session(active.os_username)
             if gui is None:
@@ -158,15 +170,23 @@ class SessionManager:
             if fresh and not self._expired(pending) and self._store.active_session() is None:
                 self._store.activate_session(pending.session_id, gui.session_id, gui.created_at)
             else:
-                if gui is not None and not fresh:
-                    self._os.teardown(pending.os_username)
                 self._store.discard_pending(pending.session_id, now)
-        if self._store.active_session() is None:
-            for name in profiles:  # an OS session nobody is accounting for has no deadline: end it (D-017)
-                if self._os.gui_session(name) is not None:
-                    self._os.teardown(name)
 
-    def planned_shutdown(self) -> None:
-        s = self._store.active_session()
-        if s is not None:
-            self._store.end_session(s.session_id, "abandoned", "workstation_rebooted", "reported", self._wall())
+    def _end_orphans(self, profiles: list[str]) -> None:
+        """D-017: a desktop with no LocalSession has no deadline, so it is ended; a failed teardown is retried."""
+        if self._store.active_session() is not None or self._store.pending_session() is not None:
+            return
+        for name in profiles:
+            gui = self._os.gui_session(name)
+            if gui is not None:
+                self._orphans[name] = gui.session_id
+        self._retry_orphans()
+
+    def _retry_orphans(self) -> None:
+        tracked = {s.os_session_id for s in (self._store.active_session(),) if s is not None}
+        for name, os_session_id in sorted(self._orphans.items()):
+            gui = self._os.gui_session(name)
+            if gui is None or gui.session_id != os_session_id or gui.session_id in tracked:
+                del self._orphans[name]  # the orphan is gone; whatever runs now is not ours to end
+            elif self._os.teardown(name).clean:
+                del self._orphans[name]

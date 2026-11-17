@@ -75,15 +75,17 @@ def main(argv: list[str] | None = None) -> int:
             return _idle(f"no identity: {err}")
         agent = build(config)
 
-        def stop(*_):
-            agent.sessions.planned_shutdown()  # planned shutdown: reported workstation_rebooted
-            if agent.link is not None:
-                agent.link.stop()  # unsent records stay in the outbox and go out after the next start
-            agent.store.close()
-            sys.exit(0)
-
-        signal.signal(signal.SIGTERM, stop)
+        signal.signal(signal.SIGTERM, lambda *_: agent.stopping.set())  # never touch the store inside the handler
         agent.run_forever()
+        # Stopping the agent never ends a session: a restart of the service alone must leave the desktop alone.
+        # On a real reboot, recover() closes the session as reconstructed at this liveness mark.
+        try:
+            agent.store.touch_liveness(agent.boot_id, time.time())
+        except Exception:  # noqa: BLE001 - stopping must go on
+            log.exception("could not record liveness on stop")
+        if agent.link is not None:
+            agent.link.stop()  # unsent records stay in the outbox and go out after the next start
+        agent.store.close()
         return 0
     if args.cmd == "reenroll":
         old = enroll.reenroll(args.identity_dir, args.state_dir)

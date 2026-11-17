@@ -5,7 +5,8 @@ import { loadConfig } from '../../src/config';
 import { MqttGateway } from '../../src/distribution/mqtt-gateway';
 import { OutboxWorker } from '../../src/distribution/outbox-worker';
 import { OutgoingMessage } from '../../src/distribution/sync.service';
-import { deriveKm, verify } from '../../src/shared/crypto/crypto-v1';
+import { validateMessage } from '../../src/shared/contracts';
+import { deriveKm, sign, verify } from '../../src/shared/crypto/crypto-v1';
 import { loadMasterKey } from '../../src/shared/crypto/uid-vault';
 import { ApiContext, startSignedIn } from '../support/api';
 import { TEST_DATABASE_URL } from '../support/db';
@@ -163,12 +164,23 @@ describe('MQTT settings', () => {
           ],
         }),
       );
-    const replies = await gateway.receive('lab/workstation/lab-a-01/outbox', batch('lab-a-01'));
+    const masterKey = loadMasterKey(testKeysDir());
+    const signBatch = (identity: string, raw: Buffer, keyVersion = 1): string =>
+      sign(deriveKm(masterKey, identity, keyVersion), 'outbox-v1', raw);
+    const raw = batch('lab-a-01');
+    const replies = await gateway.receive('lab/workstation/lab-a-01/outbox', raw, signBatch('lab-a-01', raw));
     expect(replies.map((m) => [m.topic, m.retain])).toEqual([['lab/workstation/lab-a-01/command/ack', false]]);
-    expect(JSON.parse(replies[0].payload.toString('utf8'))).toMatchObject({ command: 'ack_outbox', acked_seq: 7 });
+    const ackBody = JSON.parse(replies[0].payload.toString('utf8'));
+    expect(ackBody).toMatchObject({ command: 'ack_outbox', batch_id: 'b-1', acked_seq: 7 });
+    expect(validateMessage('ack-v1', ackBody)).toBeNull();
     expect(sent).toEqual(replies);
     expect((await api.pool.query('SELECT kind FROM workstation_alerts')).rows).toEqual([{ kind: 'edge_db_recovered' }]);
-    expect(await gateway.receive('lab/workstation/lab-a-01/outbox', batch('lab-a-02'))).toEqual([]);
+
+    expect(await gateway.receive('lab/workstation/lab-a-01/outbox', raw)).toEqual([]);
+    expect(sent).toHaveLength(1);
+
+    const raw2 = batch('lab-a-02');
+    expect(await gateway.receive('lab/workstation/lab-a-01/outbox', raw2, signBatch('lab-a-02', raw2))).toEqual([]);
     expect(sent).toHaveLength(1);
   });
 
