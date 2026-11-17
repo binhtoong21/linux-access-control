@@ -202,7 +202,18 @@ export class IngestService {
         RETURNING id
       `.execute(db)
     ).rows;
-    return inserted.length > 0 ? 'applied' : 'duplicate';
+    if (inserted.length === 0) return 'duplicate';
+    // D-033: a same-user swipe extended the running session. Extend only; a resent record changes nothing.
+    if (isObject(p.session_extension)) {
+      const ext = p.session_extension;
+      const newExpiresAt = seconds(ext.expires_at, 'session_extension.expires_at');
+      await sql`
+        UPDATE sessions SET expires_at = to_timestamp(${newExpiresAt}::double precision)
+        WHERE id = ${text(ext.session_id, 'session_extension.session_id')}::uuid AND workstation_id = ${w.id}::uuid
+          AND expires_at < to_timestamp(${newExpiresAt}::double precision)
+      `.execute(db);
+    }
+    return 'applied';
   }
 
   /** D-015.3: a new session of a workstation means its previous one ended without the server hearing of it. */
