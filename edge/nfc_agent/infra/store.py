@@ -34,6 +34,16 @@ class PendingSession:
 
 
 @dataclass(frozen=True)
+class SessionExtension:
+    """D-033: new deadlines of the active session, written with the noop audit record of the swipe."""
+
+    session_id: str
+    previous_expires_at: float
+    expires_at: float
+    boottime_limit: float
+
+
+@dataclass(frozen=True)
 class SessionRow:
     session_id: str
     entry_id: str
@@ -414,8 +424,11 @@ class Store:
         reader_raw: str | None = None,
         data_version: int,
         pending: PendingSession | None = None,
+        extension: SessionExtension | None = None,
     ) -> str:
-        """Audit entry and, when granted, the pending LocalSession in ONE transaction, before answering PAM."""
+        """Audit entry plus the pending LocalSession or the session extension in ONE transaction,
+        before answering PAM.
+        """
         if self.outbox_count() >= OUTBOX_LIMIT:
             raise OutboxFull()
         if decision.granted and pending is None:
@@ -423,7 +436,7 @@ class Store:
         payload = {
             "outcome": decision.outcome.value,
             "reason": decision.reason,
-            "detail": decision.detail,
+            "detail": "extended" if extension is not None else decision.detail,
             "card_uid": card_uid,
             "reader_raw": reader_raw,
             "user": None
@@ -440,8 +453,22 @@ class Store:
             "matched_schedule_ids": list(decision.matched_schedule_ids),
             "data_version": data_version,
         }
+        if extension is not None:
+            payload["session_extension"] = {
+                "session_id": extension.session_id,
+                "previous_expires_at": extension.previous_expires_at,
+                "expires_at": extension.expires_at,
+            }
         with self._tx() as db:
             entry_id = self._outbox_insert("swipe_decision", payload, occurred_at)
+            if extension is not None:
+                cur = db.execute(
+                    "UPDATE local_sessions SET expires_at = ?, boottime_limit = ?"
+                    " WHERE session_id = ? AND status = 'active'",
+                    (extension.expires_at, extension.boottime_limit, extension.session_id),
+                )
+                if cur.rowcount != 1:
+                    raise RuntimeError("session to extend is no longer active")
             if decision.granted:
                 # A new granted swipe replaces a permission PAM has not used yet (the gate is cleared too): the older
                 # pending session never reached the OS, so it is discarded, not reported. Its audit entry stays (D-005).

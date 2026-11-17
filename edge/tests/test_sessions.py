@@ -5,6 +5,7 @@ from test_store import IDENT, KM, NOW, UID, signed, snapshot_bytes
 
 from nfc_agent.app.sessions import PENDING_TIMEOUT, SessionManager
 from nfc_agent.domain.evaluation import evaluate
+from nfc_agent.domain.model import Decision, Outcome
 from nfc_agent.infra import crypto
 from nfc_agent.infra.logind import OsSession, TeardownResult
 from nfc_agent.infra.store import PendingSession, Store
@@ -275,3 +276,63 @@ class TestRecovery:
         assert store.active_session().os_session_id == "new"
         assert os_.gui_session("student") is not None
         assert os_.teardowns == ["student"]  # only the first, failed attempt on "old"
+
+
+def test_extension_shifts_both_deadlines_and_is_audited(env):
+    store, os_, clock, mgr, _ = env
+    s = _active(env)
+    delta = 3600.0
+    d = Decision(Outcome.NOOP, "already_active", expires_at=s.expires_at + delta)
+    ext = mgr.extension_for(d)
+    assert ext is not None
+    assert ext.expires_at - s.expires_at == pytest.approx(delta)
+    assert ext.boottime_limit - s.boottime_limit == pytest.approx(delta)
+    store.record_swipe(d, occurred_at=clock.wall, card_uid=UID, data_version=13, extension=ext)
+    active = store.active_session()
+    assert active.expires_at == pytest.approx(ext.expires_at)
+    assert active.boottime_limit == pytest.approx(ext.boottime_limit)
+    last_batch = store.outbox_batch()[-1]
+    assert last_batch["event_type"] == "swipe_decision"
+    payload = last_batch["payload"]
+    assert payload["detail"] == "extended"
+    assert payload["session_extension"]["session_id"] == s.session_id
+
+
+def test_no_extension_when_decision_has_no_deadline(env):
+    _, _, _, mgr, _ = env
+    _active(env)
+    assert mgr.extension_for(Decision(Outcome.NOOP, "already_active")) is None
+
+
+def test_no_extension_when_not_later(env):
+    _, _, _, mgr, _ = env
+    s = _active(env)
+    assert mgr.extension_for(Decision(Outcome.NOOP, "already_active", expires_at=s.expires_at - 10)) is None
+
+
+def test_warning_fires_again_after_extension(env):
+    store, os_, clock, mgr, _ = env
+    s = _active(env)
+    clock.wall = s.expires_at - 240
+    clock.boot = s.boottime_limit - 240
+    mgr.tick()
+    assert os_.notes == [("student", "Sắp hết giờ")]
+
+    d = Decision(Outcome.NOOP, "already_active", expires_at=s.expires_at + 3600)
+    ext = mgr.extension_for(d)
+    assert ext is not None
+    store.record_swipe(d, occurred_at=clock.wall, card_uid=UID, data_version=13, extension=ext)
+    mgr.extended(ext)
+
+    clock.wall = ext.expires_at - 240
+    clock.boot = ext.boottime_limit - 240
+    mgr.tick()
+    assert os_.notes == [("student", "Sắp hết giờ"), ("student", "Sắp hết giờ")]
+
+
+def test_noop_without_extension_payload_unchanged(env):
+    store, _, clock, _, _ = env
+    store.record_swipe(Decision(Outcome.NOOP, "already_active"), occurred_at=clock.wall, card_uid=UID, data_version=13)
+    payload = store.outbox_batch()[-1]["payload"]
+    assert payload["detail"] is None
+    assert "session_extension" not in payload
