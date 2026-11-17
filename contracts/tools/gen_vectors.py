@@ -59,7 +59,9 @@ def main() -> None:
         "lease-v1": b'{"schema":"lease-v1","workstation_id":"ws-01","desired_version":13,'
         b'"server_time":1793049323.96,"lease_duration_sec":86400,'
         b'"nonce":"c41b0e7a92d35f8816a4e0b2c9d7f351"}',
-        "ack-v1": '{"schema":"ack-v1","command":"ack_outbox","workstation_id":"ws-01","acked_seq":103,"note":"tiếng Việt"}'.encode(),
+        "ack-v1": '{"schema":"ack-v1","command":"ack_outbox","workstation_id":"ws-01","batch_id":"b-68192a","acked_seq":103,"note":"tiếng Việt"}'.encode(),
+        "outbox-v1": b'{"schema":"outbox-v1","workstation_id":"ws-01","batch_id":"b-68192a","from_seq":101,'
+        b'"to_seq":101,"records":[]}',
     }
 
     out = {

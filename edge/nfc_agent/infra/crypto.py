@@ -4,7 +4,7 @@ import hashlib
 import hmac
 
 KM_SALT = b"nfc-lab-km-v1"
-SIGNATURE_TAGS = ("snapshot-v1", "lease-v1", "ack-v1")
+SIGNATURE_TAGS = ("snapshot-v1", "lease-v1", "ack-v1", "outbox-v1")
 
 
 def hkdf_sha256(ikm: bytes, salt: bytes, info: bytes, length: int = 32) -> bytes:

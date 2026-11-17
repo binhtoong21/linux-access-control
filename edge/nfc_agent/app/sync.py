@@ -36,6 +36,7 @@ class Outgoing:
     payload: bytes
     qos: int
     retain: bool = False
+    signature: str | None = None  # MQTT 5 user property "signature" (outbox-v1)
 
 
 def _json(body: dict) -> bytes:
@@ -56,6 +57,7 @@ class SyncClient:
         monotonic: Callable[[], float] = time.monotonic,
         agent_version: str = "0.1.0",
         new_nonce: Callable[[], str] = lambda: secrets.token_hex(16),
+        new_batch_id: Callable[[], str] = lambda: secrets.token_hex(16),
     ):
         self._store = store
         self._id = identity
@@ -66,11 +68,12 @@ class SyncClient:
         self._mono = monotonic
         self._version = agent_version
         self._new_nonce = new_nonce
+        self._new_batch_id = new_batch_id
         self._prefix = f"lab/workstation/{identity.mqtt_identity}/"
         self._nonces: deque[tuple[str, float]] = deque(maxlen=NONCES_KEPT)  # (nonce, issued at, monotonic)
         self._connected = False
         self._last_heartbeat = float("-inf")
-        self._inflight: tuple[int, float] | None = None  # (to_seq, sent at, monotonic)
+        self._inflight: tuple[int, float, str] | None = None  # (to_seq, sent at, batch_id)
         self._skew = False
 
     # ------------------------------------------------------------------ connection
@@ -158,16 +161,19 @@ class SyncClient:
         if not records:
             return
         first, last = records[0]["outbox_seq"], records[-1]["outbox_seq"]
+        batch_id = self._new_batch_id()  # new for every send: an ACK for an older send can never match (D-030)
         body = {
             "schema": "outbox-v1",
             "workstation_id": self._id.mqtt_identity,
-            "batch_id": f"b-{first}-{last}",
+            "batch_id": batch_id,
             "from_seq": first,
             "to_seq": last,
             "records": records,
         }
-        if self._send(Outgoing(self._prefix + "outbox", _json(body), qos=1)):
-            self._inflight = (last, self._mono())
+        raw = _json(body)
+        message = Outgoing(self._prefix + "outbox", raw, qos=1, signature=crypto.sign(self._id.km, "outbox-v1", raw))
+        if self._send(message):
+            self._inflight = (last, self._mono(), batch_id)
 
     # ------------------------------------------------------------------ messages from the server
     def on_message(self, topic: str, payload: bytes, signature: str | None) -> None:
@@ -236,13 +242,13 @@ class SyncClient:
         return True
 
     def on_ack(self, payload: bytes, signature: str | None) -> int:
-        """INV-013: deletes up to acked_seq. Returns how many records were deleted."""
+        """INV-013 + D-030: only an ACK naming the batch in flight deletes, and never past that batch."""
         body = self._verified("ack-v1", payload, signature)
         if body is None or body.get("command") != "ack_outbox" or not isinstance(body.get("acked_seq"), int):
             return 0
-        acked = body["acked_seq"]
-        deleted = self._store.ack_outbox(acked)
-        if self._inflight is not None and acked >= self._inflight[0]:
-            self._inflight = None
+        if self._inflight is None or body.get("batch_id") != self._inflight[2]:
+            return 0  # late, replayed or from before a reconnect / an edge.db recovery
+        deleted = self._store.ack_outbox(min(body["acked_seq"], self._inflight[0]))
+        self._inflight = None
         self.push_outbox()
         return deleted

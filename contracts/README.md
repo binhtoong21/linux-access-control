@@ -24,7 +24,7 @@ Mọi chuỗi văn bản mã hóa UTF-8. `‖` là nối byte. `hex` là chữ t
 | UID chuẩn hóa | Hex **chữ hoa** của dãy byte đầu đọc trả về, không đảo byte, bỏ `:`/khoảng trắng/`-`; 4, 7 hoặc 10 byte (VR-007) |
 | `CardMatchKey` | `hex(HMAC-SHA256(K_m, "uid-match-v1" ‖ UID_chuẩn_hóa))` (UID dạng chuỗi ASCII, ví dụ `"1F0820CF"`) |
 | Blind index (Server) | `hex(HMAC-SHA256(K_index, "uid-index-v1" ‖ UID_chuẩn_hóa))` |
-| Chữ ký bản tin | `hex(HMAC-SHA256(K_m, tag ‖ ":" ‖ payload_bytes))`, `tag` ∈ `snapshot-v1`, `lease-v1`, `ack-v1`; ký trên **đúng byte gửi đi**, kiểm trên byte nhận được trước khi parse |
+| Chữ ký bản tin | `hex(HMAC-SHA256(K_m, tag ‖ ":" ‖ payload_bytes))`, `tag` ∈ `snapshot-v1`, `lease-v1`, `ack-v1` (Server ký), `outbox-v1` (Edge ký, D-030); ký trên **đúng byte gửi đi**, kiểm trên byte nhận được trước khi parse |
 | So sánh chữ ký | Hằng thời gian (`hmac.compare_digest` / `crypto.timingSafeEqual`) |
 | `lease_nonce` | 16 byte ngẫu nhiên, `hex` (32 ký tự) |
 | `fetch_code` | 32 byte ngẫu nhiên, base64url không đệm (43 ký tự); Server lưu `hex(SHA-256(fetch_code))` |
@@ -32,3 +32,4 @@ Mọi chuỗi văn bản mã hóa UTF-8. `‖` là nối byte. `hex` là chữ t
 Ghi chú:
 - Salt cố định theo phiên bản để tách miền khóa; định danh máy nằm trong `info`. Spike S8 đã chứng minh HKDF/HMAC của `node:crypto` và Python trùng từng byte; vector ở đây khóa thêm **bố cục tham số** đã chọn.
 - Đổi bất kỳ dòng nào trong bảng trên là thay đổi phá vỡ tương thích: phải tăng phiên bản (`uid_scheme`, tag `-v2`) theo Expand → Contract (`migrations.md` §3.1).
+- ACK nhắc lại `batch_id` của lô; Edge chỉ xóa theo ACK có `batch_id` trùng lô đang chờ (D-030).

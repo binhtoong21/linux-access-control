@@ -31,6 +31,7 @@ def env(tmp_path, contracts_dir):
     store, _ = Store.open(tmp_path / "edge.db", IDENT, BOOT, clock=clock.wall)
     sent: list[Outgoing] = []
     counter = iter(range(10_000))
+    batches = iter(range(10_000))
     client = SyncClient(
         store,
         IDENT,
@@ -41,10 +42,11 @@ def env(tmp_path, contracts_dir):
         monotonic=lambda: clock.now,
         agent_version="1.0.0",
         new_nonce=lambda: f"{next(counter):032x}",
+        new_batch_id=lambda: f"batch-{next(batches)}",
     )
     schemas = {
         name: json.loads((contracts_dir / "schemas" / f"{name}.schema.json").read_text(encoding="utf-8"))
-        for name in ("hello-v1", "heartbeat-v1", "outbox-v1")
+        for name in ("hello-v1", "heartbeat-v1", "outbox-v1", "ack-v1")
     }
     yield client, store, clock, sent, schemas
     store.close()
@@ -68,9 +70,15 @@ def lease(version=13, nonce="00000000000000000000000000000000", workstation="ws-
     return raw, crypto.sign(KM, "lease-v1", raw)
 
 
-def ack(seq, workstation="ws-01"):
+def ack(seq, batch_id, workstation="ws-01"):
     raw = json.dumps(
-        {"schema": "ack-v1", "command": "ack_outbox", "workstation_id": workstation, "acked_seq": seq}
+        {
+            "schema": "ack-v1",
+            "command": "ack_outbox",
+            "workstation_id": workstation,
+            "batch_id": batch_id,
+            "acked_seq": seq,
+        }
     ).encode()
     return raw, crypto.sign(KM, "ack-v1", raw)
 
@@ -263,20 +271,22 @@ def test_outbox_goes_in_batches_of_fifty_one_at_a_time_and_ack_deletes(env):
     client.tick()
     assert len([m for m in sent if m.topic.endswith("outbox")]) == 1  # still waiting for the ACK
 
+    bid = first["batch_id"]
     # Unsigned, wrongly signed or foreign ACKs change nothing.
-    assert client.on_ack(ack(50)[0], None) == 0
-    assert client.on_ack(ack(50)[0], "00" * 32) == 0
-    assert client.on_ack(*ack(50, workstation="ws-02")) == 0
+    assert client.on_ack(ack(50, bid)[0], None) == 0
+    assert client.on_ack(ack(50, bid)[0], "00" * 32) == 0
+    assert client.on_ack(*ack(50, bid, workstation="ws-02")) == 0
     assert store.outbox_count() == 60
 
-    assert client.on_ack(*ack(50)) == 50
+    assert client.on_ack(*ack(50, bid)) == 50
     assert store.outbox_count() == 10
     second = body([m for m in sent if m.topic.endswith("outbox")][-1])
     assert (second["from_seq"], second["to_seq"], len(second["records"])) == (51, 60, 10)
     # A repeated old ACK is harmless and does not resend.
-    assert client.on_ack(*ack(50)) == 0
+    assert client.on_ack(*ack(50, bid)) == 0
     assert len([m for m in sent if m.topic.endswith("outbox")]) == 2
-    assert client.on_message(P + "command/ack", *ack(60)) is None
+    second_bid = second["batch_id"]
+    assert client.on_message(P + "command/ack", *ack(60, second_bid)) is None
     assert store.outbox_count() == 0
 
 
@@ -295,6 +305,34 @@ def test_a_batch_without_ack_is_sent_again_after_a_minute_and_on_reconnect(env):
     client.on_disconnected()
     client.on_connected()
     assert count() == 3
+
+
+def test_an_outbox_batch_is_signed_and_its_ack_must_name_it(env):
+    client, store, clock, sent, schemas = env
+    jsonschema.validate(json.loads(ack(1, "b")[0]), schemas["ack-v1"])
+    for i in range(3):
+        store.record_alert("edge_db_recovered", {"lost_outbox_entries": i})
+    client.on_connected()
+    out = [m for m in sent if m.topic.endswith("outbox")][-1]
+    jsonschema.validate(body(out), schemas["outbox-v1"])
+    assert crypto.verify(KM, "outbox-v1", out.payload, out.signature)
+    bid = body(out)["batch_id"]
+    assert client.on_ack(*ack(3, "batch-other")) == 0
+    assert client.on_ack(*ack(10**6, bid)) == 3  # never past the batch in flight
+    assert store.outbox_count() == 0
+
+
+def test_an_ack_from_before_a_reconnect_deletes_nothing(env):
+    client, store, clock, sent, _ = env
+    store.record_alert("edge_db_recovered", None)
+    client.on_connected()
+    old = body([m for m in sent if m.topic.endswith("outbox")][-1])["batch_id"]
+    client.on_disconnected()
+    client.on_connected()  # resent under a new batch_id
+    new = body([m for m in sent if m.topic.endswith("outbox")][-1])["batch_id"]
+    assert new != old
+    assert client.on_ack(*ack(1, old)) == 0 and store.outbox_count() == 1
+    assert client.on_ack(*ack(1, new)) == 1
 
 
 def test_a_failing_publish_never_raises_and_is_retried(env):
