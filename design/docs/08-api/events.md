@@ -50,8 +50,8 @@ sequenceDiagram
         A->>B: heartbeat {snapshot_version, lease_nonce, trust_state}
         S->>B: lease (nếu version bằng desired)
     end
-    A->>B: outbox {from_seq, to_seq, records[]}
-    S->>B: command/ack {acked_seq} [signature]
+    A->>B: outbox {batch_id, from_seq, to_seq, records[]} [signature]
+    S->>B: command/ack {batch_id, acked_seq} [signature]
 ```
 
 ---
@@ -111,13 +111,13 @@ Mỗi 30s và ngay sau khi nạp snapshot mới (thay cho bản tin `SnapshotApp
 | `active_session_id` | Phiên `active` cục bộ hoặc `null`. Chỉ để Dashboard hiển thị; **không** dùng để đóng phiên trên server (việc đó theo XINV-008 / D-015) |
 
 ### 3.3. Outbox Batch
-Tối đa 50 mục, theo thứ tự `outbox_seq` tăng dần, một lô đang chờ ACK tại một thời điểm (ADR-002 §5).
+Tối đa 50 mục, theo thứ tự `outbox_seq` tăng dần, một lô đang chờ ACK tại một thời điểm (ADR-002 §5). Edge ký lô bằng `K_m` với tag `outbox-v1` (user property `signature`); `batch_id` là 16 byte ngẫu nhiên dạng hex, mới cho mỗi lần gửi, kể cả gửi lại (D-030). Server bỏ qua, không ACK, lô thiếu hoặc sai chữ ký.
 
 ```json
 {
   "schema": "outbox-v1",
   "workstation_id": "ws-01",
-  "batch_id": "b-68192a",
+  "batch_id": "3f1c9a0d5e7b42a8b6c4d2e0f1a3b5c7",
   "from_seq": 101,
   "to_seq": 103,
   "records": [ { "...": "xem các loại dưới đây" } ]
@@ -183,11 +183,11 @@ Quy tắc: `card_uid = null` khi không đọc được UID (`error`); `user`, `
 
 **`security_alert`** → `workstation_alerts`
 ```json
-{ "payload": { "kind": "edge_db_recovered", "detail": {"lost_outbox_entries": 3} } }
+{ "payload": { "kind": "edge_db_recovered", "detail": {"salvaged_outbox_entries": 3} } }
 ```
 `kind` ∈ `snapshot_signature_invalid`, `edge_db_recovered`, `key_version_mismatch`, `teardown_failed_stuck_resource` (ADR-008: phiên cũ không dọn được sau 5s). Tên `security_alert` giữ cho gọn; thực chất là "cảnh báo từ máy cần Admin xem".
 
-**Chi tiết hiện thực (D-026):** lô chỉ bị bỏ qua, không ACK, khi chính lô không tin được (không phải JSON, thiếu `to_seq`/`records`, `workstation_id` khác định danh trên topic, máy lạ); mọi trường hợp khác đều ACK tới `to_seq`. Mục trùng: `entry_id` đã có (audit, cảnh báo), phiên đã có theo `session_id` hoặc `decision_entry_id`, `session_ended` cho phiên đã có kết thúc `reported`. Mục lỗi (loại lạ, sai kiểu, vi phạm ràng buộc CSDL, `session_ended` cho phiên Server không biết) vào `ingest_rejects` đúng một lần dù lô được gửi lại. `session_started` đóng phiên `active` cũ của máy thành `abandoned` / `os_session_lost` / `inferred`, `ended_at = max(started_at cũ, started_at mới)`.
+**Chi tiết hiện thực (D-026):** lô chỉ bị bỏ qua, không ACK, khi chính lô không tin được (thiếu hoặc sai chữ ký `outbox-v1`, không phải JSON, thiếu `batch_id`, thiếu `to_seq`/`records`, `workstation_id` khác định danh trên topic, máy lạ); mọi trường hợp khác đều ACK tới `to_seq`. Mục trùng: `entry_id` đã có (audit, cảnh báo), phiên đã có theo `session_id` hoặc `decision_entry_id`, `session_ended` cho phiên đã có kết thúc `reported`. Mục lỗi (loại lạ, sai kiểu, vi phạm ràng buộc CSDL, `session_ended` cho phiên Server không biết) vào `ingest_rejects` đúng một lần dù lô được gửi lại. `session_started` đóng phiên `active` cũ của máy thành `abandoned` / `os_session_lost` / `inferred`, `ended_at = max(started_at cũ, started_at mới)`.
 
 **Xử lý phía Server (D-015):** mỗi mục áp dụng trong một savepoint riêng; mục trùng `entry_id` bỏ qua; mục không áp dụng được vào `ingest_rejects`; lô luôn được ACK đến `to_seq`. `session_ended` thay kết quả suy luận đúng một lần; `session_started` khi máy còn phiên `active` cũ thì phiên cũ được suy luận kết thúc trước.
 
@@ -282,13 +282,13 @@ Chỉ gửi khi `snapshot_version` máy báo bằng `desired_version`, trả l�
   "nonce": "c41b0e7a92d35f8816a4e0b2c9d7f351"
 }
 ```
-Edge chỉ nhận khi chữ ký đúng, `desired_version` bằng version cục bộ và `nonce` là một trong 3 `lease_nonce` gần nhất đã gửi; khi đó gia hạn như snapshot. `server_time` chỉ dùng để phát hiện lệch giờ (`clock_skew_detected` khi lệch > 60s, không chặn) (D-018).
+Edge chỉ nhận khi chữ ký đúng, `desired_version` bằng version cục bộ và `nonce` là một trong 3 `lease_nonce` gần nhất đã gửi, chưa dùng (D-028.2); khi đó gia hạn như snapshot. `server_time` dùng để phát hiện lệch giờ (`clock_skew_detected` khi lệch > 60s, không chặn) (D-018), và để neo lại mốc sàn: giờ máy nhỏ hơn mốc sàn, lệch `server_time` ≤ 60s và nonce sinh ≤ 120s trước thì `trusted_until`/`last_sync_local_time` đặt lại theo giờ máy hiện tại (D-029).
 
 ### 4.3. Outbox ACK (`ack-v1`)
 ```json
-{ "schema": "ack-v1", "command": "ack_outbox", "workstation_id": "ws-01", "acked_seq": 103 }
+{ "schema": "ack-v1", "command": "ack_outbox", "workstation_id": "ws-01", "batch_id": "3f1c9a0d5e7b42a8b6c4d2e0f1a3b5c7", "acked_seq": 103 }
 ```
-Edge xóa `outbox_seq <= acked_seq`; `acked_seq` nhỏ hơn mức đã xóa thì bỏ qua (INV-013).
+ACK nhắc lại `batch_id` của lô. Edge chỉ nhận ACK có `batch_id` trùng lô đang chờ và xóa `outbox_seq <= min(acked_seq, to_seq của lô đó)`; ACK khác (đến muộn, phát lại, của lần gửi trước khi mất kết nối) không xóa gì (INV-013, D-030). Mất ACK thì sau 60s Edge gửi lại lô với `batch_id` mới; Server bỏ mục trùng theo `entry_id`.
 
 ---
 

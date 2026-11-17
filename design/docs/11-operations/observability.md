@@ -13,7 +13,7 @@ Hiển thị trên Dashboard (`GET /workstations`, `GET /system/health`), không
 | Trạng thái tin cậy | `trust_state` từ heartbeat | `Expired`, `ClockInvalid` | Cờ theo máy |
 | Lệch đồng hồ | `clock_skew_detected` | `true` | Cờ theo máy |
 | Lỗi nạp snapshot | `last_apply_error` | khác `null` | Cờ `apply_error` |
-| Outbox tồn ở máy | `pending_outbox_count` trong Hello | > 1.000 | Chi tiết máy |
+| Outbox tồn ở máy | `pending_outbox_count` trong Hello (Server chưa lưu, để M4) | > 1.000 | Chi tiết máy |
 | Phiên quá hạn chưa kết thúc | `sessions.status = 'active'` và `now > expires_at + 10 phút` | Có | Cờ `overdue_session` |
 | Mục nhật ký lỗi chưa xử lý | `ingest_rejects` với `resolved_at IS NULL` | > 0 | Cờ `ingest_rejects` |
 | Cảnh báo an ninh | `workstation_alerts` trong 7 ngày | > 0 | Cờ `security_alert` |
