@@ -47,3 +47,16 @@ def renew(lease: LeaseState, received_local: float, lease_duration_sec: int) -> 
         trusted_until=max(lease.trusted_until, received_local + lease_duration_sec),
         last_sync_local_time=max(lease.last_sync_local_time, received_local),
     )
+
+
+def reanchor(received_local: float, lease_duration_sec: int) -> LeaseState:
+    """D-029: a fresh, nonce-bound lease agreeing with the local clock resets trust to this clock, also downwards.
+
+    Only for a clock that was ahead and has been corrected: without it the floor stays ahead and every swipe is
+    denied clock_invalid until real time catches up, even while online. Snapshots never call this.
+    """
+    return LeaseState(
+        has_snapshot=True,
+        trusted_until=received_local + lease_duration_sec,
+        last_sync_local_time=received_local,
+    )

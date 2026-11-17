@@ -15,14 +15,20 @@ P = "lab/workstation/ws-01/"
 
 
 class Clock:
+    """`now` drives both clocks; `jump` moves only the wall clock (NTP correction, RTC set by hand)."""
+
     def __init__(self):
         self.now = NOW
+        self.jump = 0.0
+
+    def wall(self):
+        return self.now + self.jump
 
 
 @pytest.fixture
 def env(tmp_path, contracts_dir):
     clock = Clock()
-    store, _ = Store.open(tmp_path / "edge.db", IDENT, BOOT, clock=lambda: clock.now)
+    store, _ = Store.open(tmp_path / "edge.db", IDENT, BOOT, clock=clock.wall)
     sent: list[Outgoing] = []
     counter = iter(range(10_000))
     client = SyncClient(
@@ -31,7 +37,8 @@ def env(tmp_path, contracts_dir):
         BOOT,
         publish=lambda m: sent.append(m) or True,
         profiles=lambda: ["student", "labuser"],
-        wall=lambda: clock.now,
+        wall=clock.wall,
+        monotonic=lambda: clock.now,
         agent_version="1.0.0",
         new_nonce=lambda: f"{next(counter):032x}",
     )
@@ -311,3 +318,65 @@ def test_messages_for_other_workstations_or_unknown_topics_are_ignored(env):
     client.on_message("lab/workstation/ws-02/snapshot", *signed(snapshot_bytes(13)))
     client.on_message(P + "command/reboot", b"{}", None)
     assert store.meta()["version"] == 0
+
+
+DAY = 86400.0
+
+
+def _synced_ahead(env, ahead=3 * DAY):
+    """Snapshot applied while the RTC was `ahead` seconds fast, then NTP corrected the clock."""
+    client, store, clock, sent, _ = env
+    clock.jump = ahead
+    client.on_snapshot(*signed(snapshot_bytes(13)))
+    clock.jump = 0.0
+    return client, store, clock, sent
+
+
+def test_clock_corrected_backwards_is_reanchored_by_a_fresh_lease(env):
+    client, store, clock, sent = _synced_ahead(env)
+    from nfc_agent.domain.clock import trust_state
+    from nfc_agent.domain.model import TrustState
+
+    assert trust_state(clock.wall(), store.lease()) is TrustState.CLOCK_INVALID
+    client.on_connected()
+    nonce = body(sent[0])["lease_nonce"]
+    assert client.on_lease(*lease(nonce=nonce, server_time=clock.wall())) is True
+    assert store.lease().last_sync_local_time == clock.wall()
+    assert store.lease().trusted_until == clock.wall() + 86400
+    assert trust_state(clock.wall(), store.lease()) is TrustState.FRESH
+
+
+def test_no_reanchor_when_server_time_disagrees(env):
+    client, store, clock, sent = _synced_ahead(env)
+    floor = store.lease().last_sync_local_time
+    client.on_connected()
+    nonce = body(sent[0])["lease_nonce"]
+    assert client.on_lease(*lease(nonce=nonce, server_time=clock.wall() + 3 * DAY)) is True
+    assert store.lease().last_sync_local_time == floor
+
+
+def test_no_reanchor_with_an_old_nonce(env):
+    client, store, clock, sent = _synced_ahead(env)
+    floor = store.lease().last_sync_local_time
+    client.on_connected()
+    nonce = body(sent[0])["lease_nonce"]
+    clock.now += 121  # monotonic age of the nonce > NONCE_MAX_AGE (no tick: still among the kept nonces)
+    assert client.on_lease(*lease(nonce=nonce, server_time=clock.wall())) is True
+    assert store.lease().last_sync_local_time == floor
+
+
+def test_a_snapshot_never_lowers_the_floor(env):
+    client, store, clock, _ = _synced_ahead(env)
+    floor = store.lease().last_sync_local_time
+    client.on_snapshot(*signed(snapshot_bytes(14)))
+    assert store.lease().last_sync_local_time == floor
+
+
+def test_heartbeats_continue_after_the_wall_clock_jumps_back(env):
+    client, _, clock, sent, _ = env
+    client.on_connected()
+    client.tick()
+    clock.jump = -3 * DAY
+    clock.now += 30
+    client.tick()
+    assert len([m for m in sent if m.topic.endswith("heartbeat")]) == 2

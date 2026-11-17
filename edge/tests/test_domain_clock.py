@@ -1,6 +1,6 @@
 """Trust state and lease renewal (BR-006, D-018)."""
 
-from nfc_agent.domain.clock import local_datetime, renew, trust_state
+from nfc_agent.domain.clock import local_datetime, reanchor, renew, trust_state
 from nfc_agent.domain.model import LeaseState, TrustState
 
 T = 1_793_049_300.0
@@ -29,3 +29,9 @@ def test_renew_moves_forward_only():
 def test_first_snapshot_starts_lease():
     lease = renew(LeaseState(False, 0, 0), T, 3600)
     assert lease.has_snapshot and trust_state(T + 10, lease) is TrustState.FRESH
+
+
+def test_reanchor_moves_trust_down_to_the_given_clock():
+    old = LeaseState(True, trusted_until=1_000_000.0, last_sync_local_time=900_000.0)
+    assert renew(old, 500_000.0, 86400) == old  # renew never goes down
+    assert reanchor(500_000.0, 86400) == LeaseState(True, 586_400.0, 500_000.0)
