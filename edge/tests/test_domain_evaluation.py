@@ -183,3 +183,48 @@ class TestCurrentSession:
         """P1-1: a disabled card is reported as such even if the machine is busy."""
         cur = CurrentSession("sess-1", BOB.id, at("2026-11-11 11:30"), True)
         assert run(key="mk-alice-old", current=cur).reason == "card_disabled"
+
+    def test_same_user_extends_to_later_schedule_end(self):
+        cur = CurrentSession("sess-1", ALICE.id, at("2026-11-11 09:30"), True, "student", at("2026-11-11 07:35"))
+        d = run(current=cur)
+        assert (d.outcome, d.reason) == (Outcome.NOOP, "already_active")
+        assert d.expires_at == at("2026-11-11 11:30")
+
+    def test_same_user_no_extension_when_deadline_not_later(self):
+        cur = CurrentSession("sess-1", ALICE.id, at("2026-11-11 11:30"), True, "student", at("2026-11-11 07:35"))
+        d = run(current=cur)
+        assert (d.outcome, d.reason) == (Outcome.NOOP, "already_active")
+        assert d.expires_at is None
+
+    def test_same_user_less_than_a_minute_later_is_not_an_extension(self):
+        cur = CurrentSession("sess-1", ALICE.id, at("2026-11-11 11:30") - 30, True, "student", at("2026-11-11 07:35"))
+        d = run(current=cur)
+        assert (d.outcome, d.reason) == (Outcome.NOOP, "already_active")
+        assert d.expires_at is None
+
+    def test_same_user_other_profile_not_extended(self):
+        cur = CurrentSession("sess-1", ALICE.id, at("2026-11-11 09:30"), True, "labuser", at("2026-11-11 07:35"))
+        d = run(current=cur)
+        assert (d.outcome, d.reason) == (Outcome.NOOP, "already_active")
+        assert d.expires_at is None
+
+    def test_same_user_starting_session_not_extended(self):
+        cur = CurrentSession(
+            "sess-1", ALICE.id, at("2026-11-11 09:30"), True, "student", at("2026-11-11 07:35"), starting=True
+        )
+        d = run(current=cur)
+        assert (d.outcome, d.reason) == (Outcome.NOOP, "already_active")
+        assert d.expires_at is None
+
+    def test_extension_cap_counts_from_original_decision(self):
+        snap = snapshot(max_session_sec=3 * 3600)
+        cur = CurrentSession("sess-1", ALICE.id, at("2026-11-11 09:30"), True, "student", at("2026-11-11 07:00"))
+        d = run(snap=snap, current=cur)
+        assert (d.outcome, d.reason) == (Outcome.NOOP, "already_active")
+        assert d.expires_at == at("2026-11-11 10:00")
+
+    def test_default_current_session_is_never_extended(self):
+        cur = CurrentSession("sess-1", ALICE.id, at("2026-11-11 09:30"), True)
+        d = run(current=cur)
+        assert (d.outcome, d.reason) == (Outcome.NOOP, "already_active")
+        assert d.expires_at is None

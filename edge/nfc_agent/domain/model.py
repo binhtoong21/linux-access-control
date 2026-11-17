@@ -99,8 +99,11 @@ class CurrentSession:
 
     session_id: str
     user_id: str
-    expires_at: float
+    expires_at: float  # effective deadline in UTC: earlier of the UTC and CLOCK_BOOTTIME deadlines
     os_session_alive: bool
+    os_username: str = ""
+    decided_at: float = 0.0  # when the session was granted; the max-session cap counts from here (D-033)
+    starting: bool = False  # PAM is still opening this desktop (pending); such a session is never extended
 
 
 @dataclass(frozen=True)

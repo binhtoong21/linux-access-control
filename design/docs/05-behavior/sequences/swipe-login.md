@@ -38,8 +38,8 @@ sequenceDiagram
         else Thẻ & Lịch hợp lệ (tiến hành xét trạng thái phiên theo BR-008)
             alt Thẻ của chính user đang active trên Desktop (same_user)
                 Note over A: Trả về noop(already_active), không kill phiên
-                A->>K: Ghi AuditLog noop(already_active) vào SQLite WAL (ghi bền trước, BR-007b)
-                A->>OS: Bắn D-Bus notification lên Desktop: báo thời gian còn lại
+                A->>K: Ghi AuditLog noop(already_active) vào SQLite WAL (ghi bền trước, BR-007b), lịch cho hạn muộn hơn thì cùng giao dịch kéo dài LocalSession (detail extended, D-033)
+                A->>OS: Bắn D-Bus notification lên Desktop: hạn mới hoặc thời gian còn lại
             else Thẻ của user khác quẹt khi Desktop đang active và phiên còn hạn
                 Note over A: Kiểm tra logind: nếu phiên OS thực sự active -> từ chối workstation_busy
                 A->>K: Ghi AuditLog denied(workstation_busy) vào SQLite WAL (ghi bền trước, BR-007b)

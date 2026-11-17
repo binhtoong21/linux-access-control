@@ -11,6 +11,8 @@ from datetime import date
 from .clock import STALE_DETAIL, local_datetime, local_midnight_utc, trust_state
 from .model import CurrentSession, Decision, LeaseState, Outcome, Schedule, SnapshotView, TrustState, User
 
+EXTEND_MIN_SEC = 60.0  # D-033: a same-user swipe extends the session only if the new deadline is this much later
+
 
 def _valid_on(s: Schedule, day: date) -> bool:
     return (
@@ -18,15 +20,17 @@ def _valid_on(s: Schedule, day: date) -> bool:
     )
 
 
-def _session_end(now_utc: float, day: date, chain: list[Schedule], max_session_sec: int) -> float:
-    """End of the continuous run of windows (same day, same profile) that contains `now`, capped (CR-001 step 7)."""
+def _session_end(now_utc: float, day: date, chain: list[Schedule], cap_at: float) -> float:
+    """End of the continuous run of windows (same day, same profile) that contains `now`, capped at `cap_at`
+    (CR-001 step 7).
+    """
     midnight = local_midnight_utc(day)
     windows = sorted((midnight + s.start_minute * 60, midnight + s.end_minute * 60) for s in chain)
     end = now_utc
     for start, stop in windows:
         if start <= end:
             end = max(end, stop)
-    return min(end, now_utc + max_session_sec)
+    return min(end, cap_at)
 
 
 def evaluate(
@@ -96,7 +100,7 @@ def evaluate(
 
     # Step 7: session deadline from the chain of today's windows resolving to the same profile
     chain = [s for s in today if (s.target_os_username or default) == target]
-    expires_at = _session_end(now_utc, day, chain, snapshot.max_session_sec)
+    expires_at = _session_end(now_utc, day, chain, now_utc + snapshot.max_session_sec)
 
     # Step 8: current session on the machine (BR-008, D-006.1)
     base = dict(user=user, card=card, target_os_username=target, matched_schedule_ids=matched)
@@ -104,7 +108,13 @@ def evaluate(
     if current is not None:
         if now_utc < current.expires_at:
             if current.user_id == user.id:
-                return Decision(Outcome.NOOP, "already_active", **base)
+                # D-033: same profile, desktop running -> the deadline may move later (never earlier).
+                extend_to = None
+                if not current.starting and current.os_username == target:
+                    candidate = _session_end(now_utc, day, chain, current.decided_at + snapshot.max_session_sec)
+                    if candidate >= current.expires_at + EXTEND_MIN_SEC:
+                        extend_to = candidate
+                return Decision(Outcome.NOOP, "already_active", expires_at=extend_to, **base)
             if current.os_session_alive:
                 return Decision(Outcome.DENIED, "workstation_busy", **base)
             replaces = "os_session_lost"

@@ -3,7 +3,7 @@
   "workstation_id": "ws-01",
   "batch_id": "b-68192a",
   "from_seq": 101,
-  "to_seq": 104,
+  "to_seq": 105,
   "records": [
     {
       "entry_id": "d84f9a10-3c2b-4e6f-8a1d-5b7c9e0f2a34",
@@ -71,6 +71,38 @@
         "kind": "edge_db_recovered",
         "detail": {
           "lost_outbox_entries": 3
+        }
+      }
+    },
+    {
+      "entry_id": "b4c5d6e7-f8a9-4b0c-9d1e-3f4a5b6c7d8e",
+      "outbox_seq": 105,
+      "occurred_at": 1793054000.2,
+      "event_type": "swipe_decision",
+      "payload": {
+        "outcome": "noop",
+        "reason": "already_active",
+        "detail": "extended",
+        "card_uid": "1F0820CF",
+        "reader_raw": null,
+        "user": {
+          "id": "6f1c2a3b-4d5e-4f60-8a1b-2c3d4e5f6a7b",
+          "external_id": "SV001",
+          "full_name": "Nguyễn Văn A"
+        },
+        "card": {
+          "id": "0b7e4d21-3c4b-4a5d-9e6f-7a8b9c0d1e2f",
+          "status": "active"
+        },
+        "target_os_username": "student",
+        "matched_schedule_ids": [
+          "3a9d5e10-2b4c-4d6e-8f10-1a2b3c4d5e6f"
+        ],
+        "data_version": 13,
+        "session_extension": {
+          "session_id": "a3c1f0d2-7e44-4b8e-9c1a-2f6d8e0b5a91",
+          "previous_expires_at": 1793055600,
+          "expires_at": 1793059200
         }
       }
     }

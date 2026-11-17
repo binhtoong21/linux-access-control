@@ -158,8 +158,10 @@ Mọi mục có chung khung:
 |---|---|---|
 | `granted` | `granted` | `null`, `superseded`, `os_session_lost` (phiên cũ bị thay) |
 | `denied` | `unknown_card`, `card_disabled`, `user_inactive`, `no_schedule`, `out_of_schedule`, `data_stale`, `workstation_busy`, `ambiguous_profile`, `profile_disabled`, `profile_not_found` | `data_stale` kèm `no_data` \| `lease_expired` \| `clock_invalid` |
-| `noop` | `already_active` | `null` |
+| `noop` | `already_active` | `null`, `extended` (phiên được gia hạn, D-033) |
 | `error` | `invalid_uid`, `reader_error`, `internal_error` | — |
+
+Trường tùy chọn `session_extension` chỉ có khi `detail = extended`: `{"session_id": "a3c1f0d2-...", "previous_expires_at": 1793055600, "expires_at": 1793059200}`. Server kéo dài `sessions.expires_at` của đúng phiên đó trên đúng máy đó, chỉ khi hạn mới muộn hơn; bản ghi trùng hay đến muộn không làm gì.
 
 Quy tắc: `card_uid = null` khi không đọc được UID (`error`); `user`, `card` là `null` khi chưa tra được (`unknown_card`, `data_stale`, `error`). Ảnh chụp máy (`workstation_snapshot`: hostname, zone) do Server điền lúc nhận từ dữ liệu của chính nó.
 

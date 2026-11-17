@@ -105,18 +105,28 @@ class Agent:
             pending = PendingSession(
                 str(uuid.uuid4()), self.boot_id, self.sessions.boottime_limit_for(decision.expires_at)
             )
+        extension = self.sessions.extension_for(decision)
         try:
             entry_id = self.store.record_swipe(
-                decision, occurred_at=now, card_uid=uid, data_version=version, pending=pending
+                decision,
+                occurred_at=now,
+                card_uid=uid,
+                data_version=version,
+                pending=pending,
+                extension=extension,
             )
         except OutboxFull:
             log.error("audit outbox full: refusing swipes until the server acknowledges")
             self._push({"event": "card_denied", "reason": "internal_error"})
             return decision
         log.info("swipe %s -> %s/%s", uid, decision.outcome.value, decision.reason)
+        if extension is not None:
+            log.info("session %s extended to %s", extension.session_id, extension.expires_at)
 
         if decision.outcome is Outcome.NOOP:
-            self.sessions.remind_remaining(decision)
+            if extension is not None:
+                self.sessions.extended(extension)
+            self.sessions.remind_remaining(decision, extended=extension is not None)
         elif not decision.granted:
             self._push({"event": "card_denied", "reason": decision.reason, "detail": decision.detail})
         elif not self.sessions.make_room(decision):  # stuck teardown: the audit stays "granted" (D-005)

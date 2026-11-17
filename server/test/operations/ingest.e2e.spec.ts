@@ -200,6 +200,28 @@ const T0 = 1793048000;
     expect((await session(id)).ended).toBe(T0 + 900);
   });
 
+  it('extends a session when a same-user swipe reports an extension, never shortens it (D-033)', async () => {
+    const decision = swipe({}, T0 + 2000);
+    const id = randomUUID();
+    const raw1 = batch([decision, started(id, decision.entry_id, T0 + 2005)]); // expires_at = T0 + 5605
+    expect(await ingest.handleOutbox('lab-a-01', raw1, signBatch('lab-a-01', raw1))).toMatchObject({ applied: 2 });
+    const expires = async () => (await q('SELECT extract(epoch from expires_at)::float8 AS e FROM sessions WHERE id = $1', [id]))[0].e;
+
+    const extend = swipe({ outcome: 'noop', reason: 'already_active', detail: 'extended', session_extension: { session_id: id, previous_expires_at: T0 + 5605, expires_at: T0 + 9205 } }, T0 + 3000);
+    const raw2 = batch([extend]);
+    expect(await ingest.handleOutbox('lab-a-01', raw2, signBatch('lab-a-01', raw2))).toMatchObject({ applied: 1, rejected: 0 });
+    expect(await expires()).toBe(T0 + 9205);
+
+    // An older extension arriving late never shortens the session.
+    const older = swipe({ outcome: 'noop', reason: 'already_active', detail: 'extended', session_extension: { session_id: id, previous_expires_at: T0 + 5605, expires_at: T0 + 7000 } }, T0 + 2500);
+    const raw3 = batch([older]);
+    expect(await ingest.handleOutbox('lab-a-01', raw3, signBatch('lab-a-01', raw3))).toMatchObject({ applied: 1, rejected: 0 });
+    expect(await expires()).toBe(T0 + 9205);
+
+    const raw4 = batch([ended(id, T0 + 9205, { status: 'forced_logout', end_reason: 'schedule_expired' })]);
+    await ingest.handleOutbox('lab-a-01', raw4, signBatch('lab-a-01', raw4));
+  });
+
   it('closes a session the server still thinks active when the workstation starts a new one, and lets the real report replace that once (D-015)', async () => {
     const a = randomUUID();
     const b = randomUUID();

@@ -210,6 +210,20 @@
                   "data_version": {
                     "type": "integer",
                     "minimum": 0
+                  },
+                  "session_extension": {
+                    "oneOf": [
+                      { "type": "null" },
+                      {
+                        "type": "object",
+                        "required": ["session_id", "previous_expires_at", "expires_at"],
+                        "properties": {
+                          "session_id": { "type": "string", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" },
+                          "previous_expires_at": { "type": "number", "minimum": 0 },
+                          "expires_at": { "type": "number", "minimum": 0 }
+                        }
+                      }
+                    ]
                   }
                 }
               }

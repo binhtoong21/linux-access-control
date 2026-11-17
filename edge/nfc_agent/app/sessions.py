@@ -9,9 +9,11 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol
 
-from ..domain.model import CurrentSession, Decision
+from ..domain.clock import local_datetime
+from ..domain.evaluation import EXTEND_MIN_SEC
+from ..domain.model import CurrentSession, Decision, Outcome
 from ..infra.logind import OsSession, TeardownResult
-from ..infra.store import SessionRow, Store
+from ..infra.store import SessionExtension, SessionRow, Store
 
 PENDING_TIMEOUT = 60.0  # pending session never shown up on seat0 -> discarded
 CREATED_AFTER_TOLERANCE = 0.5  # monotonic->UTC conversion slack when comparing with decided_at
@@ -50,10 +52,17 @@ class SessionManager:
             p = self._store.pending_session()
             if p is not None and p.entry_id == consumed_entry:
                 # PAM is starting this desktop even if logind has not published it yet.
-                return CurrentSession(p.session_id, p.user_id, self._deadline_utc(p), True)
+                return CurrentSession(
+                    p.session_id, p.user_id, self._deadline_utc(p), True, p.os_username, p.decided_at, True
+                )
             return None
         return CurrentSession(
-            s.session_id, s.user_id, self._deadline_utc(s), self._os.gui_session(s.os_username) is not None
+            s.session_id,
+            s.user_id,
+            self._deadline_utc(s),
+            self._os.gui_session(s.os_username) is not None,
+            s.os_username,
+            s.decided_at,
         )
 
     def _deadline_utc(self, s: SessionRow) -> float:
@@ -128,11 +137,38 @@ class SessionManager:
                 s.os_username, "Sắp hết giờ", f"Phiên sẽ tự đăng xuất sau khoảng {minutes} phút. Hãy lưu bài."
             )
 
-    def remind_remaining(self, decision: Decision) -> None:
-        """noop(already_active): tell the user how long is left (BR-008a)."""
+    def extension_for(self, decision: Decision) -> SessionExtension | None:
+        """D-033: a noop carrying a later deadline moves the stored UTC deadline there and the CLOCK_BOOTTIME deadline
+        by the same amount.
+
+        The amount is measured against the stored UTC deadline, not the effective one: after the wall clock was set
+        back the effective deadline is earlier, and that gap must not count as an extension. The CLOCK_BOOTTIME
+        deadline is shifted, never rebuilt from the wall clock, so a clock change grants nothing.
+        """
+        if decision.outcome is not Outcome.NOOP or decision.expires_at is None:
+            return None
         s = self._store.active_session()
-        if s is not None:
-            minutes = max(0, round((self._deadline_utc(s) - self._wall()) / 60))
+        if s is None:
+            return None
+        delta = decision.expires_at - s.expires_at
+        if delta < EXTEND_MIN_SEC:
+            return None
+        return SessionExtension(s.session_id, s.expires_at, decision.expires_at, s.boottime_limit + delta)
+
+    def extended(self, extension: SessionExtension) -> None:
+        """Warn again before the new deadline."""
+        self._warned.discard(extension.session_id)
+
+    def remind_remaining(self, decision: Decision, extended: bool = False) -> None:
+        """noop(already_active): tell the user the current deadline (BR-008a, D-033)."""
+        s = self._store.active_session()
+        if s is None:
+            return
+        deadline = self._deadline_utc(s)
+        if extended:
+            self._os.notify(s.os_username, "Đã gia hạn phiên", f"Phiên kéo dài tới {local_datetime(deadline):%H:%M}.")
+        else:
+            minutes = max(0, round((deadline - self._wall()) / 60))
             self._os.notify(s.os_username, "Bạn đang trong phiên của mình", f"Còn khoảng {minutes} phút.")
 
     # ------------------------------------------------------------------ startup recovery & planned shutdown
