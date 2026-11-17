@@ -98,3 +98,32 @@ export type CardDetail = Card & {
   uid: string;
 };
 
+export interface AuditWorkstation {
+  id: string;
+  mqtt_identity: string;
+  hostname: string;
+  zone: { id: string; name: string } | null;
+}
+
+export interface AuditLog {
+  id: string;
+  entry_id: string;
+  occurred_at: string;
+  received_at: string;
+  outcome: string;
+  reason: string;
+  detail: unknown;
+  user: unknown;
+  card: unknown;
+  workstation: AuditWorkstation | null;
+  target_os_username: string | null;
+  data_version: number;
+  matched_schedule_ids: string[];
+  has_card_uid: boolean;
+}
+
+export type AuditLogDetail = AuditLog & {
+  card_uid: string | null;
+  reader_raw: string | null;
+};
+

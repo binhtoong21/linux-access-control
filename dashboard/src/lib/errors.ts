@@ -5,6 +5,8 @@ export function errorMessage(err: unknown): string {
     switch (err.code) {
       case 'DUPLICATE':
         return 'Đã tồn tại (trùng mã hoặc tên).';
+      case 'NOT_FOUND':
+        return 'Không tìm thấy (có thể đã bị xóa).';
       case 'CARD_ALREADY_BOUND':
         return 'Thẻ này đang thuộc về người khác. Gỡ thẻ khỏi người đó trước.';
       case 'INVALID_UID':

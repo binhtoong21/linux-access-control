@@ -8,6 +8,11 @@ describe('errorMessage', () => {
     expect(errorMessage(err)).toBe('Đã tồn tại (trùng mã hoặc tên).');
   });
 
+  it('maps NOT_FOUND', () => {
+    const err = new ApiError(404, 'NOT_FOUND', 'not found');
+    expect(errorMessage(err)).toBe('Không tìm thấy (có thể đã bị xóa).');
+  });
+
   it('maps CARD_ALREADY_BOUND', () => {
     const err = new ApiError(409, 'CARD_ALREADY_BOUND', 'bound');
     expect(errorMessage(err)).toBe('Thẻ này đang thuộc về người khác. Gỡ thẻ khỏi người đó trước.');

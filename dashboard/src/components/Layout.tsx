@@ -45,6 +45,26 @@ export function Layout() {
             >
               Người dùng
             </NavLink>
+            <NavLink
+              to="/groups"
+              className={({ isActive }) =>
+                isActive
+                  ? 'text-blue-600 font-medium px-2 py-1 rounded bg-blue-50'
+                  : 'text-gray-600 hover:text-gray-900 px-2 py-1'
+              }
+            >
+              Nhóm
+            </NavLink>
+            <NavLink
+              to="/cards"
+              className={({ isActive }) =>
+                isActive
+                  ? 'text-blue-600 font-medium px-2 py-1 rounded bg-blue-50'
+                  : 'text-gray-600 hover:text-gray-900 px-2 py-1'
+              }
+            >
+              Thẻ
+            </NavLink>
           </nav>
         </div>
         <div className="flex items-center space-x-4">

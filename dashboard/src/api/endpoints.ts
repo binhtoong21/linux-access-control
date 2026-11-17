@@ -1,6 +1,8 @@
 import { api } from './client';
 import type {
   Admin,
+  AuditLog,
+  AuditLogDetail,
   Card,
   CardDetail,
   CardStatus,
@@ -90,6 +92,43 @@ export function listGroups(): Promise<Group[]> {
   return api<Group[]>('GET', '/groups');
 }
 
+export interface CreateGroupInput {
+  name: string;
+  description?: string | null;
+}
+
+export function createGroup(input: CreateGroupInput): Promise<Group> {
+  return api<Group>('POST', '/groups', input);
+}
+
+export interface UpdateGroupChanges {
+  name?: string;
+  description?: string | null;
+}
+
+export function updateGroup(id: string, changes: UpdateGroupChanges): Promise<Group> {
+  return api<Group>('PATCH', `/groups/${encodeURIComponent(id)}`, changes);
+}
+
+export function deleteGroup(id: string): Promise<void> {
+  return api<void>('DELETE', `/groups/${encodeURIComponent(id)}`);
+}
+
+export function listGroupMembers(id: string): Promise<User[]> {
+  return api<User[]>('GET', `/groups/${encodeURIComponent(id)}/members`);
+}
+
+export function addGroupMembers(id: string, user_ids: string[]): Promise<{ added: number }> {
+  return api<{ added: number }>('PUT', `/groups/${encodeURIComponent(id)}/members`, { user_ids });
+}
+
+export function removeGroupMember(id: string, user_id: string): Promise<void> {
+  return api<void>(
+    'DELETE',
+    `/groups/${encodeURIComponent(id)}/members/${encodeURIComponent(user_id)}`,
+  );
+}
+
 export interface ListCardsFilter {
   uid?: string;
   user_id?: string;
@@ -135,5 +174,30 @@ export function unbindCard(id: string): Promise<Card> {
 
 export function bindCard(id: string, user_id: string): Promise<Card> {
   return api<Card>('POST', `/cards/${encodeURIComponent(id)}/bind`, { user_id });
+}
+
+export interface ListAuditLogsFilter {
+  reason?: string;
+  outcome?: string;
+  user_id?: string;
+  workstation_id?: string;
+  cursor?: string;
+  limit?: number;
+}
+
+export function listAuditLogs(f?: ListAuditLogsFilter): Promise<Page<AuditLog>> {
+  const params = new URLSearchParams();
+  if (f?.reason) params.set('reason', f.reason);
+  if (f?.outcome) params.set('outcome', f.outcome);
+  if (f?.user_id) params.set('user_id', f.user_id);
+  if (f?.workstation_id) params.set('workstation_id', f.workstation_id);
+  if (f?.cursor) params.set('cursor', f.cursor);
+  if (f?.limit !== undefined && f?.limit !== null) params.set('limit', String(f.limit));
+  const qs = params.toString();
+  return api<Page<AuditLog>>('GET', `/audit-logs${qs ? `?${qs}` : ''}`);
+}
+
+export function getAuditLog(id: string): Promise<AuditLogDetail> {
+  return api<AuditLogDetail>('GET', `/audit-logs/${encodeURIComponent(id)}`);
 }
 
