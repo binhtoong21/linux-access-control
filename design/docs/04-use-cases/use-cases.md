@@ -143,7 +143,7 @@ flowchart LR
 
 **Nhánh:**
 - AF-1 User tự đăng xuất trước hạn: đóng phiên `user_logout`.
-- AF-2 Cần thêm giờ: Admin kéo dài lịch, máy nhận snapshot mới, user quẹt lại trước hạn cũ → phiên được gia hạn, cảnh báo đặt lại theo hạn mới, phát `SessionExtended` (BR-008a, D-033). Sau khi phiên đã kết thúc thì quẹt lại để mở phiên mới (BR-009).
+- AF-2 Cần thêm giờ: Admin kéo dài lịch, máy nhận snapshot mới, user quẹt lại trước hạn cũ → phiên được gia hạn, cảnh báo đặt lại theo hạn mới, bản ghi `noop` mang `detail = extended`, Server kéo dài hạn của Session (BR-008a, D-033). Sau khi phiên đã kết thúc thì quẹt lại để mở phiên mới (BR-009).
 - AF-3 Lịch bị sửa hoặc tắt giữa chừng: tự nó không đổi hạn phiên đang chạy, không bao giờ rút ngắn phiên (BR-010).
 - AF-4 Thời hạn tin cậy hết trong lúc có phiên: phiên vẫn chạy đến hạn phiên (BR-006).
 - AF-5 Khung giờ liền kề trong ngày: các khung giờ của các Schedule khớp nối nhau không hở trong cùng một ngày được gộp thành chuỗi liên tục, phiên kéo dài hết chuỗi nhưng không vượt thời điểm quẹt cộng hạn phiên tối đa. Không hỗ trợ ca qua nửa đêm (D-011).

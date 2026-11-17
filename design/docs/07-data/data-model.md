@@ -297,7 +297,7 @@ erDiagram
 | `boot_id` | `VARCHAR(64)` | No | — | Kernel `boot_id` lúc mở phiên |
 | `decided_at` | `TIMESTAMPTZ` | No | — | Mốc Edge ra quyết định `granted` (BR-001) |
 | `started_at` | `TIMESTAMPTZ` | No | — | Mốc GUI session lên trên OS (`started_at >= decided_at`) |
-| `expires_at` | `TIMESTAMPTZ` | No | — | Hạn cố định của phiên (`expires_at >= decided_at`) |
+| `expires_at` | `TIMESTAMPTZ` | No | — | Hạn của phiên (`expires_at >= decided_at`); chỉ đổi khi bản ghi quẹt mang `session_extension`, và chỉ kéo dài (D-033) |
 | `status` | `VARCHAR(16)` | No | `'active'` | `CHECK (status IN ('active', 'completed', 'forced_logout', 'abandoned'))` |
 | `ended_at` | `TIMESTAMPTZ` | Yes | `NULL` | Rỗng khi `active`, bắt buộc khi kết thúc |
 | `end_reason` | `VARCHAR(32)` | Yes | `NULL` | `CHECK (end_reason IS NULL OR end_reason IN ('user_logout', 'schedule_expired', 'workstation_rebooted', 'superseded', 'os_session_lost'))` |
@@ -319,7 +319,7 @@ erDiagram
 | `workstation_id` | `UUID` | No | — | FK → `workstations(id)` (phục vụ index truy vấn) |
 | `outcome` | `VARCHAR(16)` | No | — | `CHECK (outcome IN ('granted', 'denied', 'error', 'noop'))` |
 | `reason` | `VARCHAR(32)` | No | — | Mã lý do chuẩn (`granted`, `DenyReason`, `NoopReason`, `ErrorReason`) |
-| `detail` | `VARCHAR(64)` | Yes | `NULL` | Chi tiết phụ (`no_data`, `lease_expired`, `clock_invalid`, `ambiguous_profile`, `already_active`, ...) |
+| `detail` | `VARCHAR(64)` | Yes | `NULL` | Chi tiết phụ (`no_data`, `lease_expired`, `clock_invalid`, `ambiguous_profile`, `superseded`, `extended`, ...) |
 | `card_uid_encrypted` | `BYTEA` | Yes | `NULL` | UID quẹt thẻ mã hóa AES-256-GCM (NULL nếu lỗi phần cứng không đọc được UID) |
 | `card_uid_iv` | `BYTEA` | Yes | `NULL` | 12-byte GCM nonce |
 | `card_uid_auth_tag` | `BYTEA` | Yes | `NULL` | 16-byte GCM auth tag |
@@ -485,8 +485,8 @@ erDiagram
 | `boot_id` | `TEXT` | No | — | Kernel `boot_id` khi tạo phiên |
 | `decided_at` | `REAL` | No | — | Mốc cấp quyền `granted` (dùng đối chiếu `started > decided_at` theo `ADR-008`) |
 | `started_at` | `REAL` | Yes | `NULL` | Mốc GUI session thực sự khởi chạy |
-| `expires_at` | `REAL` | No | — | Hạn tuyệt đối UTC |
-| `boottime_limit` | `REAL` | No | — | Hạn đo đơn điệu `CLOCK_BOOTTIME` (`INV-015`) |
+| `expires_at` | `REAL` | No | — | Hạn tuyệt đối UTC; gia hạn (D-033) đặt giá trị mới cùng giao dịch với bản ghi quẹt |
+| `boottime_limit` | `REAL` | No | — | Hạn đo đơn điệu `CLOCK_BOOTTIME` (`INV-015`); gia hạn cộng đúng phần UTC được kéo dài |
 | `status` | `TEXT` | No | `'pending'` | `CHECK (status IN ('pending', 'active', 'completed', 'forced_logout', 'abandoned', 'discarded'))` |
 | `ended_at` | `REAL` | Yes | `NULL` | |
 | `end_reason` | `TEXT` | Yes | `NULL` | `CHECK (end_reason IS NULL OR end_reason IN ('user_logout', 'schedule_expired', 'workstation_rebooted', 'superseded', 'os_session_lost'))` |

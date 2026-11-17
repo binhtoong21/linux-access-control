@@ -14,7 +14,7 @@
 | FR-004 | Đường đăng nhập dự phòng cục bộ | Must | MVP | Tài khoản quản trị cục bộ mật khẩu riêng, nằm ngoài nền tảng, không tạo phiên (BR-004). Hỗ trợ khôi phục về greeter chuẩn khi gặp sự cố kéo dài qua script launcher hoặc TTY/SSH |
 | FR-005 | Cảnh báo trước khi hết khung giờ và tự đăng xuất khi hết hạn phiên | Must | MVP | Cảnh báo qua D-Bus, tự đăng xuất và dọn sạch toàn bộ tiến trình của phiên OS theo user slice (`loginctl terminate-user`, chờ 2s, cưỡng chế `kill-user -s SIGKILL`, BR-009, D-006, A6); tuyệt đối không xóa thư mục home hay file dữ liệu cục bộ |
 | FR-006 | Xác thực khuôn mặt (phương thức bổ sung) | Could | Nice-to-have | Thư viện có sẵn, xử lý cục bộ |
-| FR-008 | Gia hạn phiên đang chạy khi chính người dùng quẹt lại | Must | MVP | Chỉ kéo dài theo lịch trên snapshot hiện tại, không rút ngắn; trần hạn phiên tối đa tính từ lúc mở phiên; outcome vẫn `noop(already_active)`, phát `session_extended` (BR-008a, BR-009, D-033) |
+| FR-008 | Gia hạn phiên đang chạy khi chính người dùng quẹt lại | Must | MVP | Chỉ kéo dài theo lịch trên snapshot hiện tại, không rút ngắn; trần hạn phiên tối đa tính từ lúc mở phiên; outcome vẫn `noop(already_active)`, bản ghi mang `detail = extended` và `session_extension` (BR-008a, BR-009, D-033) |
 | FR-007 | Quản lý Profile tài khoản OS dùng chung theo Allowlist | Must | MVP | Hỗ trợ tài khoản Linux dùng chung (`WorkstationProfile`), tự phát hiện qua Auto-Discovery (D-009). Cung cấp giao diện Admin xem danh mục profile do Agent báo cáo, cấu hình bật/tắt (`enabled`/`disabled`) và đặt profile mặc định (`is_default`) cho từng máy trạm; cảnh báo trên Dashboard nếu có máy trong Zone thiếu profile mà Schedule yêu cầu (P2-1, P2-2) |
 
 ## Module 01: Màn hình login
