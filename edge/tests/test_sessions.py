@@ -260,3 +260,18 @@ class TestRecovery:
         """A1: stopping the agent must not end the session (the restarted agent would log the student out)."""
         _, _, _, mgr, _ = env
         assert not hasattr(mgr, "planned_shutdown")
+
+    def test_orphan_retry_never_ends_a_new_desktop_of_the_same_profile(self, env):
+        store, os_, clock, mgr, _ = env
+        os_.sessions["student"] = OsSession("old", "student", clock.wall - 50)
+        os_.stuck = True
+        mgr.recover("boot-1", ("boot-1", clock.wall), ["student"])
+        os_.stuck = False
+        del os_.sessions["student"]  # the old desktop finally exits on its own
+        grant(store, mgr, clock)
+        clock.advance(2)
+        os_.sessions["student"] = OsSession("new", "student", clock.wall)
+        mgr.tick()  # promotes "new", then retries orphans
+        assert store.active_session().os_session_id == "new"
+        assert os_.gui_session("student") is not None
+        assert os_.teardowns == ["student"]  # only the first, failed attempt on "old"

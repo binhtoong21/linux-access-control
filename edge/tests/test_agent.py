@@ -189,3 +189,23 @@ def test_reader_error_is_audited_without_uid(agent):
     rec = a.store.outbox_batch()[-1]["payload"]
     assert (rec["outcome"], rec["reason"], rec["card_uid"]) == ("error", "reader_error", None)
     assert greeter.events[-1]["reason"] == "reader_error"
+
+
+def test_run_forever_returns_when_stopping_is_set(agent):
+    a, _, _, _ = agent
+    a.stopping.set()
+    a.run_forever()
+
+
+def test_run_forever_returns_on_call_event_setting_stopping(agent):
+    a, _, _, _ = agent
+    called = []
+
+    def set_stopping():
+        called.append(True)
+        a.stopping.set()
+
+    a.events.put(("call", set_stopping))
+    a.run_forever()
+    assert called == [True]
+    assert a.stopping.is_set()

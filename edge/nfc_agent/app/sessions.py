@@ -39,7 +39,9 @@ class SessionManager:
         self._store, self._os, self._wall, self._boot, self._push = store, os_port, wall, boottime, push
         self._warning_before = warning_before_sec
         self._warned: set[str] = set()
-        self._orphans: set[str] = set()  # desktops nobody accounts for whose teardown failed: retried on tick()
+        self._orphans: dict[
+            str, str
+        ] = {}  # profile -> logind session id of a desktop nobody accounts for (teardown failed)
 
     # ------------------------------------------------------------------ queries
     def current(self, consumed_entry: str | None = None) -> CurrentSession | None:
@@ -175,11 +177,16 @@ class SessionManager:
         if self._store.active_session() is not None or self._store.pending_session() is not None:
             return
         for name in profiles:
-            if self._os.gui_session(name) is not None:
-                self._orphans.add(name)
+            gui = self._os.gui_session(name)
+            if gui is not None:
+                self._orphans[name] = gui.session_id
         self._retry_orphans()
 
     def _retry_orphans(self) -> None:
-        for name in sorted(self._orphans):
-            if self._os.gui_session(name) is None or self._os.teardown(name).clean:
-                self._orphans.discard(name)
+        tracked = {s.os_session_id for s in (self._store.active_session(),) if s is not None}
+        for name, os_session_id in sorted(self._orphans.items()):
+            gui = self._os.gui_session(name)
+            if gui is None or gui.session_id != os_session_id or gui.session_id in tracked:
+                del self._orphans[name]  # the orphan is gone; whatever runs now is not ours to end
+            elif self._os.teardown(name).clean:
+                del self._orphans[name]
