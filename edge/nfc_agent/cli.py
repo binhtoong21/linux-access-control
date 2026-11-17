@@ -76,7 +76,12 @@ def main(argv: list[str] | None = None) -> int:
         agent = build(config)
 
         def stop(*_):
-            agent.sessions.planned_shutdown()  # planned shutdown: reported workstation_rebooted
+            # Stopping the agent never ends a session: a restart of the service alone must leave the desktop alone.
+            # On a real reboot, recover() closes the session as reconstructed at this liveness mark.
+            try:
+                agent.store.touch_liveness(agent.boot_id, time.time())
+            except Exception:  # noqa: BLE001 - stopping must go on
+                log.exception("could not record liveness on stop")
             if agent.link is not None:
                 agent.link.stop()  # unsent records stay in the outbox and go out after the next start
             agent.store.close()
