@@ -157,7 +157,7 @@ classDiagram
    - Tra cứu profile theo `os_username` được chọn trong allowlist cục bộ của máy: không có → `denied(profile_not_found)`; `status = disabled` → `denied(profile_disabled)`.
 7. Tính hạn phiên: là điểm kết thúc của chuỗi khung giờ liên tục trong cùng một ngày (D-011) từ các Schedule khớp và cùng profile, nhưng không vượt quá hạn phiên tối đa (tham số). Hạn phiên gắn với cả UTC tuyệt đối (`expires_at`) và hạn đo `CLOCK_BOOTTIME`.
 8. Đánh giá trạng thái phiên hiện tại trên máy (BR-008, P1-1, P1-3):
-   - (a) Thẻ thuộc về chính user đang active (`same_user`): trả về kết quả `noop`, lý do `already_active`. Phát thông báo D-Bus thời lượng còn lại lên màn hình Desktop, không tạo phiên mới.
+   - (a) Thẻ thuộc về chính user đang active (`same_user`): trả về kết quả `noop`, lý do `already_active`, không tạo phiên mới. Nếu profile đích trùng profile của phiên và hạn tính ở bước 7 (trần tính từ lúc phiên được quyết định) muộn hơn hạn hiện tại thì phiên được gia hạn (chỉ kéo dài, D-033). Phát thông báo D-Bus hạn hiện tại lên màn hình Desktop.
    - (b) Thẻ của user khác khi máy ghi nhận Desktop đang active và phiên còn hạn: Agent chủ động kiểm tra trạng thái phiên OS qua `systemd-logind` trên `seat0`.
      * Nếu logind xác nhận phiên đồ họa thực sự còn đang chạy: trả về `denied(workstation_busy)`.
      * Nếu logind báo phiên đồ họa không còn tồn tại trên `seat0` (do GNOME/X11 crash hoặc người dùng đã thoát mà Agent chưa nhận diện): đóng phiên cũ là `abandoned(os_session_lost)`, phát `SessionEnded(os_session_lost)`, và xử lý như máy rảnh (`granted`).

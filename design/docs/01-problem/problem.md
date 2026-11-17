@@ -58,6 +58,8 @@ Import Excel/CSV, tích hợp API cho hệ thống ngoài, buộc đăng xuất 
 ## Giả định
 - "Phân lịch" hiểu là gán nhóm hoặc người vào máy hoặc phòng theo khung giờ (chốt ở D-004).
 - Dữ liệu cục bộ có thời hạn tin cậy (lease): quá hạn không liên lạc server thì PC ngừng cho đăng nhập bằng thẻ, chỉ còn dự phòng. Con số chọn sau.
+- Máy trạm giữ được dữ liệu của Agent qua khởi động lại (`/var/lib/nfc-agent`, `/etc/nfc-agent`, `/etc/machine-id`). Nơi dùng cơ chế phục hồi ổ đĩa mỗi lần khởi động phải chừa các đường dẫn này (D-033).
+- Hệ thống trung lập về miền ứng dụng: mã nguồn chỉ dùng khái niệm chung (user, nhóm, zone, lịch, máy dùng chung); quy trình riêng của phòng máy trường học nằm trong kịch bản vận hành pilot, không thành tính năng (D-033).
 
 ## Tiêu chí thành công (định tính)
 - Quẹt thẻ hợp lệ trong khung giờ được phép thì vào được; ngoài khung giờ hoặc không có lịch thì bị từ chối kèm lý do.

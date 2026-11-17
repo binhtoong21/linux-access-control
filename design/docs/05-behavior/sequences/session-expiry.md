@@ -67,7 +67,7 @@ sequenceDiagram
 | EF-3 | Đăng xuất bị kẹt (tiến trình không chịu thoát) | Cưỡng bức (`SIGKILL` theo user slice) sau thời gian chờ; nếu vẫn không thoát được thì ghi log lỗi và tiếp tục thử lại, phiên vẫn giữ `active`. |
 | EF-4 | Màn hình khóa hoặc Switch User | Không xảy ra do Master Image đã vô hiệu hóa hoàn toàn qua dconf (A3, P1-3: `lock-enabled=false`, `disable-user-switching=true`); sinh viên chỉ có thể Logout hoặc chờ hết hạn ca học. |
 | EF-5 | Phiên mở ra khi khung giờ chỉ còn vài giây | Cảnh báo ngay lập tức và tự động đăng xuất đúng hạn. Không đặt quy tắc "thời lượng tối thiểu" ở MVP. |
-| EF-6 | Schedule bị sửa hoặc tắt giữa phiên | Hạn phiên đã cố định tại thời điểm quyết định (BR-010); thay đổi lịch chỉ áp dụng cho các lần quẹt thẻ sau. |
+| EF-6 | Schedule bị sửa hoặc tắt giữa phiên | Nhận snapshot không đổi hạn phiên (BR-010); thay đổi lịch chỉ áp dụng cho các lần quẹt thẻ sau. Chính user đó quẹt lại khi phiên còn hạn thì phiên được kéo dài nếu lịch mới cho hạn muộn hơn, không bao giờ rút ngắn; bộ cảnh báo đặt lại theo hạn mới (D-033). |
 | EF-7 | Agent bị treo/sập không đăng xuất được và không báo gì | Server không thể ép máy từ xa, nhưng nếu thấy máy online mà `expires_at` đã qua một khoảng thời gian chờ thì dashboard gắn cờ "quá hạn chưa kết thúc" (UC-008). |
 
 ## Tham số
