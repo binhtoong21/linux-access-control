@@ -51,7 +51,7 @@ flowchart LR
 5. Khi phiên OS đã mở, Agent chuyển LocalSession sang `active` (gắn với `user_id` và `os_username`) và phát `SessionStarted` vào AuditOutbox.
 
 **Nhánh:**
-- AF-1 Máy còn phiên cũ: nếu cùng user thì không ngắt phiên, ghi nhận `noop(already_active)` và gửi D-Bus notify thời gian còn lại; nếu khác user khi máy đang ở Greeter hoặc phiên cũ đã hết hạn ca học, ghi nhận `granted`, ghi Write-Ahead vào DB trước rồi mới teardown phiên cũ (`abandoned(superseded)`); nếu khác user khi Desktop đang active và còn hạn, từ chối với lý do `workstation_busy` (BR-008, P1-1).
+- AF-1 Máy còn phiên cũ: nếu cùng user thì không ngắt phiên, ghi nhận `noop(already_active)`, gia hạn nếu lịch hiện tại cho hạn muộn hơn (D-033) và gửi D-Bus notify hạn hiện tại; nếu khác user khi máy đang ở Greeter hoặc phiên cũ đã hết hạn ca học, ghi nhận `granted`, ghi Write-Ahead vào DB trước rồi mới teardown phiên cũ (`abandoned(superseded)`); nếu khác user khi Desktop đang active và còn hạn, từ chối với lý do `workstation_busy` (BR-008, P1-1).
 - AF-2 Mất kết nối server: vẫn chạy bình thường, sự kiện nằm trong outbox.
 - EF-1 Đăng nhập OS không hoàn tất sau `granted`: không mở phiên, màn hình báo lỗi. Bản ghi vẫn ghi `granted` (kết quả quyết định), liên kết phiên qua `entry_id`.
 
@@ -143,12 +143,12 @@ flowchart LR
 
 **Nhánh:**
 - AF-1 User tự đăng xuất trước hạn: đóng phiên `user_logout`.
-- AF-2 Muốn tiếp tục sau khi hết chuỗi hoặc chạm hạn phiên tối đa: quẹt lại (BR-009).
-- AF-3 Lịch bị sửa hoặc tắt giữa chừng: không đổi hạn phiên đang chạy (BR-010).
+- AF-2 Cần thêm giờ: Admin kéo dài lịch, máy nhận snapshot mới, user quẹt lại trước hạn cũ → phiên được gia hạn, cảnh báo đặt lại theo hạn mới, phát `SessionExtended` (BR-008a, D-033). Sau khi phiên đã kết thúc thì quẹt lại để mở phiên mới (BR-009).
+- AF-3 Lịch bị sửa hoặc tắt giữa chừng: tự nó không đổi hạn phiên đang chạy, không bao giờ rút ngắn phiên (BR-010).
 - AF-4 Thời hạn tin cậy hết trong lúc có phiên: phiên vẫn chạy đến hạn phiên (BR-006).
 - AF-5 Khung giờ liền kề trong ngày: các khung giờ của các Schedule khớp nối nhau không hở trong cùng một ngày được gộp thành chuỗi liên tục, phiên kéo dài hết chuỗi nhưng không vượt thời điểm quẹt cộng hạn phiên tối đa. Không hỗ trợ ca qua nửa đêm (D-011).
 
-**Truy vết:** FR-005, 063; BR-006, 009, 010; INV-015; D-011.
+**Truy vết:** FR-005, 008, 063; BR-006, 008, 009, 010; INV-015; D-011, D-033.
 
 ## UC-007: Đăng ký máy mới
 **Mô tả:** Một PC cài Agent được đăng ký vào hệ thống và nhận cấu hình/snapshot đầu tiên. Phương thức duy nhất: Tự động (Zero-Touch via Master Image), mọi yêu cầu do Admin duyệt (D-014).

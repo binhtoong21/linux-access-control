@@ -100,7 +100,7 @@ Cài lại một máy giữa kỳ: clone lại máy đó (hoặc `nfc-agent reen
 
 ## Bảng Tham Số
 
-Một nơi duy nhất cho mọi tham số trước đây ghi "chốt sau". Giá trị chọn theo quy mô ~40 máy và lịch học thông thường; đổi qua cấu hình, không cần sửa mã. Tham số của Edge được Server gửi trong `snapshot.parameters` khi có trường tương ứng, còn lại đặt trong `agent.conf`.
+Một nơi duy nhất cho mọi tham số trước đây ghi "chốt sau". Giá trị chọn theo quy mô ~40 máy và lịch học thông thường. Thời lượng lease, cảnh báo trước hết phiên và hạn phiên tối đa là hằng số trong mã Server (`SNAPSHOT_PARAMETERS`, gửi xuống trong `snapshot.parameters`): đổi phải sửa mã và triển khai lại, MVP không có trang Settings (D-033). Tham số chỉ của Edge là hằng số trong Agent; `agent.conf` chỉ chứa địa chỉ server và CA.
 
 | Tham số | Giá trị | Ở đâu | Lý do / ghi chú |
 |---|---|---|---|

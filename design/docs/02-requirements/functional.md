@@ -14,6 +14,7 @@
 | FR-004 | Đường đăng nhập dự phòng cục bộ | Must | MVP | Tài khoản quản trị cục bộ mật khẩu riêng, nằm ngoài nền tảng, không tạo phiên (BR-004). Hỗ trợ khôi phục về greeter chuẩn khi gặp sự cố kéo dài qua script launcher hoặc TTY/SSH |
 | FR-005 | Cảnh báo trước khi hết khung giờ và tự đăng xuất khi hết hạn phiên | Must | MVP | Cảnh báo qua D-Bus, tự đăng xuất và dọn sạch toàn bộ tiến trình của phiên OS theo user slice (`loginctl terminate-user`, chờ 2s, cưỡng chế `kill-user -s SIGKILL`, BR-009, D-006, A6); tuyệt đối không xóa thư mục home hay file dữ liệu cục bộ |
 | FR-006 | Xác thực khuôn mặt (phương thức bổ sung) | Could | Nice-to-have | Thư viện có sẵn, xử lý cục bộ |
+| FR-008 | Gia hạn phiên đang chạy khi chính người dùng quẹt lại | Must | MVP | Chỉ kéo dài theo lịch trên snapshot hiện tại, không rút ngắn; trần hạn phiên tối đa tính từ lúc mở phiên; outcome vẫn `noop(already_active)`, phát `session_extended` (BR-008a, BR-009, D-033) |
 | FR-007 | Quản lý Profile tài khoản OS dùng chung theo Allowlist | Must | MVP | Hỗ trợ tài khoản Linux dùng chung (`WorkstationProfile`), tự phát hiện qua Auto-Discovery (D-009). Cung cấp giao diện Admin xem danh mục profile do Agent báo cáo, cấu hình bật/tắt (`enabled`/`disabled`) và đặt profile mặc định (`is_default`) cho từng máy trạm; cảnh báo trên Dashboard nếu có máy trong Zone thiếu profile mà Schedule yêu cầu (P2-1, P2-2) |
 
 ## Module 01: Màn hình login
@@ -22,7 +23,7 @@
 | FR-010 | Màn hình chờ quẹt thẻ, hiển thị các trạng thái: chờ quẹt, đang xử lý, thành công, bị từ chối kèm lý do | Must | MVP | Custom Greeter chạy cục bộ, nhận sự kiện đẩy từ Agent qua IPC để mở phiên 0-chạm; hỗ trợ khôi phục về greeter chuẩn nếu gặp lỗi kéo dài |
 | FR-011 | Thông báo khi máy chưa có dữ liệu hợp lệ hoặc đã hết thời hạn tin cậy, hướng dẫn dùng đường dự phòng | Must | MVP | |
 | FR-012 | Hiển thị thời gian còn lại của phiên | Must | MVP | Gửi thông báo D-Bus khi người dùng đang active quẹt lại thẻ của chính mình (`same_user`, BR-008(a), CR-001 bước 8a) |
-| FR-013 | Phản hồi trạng thái khi máy đang có phiên hoạt động | Must | MVP | Báo hiệu tại đầu đọc (LED/còi) khi từ chối người khác lúc máy bận; chỉ thay thế phiên khi đã về greeter hoặc hết hạn (BR-008) |
+| FR-013 | Phản hồi trạng thái khi máy đang có phiên hoạt động | Must | MVP | Thông báo D-Bus lên Desktop đang mở khi từ chối người khác lúc máy bận (LED/còi đầu đọc không bắt buộc, D-033); chỉ thay thế phiên khi đã về greeter hoặc hết hạn (BR-008) |
 
 ## Module 02: Lịch
 | ID | Yêu cầu | Priority | Scope | Notes |
@@ -39,6 +40,7 @@
 | FR-031 | Quản lý nhóm và thành viên | Must | MVP | Một user thuộc nhiều nhóm |
 | FR-032 | Đăng ký UID thẻ, gắn/gỡ thẻ cho user | Must | MVP | Một user nhiều thẻ, một thẻ một user (BR-013) |
 | FR-033 | Vô hiệu hóa và bật lại thẻ | Must | MVP | Có hiệu lực tại PC sau khi nhận snapshot mới (BR-010) |
+| FR-034 | Nhập user, nhóm và thẻ hàng loạt từ CSV | Must | MVP | Cột `external_id`, `full_name`, `email`, `groups`, `card_uid` (tùy chọn); chạy thử trước, áp dụng tất cả hoặc không; chạy lại không tạo trùng; thành viên chỉ thêm; không chuyển chủ thẻ ngầm (D-033) |
 
 ## Module 04: Máy và Zone
 | ID | Yêu cầu | Priority | Scope | Notes |
@@ -87,19 +89,19 @@
 ## Extension (đã hạ xuống, giữ để mở rộng sau)
 | Nhóm | FR cũ | Ghi chú |
 |------|-------|---------|
-| Import/Export | FR-014, 035, 061, 081 | Excel/CSV |
+| Export | FR-061, 081 | Excel/CSV. *Nhập user/nhóm/thẻ đã đưa vào MVP (FR-034, D-033)* |
 | Tích hợp ngoài | FR-082, 083, 092 | API client, webhook, vai trò Api_* |
 | Thu hồi nâng cao | FR-050, FR-102 | Buộc đăng xuất khi thu hồi thẻ/user |
 | Điều khiển từ xa | FR-051 đến 054 | Lock, restart, shutdown, thông báo |
 | An ninh nâng cao | FR-101, 043, 063, 096 | Chống dò thẻ (sẽ ở agent), cảnh báo chủ động (email/chat). *Đã đưa vào MVP:* nhật ký thao tác admin (FR-083, D-020), thu hồi định danh máy (BR-018d, D-014) |
-| Vận hành | FR-006, 007, 044 | Idle, gia hạn phiên, room map |
+| Vận hành | FR-006, 007, 044 | Idle, gia hạn phiên từ Dashboard, room map. *Gia hạn bằng quẹt lại đã ở MVP (FR-008)* |
 | Bỏ hẳn | FR-062, 070, 071 | Thống kê, kiểm kê phần cứng |
 
 ## Traceability: Goal → FR
 | Goal | FR |
 |------|----|
-| G1 | FR-001, 003, 004, 005, 007 |
-| G2 | FR-020 đến 023, 030 đến 033 |
+| G1 | FR-001, 003, 004, 005, 007, 008 |
+| G2 | FR-020 đến 023, 030 đến 034 |
 | G3 | FR-050 đến 057 |
 | G4 | FR-002, 055, 056 |
 | G5 | FR-010 đến 013 |
