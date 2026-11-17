@@ -1,4 +1,4 @@
-﻿import { OutgoingMessage, SyncService } from '../../src/distribution/sync.service';
+import { OutgoingMessage, SyncService } from '../../src/distribution/sync.service';
 import { validateMessage } from '../../src/shared/contracts';
 import { deriveKm, verify } from '../../src/shared/crypto/crypto-v1';
 import { loadMasterKey } from '../../src/shared/crypto/uid-vault';
