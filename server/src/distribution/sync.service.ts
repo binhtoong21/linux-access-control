@@ -193,12 +193,14 @@ export class SyncService {
       }
 
       if (kind === 'hello') {
-        // D-014.4: the first Hello proves the workstation holds its new credentials; they cannot be fetched again.
-        await sql`
-          UPDATE enrollment_requests SET fetch_code_invalidated_at = ${now}
-          WHERE workstation_id = ${id}::uuid AND status = 'approved' AND fetch_code_invalidated_at IS NULL
-        `.execute(trx);
-        if (report.key_version !== workstation.key_version) {
+        if (report.key_version === workstation.key_version) {
+          // D-014.4: the first Hello with the credentials just issued proves the workstation holds them; they cannot be
+          // fetched again. A Hello still signed by the old key (old connection alive until the broker restarts) does not.
+          await sql`
+            UPDATE enrollment_requests SET fetch_code_invalidated_at = ${now}
+            WHERE workstation_id = ${id}::uuid AND status = 'approved' AND fetch_code_invalidated_at IS NULL
+          `.execute(trx);
+        } else {
           this.logger.warn(`${identity} reports key_version ${report.key_version}, server has ${workstation.key_version}`);
         }
       }
