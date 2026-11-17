@@ -35,6 +35,16 @@ export function Layout() {
             >
               Máy trạm
             </NavLink>
+            <NavLink
+              to="/users"
+              className={({ isActive }) =>
+                isActive
+                  ? 'text-blue-600 font-medium px-2 py-1 rounded bg-blue-50'
+                  : 'text-gray-600 hover:text-gray-900 px-2 py-1'
+              }
+            >
+              Người dùng
+            </NavLink>
           </nav>
         </div>
         <div className="flex items-center space-x-4">

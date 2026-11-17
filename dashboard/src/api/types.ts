@@ -37,3 +37,64 @@ export interface WorkstationSummary {
   } | null;
   flags: WorkstationFlag[];
 }
+
+export interface Page<T> {
+  items: T[];
+  next_cursor: string | null;
+}
+
+export type UserStatus = 'active' | 'inactive';
+
+export interface User {
+  id: string;
+  external_id: string;
+  full_name: string;
+  email: string | null;
+  status: UserStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export type UserDetail = User & {
+  cards: {
+    id: string;
+    status: 'active' | 'disabled' | 'unbound';
+    uid_length: number;
+    created_at: string;
+  }[];
+  groups: {
+    id: string;
+    name: string;
+  }[];
+};
+
+export interface Group {
+  id: string;
+  name: string;
+  description: string | null;
+  member_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export type CardStatus = 'active' | 'disabled' | 'unbound';
+
+export interface CardOwner {
+  id: string;
+  external_id: string;
+  full_name: string;
+}
+
+export interface Card {
+  id: string;
+  status: CardStatus;
+  uid_length: number;
+  owner: CardOwner | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type CardDetail = Card & {
+  uid: string;
+};
+

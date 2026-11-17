@@ -7,6 +7,8 @@ import { RequireAuth } from './auth/RequireAuth';
 import { Layout } from './components/Layout';
 import { LoginPage } from './pages/LoginPage';
 import { WorkstationsPage } from './pages/WorkstationsPage';
+import { UsersPage } from './pages/UsersPage';
+import { UserDetailPage } from './pages/UserDetailPage';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -33,6 +35,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
               }
             >
               <Route path="/workstations" element={<WorkstationsPage />} />
+              <Route path="/users" element={<UsersPage />} />
+              <Route path="/users/:id" element={<UserDetailPage />} />
               <Route path="/" element={<Navigate to="/workstations" replace />} />
               <Route path="*" element={<Navigate to="/workstations" replace />} />
             </Route>
