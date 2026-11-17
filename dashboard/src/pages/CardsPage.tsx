@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -51,6 +51,7 @@ export function CardsPage() {
   const [cardsErrorMsg, setCardsErrorMsg] = useState<string | null>(null);
   const [cardsSuccessMsg, setCardsSuccessMsg] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const inFlightRef = useRef(false);
 
   // Binding existing unbound card
   const [bindingCard, setBindingCard] = useState<Card | null>(null);
@@ -166,7 +167,8 @@ export function CardsPage() {
   };
 
   const handlePickUserForBind = async (user: User) => {
-    if (!bindingCard) return;
+    if (!bindingCard || inFlightRef.current || actionLoading) return;
+    inFlightRef.current = true;
     setCardsErrorMsg(null);
     setCardsSuccessMsg(null);
     setActionLoading(true);
@@ -180,6 +182,7 @@ export function CardsPage() {
       setCardsErrorMsg(errorMessage(err));
     } finally {
       setActionLoading(false);
+      inFlightRef.current = false;
     }
   };
 
@@ -200,7 +203,8 @@ export function CardsPage() {
   };
 
   const handlePickUserForSwipe = async (user: User) => {
-    if (!registerSwipeTarget) return;
+    if (!registerSwipeTarget || inFlightRef.current || actionLoading) return;
+    inFlightRef.current = true;
     setSwipeErrorMsg(null);
     setSwipeSuccessMsg(null);
     setActionLoading(true);
@@ -218,6 +222,7 @@ export function CardsPage() {
       setSwipeErrorMsg(errorMessage(err));
     } finally {
       setActionLoading(false);
+      inFlightRef.current = false;
     }
   };
 
@@ -432,7 +437,11 @@ export function CardsPage() {
             <p className="text-sm text-gray-600">
               Chọn người dùng để gắn thẻ ({bindingCard.uid_length} byte):
             </p>
-            <UserPicker onPick={handlePickUserForBind} placeholder="Tìm người dùng..." />
+            <UserPicker
+              onPick={handlePickUserForBind}
+              placeholder="Tìm người dùng..."
+              disabled={actionLoading}
+            />
             <div className="flex justify-end pt-2">
               <button
                 type="button"
@@ -580,7 +589,11 @@ export function CardsPage() {
               Chọn người dùng để gắn thẻ quẹt lúc{' '}
               {formatDateTime(registerSwipeTarget.occurred_at)}:
             </p>
-            <UserPicker onPick={handlePickUserForSwipe} placeholder="Tìm người dùng..." />
+            <UserPicker
+              onPick={handlePickUserForSwipe}
+              placeholder="Tìm người dùng..."
+              disabled={actionLoading}
+            />
             <div className="flex justify-end pt-2">
               <button
                 type="button"

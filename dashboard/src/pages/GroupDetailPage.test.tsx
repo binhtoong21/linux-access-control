@@ -141,7 +141,7 @@ describe('GroupDetailPage', () => {
         return Promise.resolve({
           ok: true,
           status: 200,
-          text: async () => JSON.stringify({ added: 2 }),
+          text: async () => JSON.stringify({ added: ['u-3', 'u-4'] }),
         });
       }
       if (url.startsWith('/api/v1/users')) {
@@ -301,5 +301,76 @@ describe('GroupDetailPage', () => {
     await waitFor(() => {
       expect(deleteCallDetails).toBe('/api/v1/groups/g-1/members/u-1');
     });
+  });
+
+  it('adding members when server returns added: [] shows "Những người này đã có trong nhóm."', async () => {
+    const user = userEvent.setup();
+    const candidate1: User = {
+      id: 'u-3',
+      external_id: 'SV003',
+      full_name: 'Lê Văn C',
+      email: null,
+      status: 'active',
+      created_at: '2026-11-13T00:00:00Z',
+      updated_at: '2026-11-13T00:00:00Z',
+    };
+
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/v1/groups') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify(mockGroups),
+        });
+      }
+      if (url === '/api/v1/groups/g-1/members' && (!init || init.method === 'GET')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify(mockMembers),
+        });
+      }
+      if (url === '/api/v1/groups/g-1/members' && init?.method === 'PUT') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ added: [] }),
+        });
+      }
+      if (url.startsWith('/api/v1/users')) {
+        const page: Page<User> = {
+          items: [candidate1],
+          next_cursor: null,
+        };
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify(page),
+        });
+      }
+      return Promise.reject(new Error(`Unhandled URL: ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderGroupDetailPage();
+
+    await screen.findByText('Nhóm Lớp 01');
+
+    const pickerInput = screen.getByPlaceholderText('Tìm người dùng để thêm...');
+    await user.type(pickerInput, 'SV003');
+
+    const pickOption = await screen.findByRole('button', {
+      name: 'SV003 — Lê Văn C',
+    });
+    await user.click(pickOption);
+
+    const submitAddBtn = await screen.findByRole('button', {
+      name: 'Thêm 1 người',
+    });
+    await user.click(submitAddBtn);
+
+    expect(
+      await screen.findByText('Những người này đã có trong nhóm.'),
+    ).toBeInTheDocument();
   });
 });

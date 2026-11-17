@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -21,6 +21,7 @@ export function GroupDetailPage() {
 
   const [pageError, setPageError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const inFlightRef = useRef(false);
 
   // Edit group state
   const [isEditing, setIsEditing] = useState(false);
@@ -124,15 +125,20 @@ export function GroupDetailPage() {
   };
 
   const handleAddMembers = async () => {
-    if (pickedUsers.length === 0) return;
+    if (pickedUsers.length === 0 || inFlightRef.current || actionLoading) return;
 
+    inFlightRef.current = true;
     setPageError(null);
     setAddSuccess(null);
     setActionLoading(true);
     try {
       const userIds = pickedUsers.map((u) => u.id);
       const res = await addGroupMembers(groupId, userIds);
-      setAddSuccess(`Đã thêm ${res.added} người`);
+      if (res.added.length === 0) {
+        setAddSuccess('Những người này đã có trong nhóm.');
+      } else {
+        setAddSuccess(`Đã thêm ${res.added.length} người`);
+      }
       setPickedUsers([]);
       await queryClient.invalidateQueries({ queryKey: ['groups'] });
       await queryClient.invalidateQueries({ queryKey: ['group-members', groupId] });
@@ -141,6 +147,7 @@ export function GroupDetailPage() {
       setPageError(errorMessage(err));
     } finally {
       setActionLoading(false);
+      inFlightRef.current = false;
     }
   };
 
@@ -367,6 +374,7 @@ export function GroupDetailPage() {
                 ...pickedUsers.map((u) => u.id),
               ]}
               placeholder="Tìm người dùng để thêm..."
+              disabled={actionLoading}
             />
           </div>
 

@@ -372,4 +372,98 @@ describe('CardsPage', () => {
 
     expect(await screen.findByText('04A32B1C5D6E80')).toBeInTheDocument();
   });
+
+  it('prevents double register while a request is in-flight', async () => {
+    const user = userEvent.setup();
+    let resolvePost: ((value: unknown) => void) | null = null;
+    let postCalls = 0;
+
+    const candidate2: User = {
+      id: 'u-2',
+      external_id: 'SV002',
+      full_name: 'Trần Thị B',
+      email: null,
+      status: 'active',
+      created_at: '',
+      updated_at: '',
+    };
+
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url.startsWith('/api/v1/cards') && init?.method === 'POST') {
+        postCalls++;
+        return new Promise((resolve) => {
+          resolvePost = () => {
+            resolve({
+              ok: true,
+              status: 201,
+              text: async () =>
+                JSON.stringify({
+                  id: 'card-new-1',
+                  status: 'active',
+                  uid_length: 7,
+                  owner: { id: 'u-1', external_id: 'SV001', full_name: 'Nguyễn Văn A' },
+                  created_at: '',
+                  updated_at: '',
+                }),
+            });
+          };
+        });
+      }
+      if (url.startsWith('/api/v1/cards')) {
+        const page: Page<Card> = { items: [], next_cursor: null };
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify(page),
+        });
+      }
+      if (url.startsWith('/api/v1/audit-logs')) {
+        const page: Page<AuditLog> = { items: [mockAuditLog], next_cursor: null };
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify(page),
+        });
+      }
+      if (url.startsWith('/api/v1/users')) {
+        const page: Page<User> = { items: [mockCandidateUser, candidate2], next_cursor: null };
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify(page),
+        });
+      }
+      return Promise.reject(new Error(`Unhandled URL: ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderCardsPage();
+
+    expect(await screen.findByText('ws-lab-01')).toBeInTheDocument();
+
+    const assignBtn = screen.getByRole('button', { name: 'Gắn cho người dùng…' });
+    await user.click(assignBtn);
+
+    const userPickerInput = await screen.findByPlaceholderText('Tìm người dùng...');
+    await user.type(userPickerInput, 'SV');
+
+    const pickUser1 = await screen.findByRole('button', { name: 'SV001 — Nguyễn Văn A' });
+    const pickUser2 = await screen.findByRole('button', { name: 'SV002 — Trần Thị B' });
+
+    // Pick first user -> starts in-flight POST
+    await user.click(pickUser1);
+    expect(postCalls).toBe(1);
+
+    // Try to pick second user while in-flight -> ignored / disabled
+    await user.click(pickUser2);
+    expect(postCalls).toBe(1);
+
+    // Release promise
+    resolvePost!({});
+    await waitFor(() => {
+      expect(screen.getByText('Đã gắn thẻ cho SV001.')).toBeInTheDocument();
+    });
+
+    expect(postCalls).toBe(1);
+  });
 });

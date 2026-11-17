@@ -118,8 +118,8 @@ export function listGroupMembers(id: string): Promise<User[]> {
   return api<User[]>('GET', `/groups/${encodeURIComponent(id)}/members`);
 }
 
-export function addGroupMembers(id: string, user_ids: string[]): Promise<{ added: number }> {
-  return api<{ added: number }>('PUT', `/groups/${encodeURIComponent(id)}/members`, { user_ids });
+export function addGroupMembers(id: string, user_ids: string[]): Promise<{ added: string[] }> {
+  return api<{ added: string[] }>('PUT', `/groups/${encodeURIComponent(id)}/members`, { user_ids });
 }
 
 export function removeGroupMember(id: string, user_id: string): Promise<void> {
