@@ -10,6 +10,7 @@ from collections.abc import Callable
 from typing import Protocol
 
 from ..domain.clock import local_datetime
+from ..domain.evaluation import EXTEND_MIN_SEC
 from ..domain.model import CurrentSession, Decision, Outcome
 from ..infra.logind import OsSession, TeardownResult
 from ..infra.store import SessionExtension, SessionRow, Store
@@ -137,19 +138,22 @@ class SessionManager:
             )
 
     def extension_for(self, decision: Decision) -> SessionExtension | None:
-        """D-033: a noop carrying a later deadline shifts both deadlines of the active session by the same amount.
+        """D-033: a noop carrying a later deadline moves the stored UTC deadline there and the CLOCK_BOOTTIME deadline
+        by the same amount.
 
-        The CLOCK_BOOTTIME deadline is shifted, never rebuilt from the wall clock, so a clock change grants nothing.
+        The amount is measured against the stored UTC deadline, not the effective one: after the wall clock was set
+        back the effective deadline is earlier, and that gap must not count as an extension. The CLOCK_BOOTTIME
+        deadline is shifted, never rebuilt from the wall clock, so a clock change grants nothing.
         """
         if decision.outcome is not Outcome.NOOP or decision.expires_at is None:
             return None
         s = self._store.active_session()
         if s is None:
             return None
-        delta = decision.expires_at - self._deadline_utc(s)
-        if delta <= 0:
+        delta = decision.expires_at - s.expires_at
+        if delta < EXTEND_MIN_SEC:
             return None
-        return SessionExtension(s.session_id, s.expires_at, s.expires_at + delta, s.boottime_limit + delta)
+        return SessionExtension(s.session_id, s.expires_at, decision.expires_at, s.boottime_limit + delta)
 
     def extended(self, extension: SessionExtension) -> None:
         """Warn again before the new deadline."""

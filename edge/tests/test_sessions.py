@@ -308,6 +308,20 @@ def test_no_extension_when_not_later(env):
     _, _, _, mgr, _ = env
     s = _active(env)
     assert mgr.extension_for(Decision(Outcome.NOOP, "already_active", expires_at=s.expires_at - 10)) is None
+    assert mgr.extension_for(Decision(Outcome.NOOP, "already_active", expires_at=s.expires_at + 30)) is None
+
+
+def test_clock_set_back_grants_no_extension(env):
+    """D-033: with the wall clock set back the effective deadline is earlier; that gap is not an extension."""
+    _, _, clock, mgr, _ = env
+    s = _active(env)
+    clock.advance(3600)
+    clock.wall -= 300
+    # The schedule did not change: the recomputed end is the stored deadline.
+    assert mgr.extension_for(Decision(Outcome.NOOP, "already_active", expires_at=s.expires_at)) is None
+    ext = mgr.extension_for(Decision(Outcome.NOOP, "already_active", expires_at=s.expires_at + 1800))
+    assert ext.expires_at == pytest.approx(s.expires_at + 1800)
+    assert ext.boottime_limit == pytest.approx(s.boottime_limit + 1800)
 
 
 def test_warning_fires_again_after_extension(env):
