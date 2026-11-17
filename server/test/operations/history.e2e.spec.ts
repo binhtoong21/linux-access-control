@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { IngestService } from '../../src/operations/ingest.service';
-import { loadUidVault } from '../../src/shared/crypto/uid-vault';
+import { deriveKm, sign } from '../../src/shared/crypto/crypto-v1';
+import { loadMasterKey, loadUidVault } from '../../src/shared/crypto/uid-vault';
 import { ApiContext, auditActions, errorCode, startSignedIn } from '../support/api';
 import { TEST_DATABASE_URL } from '../support/db';
 import { testKeysDir } from '../support/keys';
@@ -52,12 +53,14 @@ interface Audit {
     } while (cursor);
     return out;
   };
+  const masterKey = loadMasterKey(testKeysDir());
   const send = async (identity: string, records: Record<string, unknown>[]): Promise<void> => {
     const numbered = records.map((r) => ({ outbox_seq: (seq += 1), ...r }));
     const raw = Buffer.from(
       JSON.stringify({ schema: 'outbox-v1', workstation_id: identity, batch_id: `b-${seq}`, from_seq: numbered[0].outbox_seq, to_seq: seq, records: numbered }),
     );
-    await ingest.handleOutbox(identity, raw);
+    const sig = sign(deriveKm(masterKey, identity, 1), 'outbox-v1', raw);
+    await ingest.handleOutbox(identity, raw, sig);
   };
   const swipe = (name: string, at: number, payload: Record<string, unknown> = {}) => {
     entries[name] = randomUUID();

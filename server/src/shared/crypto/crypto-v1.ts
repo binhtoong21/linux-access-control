@@ -2,7 +2,7 @@
 import { createHash, createHmac, hkdfSync, randomBytes, timingSafeEqual } from 'node:crypto';
 
 export const KM_SALT = 'nfc-lab-km-v1';
-export const SIGNATURE_TAGS = ['snapshot-v1', 'lease-v1', 'ack-v1'] as const;
+export const SIGNATURE_TAGS = ['snapshot-v1', 'lease-v1', 'ack-v1', 'outbox-v1'] as const;
 export type SignatureTag = (typeof SIGNATURE_TAGS)[number];
 
 const VALID_UID_BYTES = new Set([4, 7, 10]);

@@ -3,7 +3,7 @@ import { sql } from 'kysely';
 import { OutgoingMessage } from '../distribution/sync.service';
 import { Db, KYSELY } from '../infra/database/database.module';
 import { MASTER_KEY } from '../infra/keys.module';
-import { deriveKm, normalizeUid, sign } from '../shared/crypto/crypto-v1';
+import { deriveKm, normalizeUid, sign, verify } from '../shared/crypto/crypto-v1';
 import { UidVault } from '../shared/crypto/uid-vault';
 
 export interface IngestResult {
@@ -60,7 +60,27 @@ export class IngestService {
     @Inject(MASTER_KEY) private readonly masterKey: Buffer,
   ) {}
 
-  async handleOutbox(identity: string, raw: Buffer): Promise<IngestResult> {
+  async handleOutbox(identity: string, raw: Buffer, signature: string | undefined): Promise<IngestResult> {
+    // D-030: the batch must come from the workstation itself; otherwise a broker could have the server sign an ACK
+    // that makes the edge delete records it never delivered.
+    const keyRow = (
+      await sql<{ key_version: number }>`SELECT key_version FROM workstations WHERE mqtt_identity = ${identity}`.execute(this.db)
+    ).rows[0];
+    if (!keyRow) {
+      this.logger.warn(`outbox of ${identity} ignored: unknown workstation`);
+      return NOTHING;
+    }
+    let signatureValid = false;
+    try {
+      signatureValid = !!signature && verify(deriveKm(this.masterKey, identity, keyRow.key_version), 'outbox-v1', raw, signature);
+    } catch {
+      signatureValid = false;
+    }
+    if (!signatureValid) {
+      this.logger.warn(`outbox of ${identity} ignored: missing or wrong signature`);
+      return NOTHING;
+    }
+
     let batch: unknown;
     try {
       batch = JSON.parse(raw.toString('utf8'));
@@ -68,7 +88,13 @@ export class IngestService {
       this.logger.warn(`outbox of ${identity} ignored: not JSON`);
       return NOTHING;
     }
-    if (!isObject(batch) || !Number.isInteger(batch.to_seq) || (batch.to_seq as number) < 1 || !Array.isArray(batch.records)) {
+    if (
+      !isObject(batch) ||
+      !(typeof batch.batch_id === 'string' && batch.batch_id.length >= 1 && batch.batch_id.length <= 64) ||
+      !Number.isInteger(batch.to_seq) ||
+      (batch.to_seq as number) < 1 ||
+      !Array.isArray(batch.records)
+    ) {
       this.logger.warn(`outbox of ${identity} ignored: no usable to_seq / records`);
       return NOTHING;
     }
@@ -111,7 +137,7 @@ export class IngestService {
       return NOTHING;
     }
     if (result.counts.rejected > 0) this.logger.warn(`outbox of ${identity}: ${result.counts.rejected} record(s) rejected, see ingest_rejects`);
-    return { ack: this.ack(result.workstation, toSeq), ...result.counts };
+    return { ack: this.ack(result.workstation, toSeq, batch.batch_id as string), ...result.counts };
   }
 
   private async apply(db: Db, w: WorkstationRow, record: unknown): Promise<Outcome> {
@@ -262,8 +288,11 @@ export class IngestService {
   }
 
   /** events.md §4.3: cumulative, so a lost ACK is repaired by the next one (INV-013). */
-  private ack(w: WorkstationRow, ackedSeq: number): OutgoingMessage {
-    const payload = Buffer.from(JSON.stringify({ schema: 'ack-v1', command: 'ack_outbox', workstation_id: w.mqtt_identity, acked_seq: ackedSeq }), 'utf8');
+  private ack(w: WorkstationRow, ackedSeq: number, batchId: string): OutgoingMessage {
+    const payload = Buffer.from(
+      JSON.stringify({ schema: 'ack-v1', command: 'ack_outbox', workstation_id: w.mqtt_identity, batch_id: batchId, acked_seq: ackedSeq }),
+      'utf8',
+    );
     const km = deriveKm(this.masterKey, w.mqtt_identity, w.key_version);
     return { topic: `lab/workstation/${w.mqtt_identity}/command/ack`, payload, signature: sign(km, 'ack-v1', payload), retain: false };
   }
