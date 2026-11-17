@@ -114,7 +114,8 @@ export class IngestService {
           FOR UPDATE OF w
         `.execute(trx)
       ).rows[0];
-      if (!workstation) return null;
+      // D-030: a reinstall approved between the signature check and this lock replaced the key that signed the batch.
+      if (!workstation || workstation.key_version !== keyRow.key_version) return null;
       const counts = { applied: 0, duplicates: 0, rejected: 0 };
       for (const record of records) {
         await sql`SAVEPOINT outbox_record`.execute(trx);
@@ -133,7 +134,7 @@ export class IngestService {
       return { workstation, counts };
     });
     if (!result) {
-      this.logger.warn(`outbox of ${identity} ignored: unknown workstation`);
+      this.logger.warn(`outbox of ${identity} ignored: unknown workstation or its key changed while the batch was checked`);
       return NOTHING;
     }
     if (result.counts.rejected > 0) this.logger.warn(`outbox of ${identity}: ${result.counts.rejected} record(s) rejected, see ingest_rejects`);

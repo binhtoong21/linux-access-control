@@ -106,6 +106,24 @@ const T0 = 1793048000;
     expect(await ingest.handleOutbox('lab-a-01', forged, undefined)).toEqual({ ack: null, applied: 0, duplicates: 0, rejected: 0 });
   });
 
+  it('drops a batch signed with a key replaced by a reinstall committed while the batch was being checked', async () => {
+    const raw = batch([swipe()]);
+    const reinstall = await api.pool.connect();
+    try {
+      await reinstall.query('BEGIN');
+      await reinstall.query("UPDATE workstations SET key_version = 2 WHERE mqtt_identity = 'lab-a-01'");
+      // The signature check reads key_version 1 (the update is not committed); the ingest then waits on the row lock.
+      const pending = ingest.handleOutbox('lab-a-01', raw, signBatch('lab-a-01', raw, 1));
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await reinstall.query('COMMIT');
+      expect(await pending).toEqual({ ack: null, applied: 0, duplicates: 0, rejected: 0 });
+      expect(await count('audit_logs')).toBe(0);
+    } finally {
+      await reinstall.query("UPDATE workstations SET key_version = 1 WHERE mqtt_identity = 'lab-a-01'");
+      reinstall.release();
+    }
+  });
+
   it('stores a swipe as an audit record with the UID encrypted and acknowledges the batch with a signed ACK', async () => {
     const record = swipe();
     const raw = batch([record]);
