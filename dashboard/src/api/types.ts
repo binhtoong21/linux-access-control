@@ -127,3 +127,42 @@ export type AuditLogDetail = AuditLog & {
   reader_raw: string | null;
 };
 
+export type RowAction = 'create' | 'update' | 'unchanged' | 'error';
+export type CardAction = 'register' | 'bind' | 'unchanged' | null;
+
+export interface RowIssue {
+  code: string;
+  message: string;
+}
+
+export interface RowResult {
+  line: number;
+  external_id: string;
+  action: RowAction;
+  groups_added: string[];
+  card: CardAction;
+  errors: RowIssue[];
+  warnings: RowIssue[];
+}
+
+export interface ImportSummary {
+  rows: number;
+  users_created: number;
+  users_updated: number;
+  users_unchanged: number;
+  groups_created: string[];
+  memberships_added: number;
+  cards_registered: number;
+  cards_bound: number;
+  errors: number;
+  warnings: number;
+}
+
+export interface ImportResult {
+  applied: boolean;
+  summary: ImportSummary;
+  ignored_columns: string[];
+  rows: RowResult[];
+}
+
+

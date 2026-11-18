@@ -7,6 +7,7 @@ import type {
   CardDetail,
   CardStatus,
   Group,
+  ImportResult,
   Page,
   User,
   UserDetail,
@@ -200,4 +201,9 @@ export function listAuditLogs(f?: ListAuditLogsFilter): Promise<Page<AuditLog>> 
 export function getAuditLog(id: string): Promise<AuditLogDetail> {
   return api<AuditLogDetail>('GET', `/audit-logs/${encodeURIComponent(id)}`);
 }
+
+export function importRoster(csv: string, apply: boolean): Promise<ImportResult> {
+  return api<ImportResult>('POST', '/imports/roster', { csv, apply });
+}
+
 

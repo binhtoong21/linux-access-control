@@ -12,6 +12,7 @@ import { UserDetailPage } from './pages/UserDetailPage';
 import { GroupsPage } from './pages/GroupsPage';
 import { GroupDetailPage } from './pages/GroupDetailPage';
 import { CardsPage } from './pages/CardsPage';
+import { ImportPage } from './pages/ImportPage';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -43,6 +44,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
               <Route path="/groups" element={<GroupsPage />} />
               <Route path="/groups/:id" element={<GroupDetailPage />} />
               <Route path="/cards" element={<CardsPage />} />
+              <Route path="/import" element={<ImportPage />} />
               <Route path="/" element={<Navigate to="/workstations" replace />} />
               <Route path="*" element={<Navigate to="/workstations" replace />} />
             </Route>
