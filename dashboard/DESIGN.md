@@ -19,7 +19,7 @@ All text tokens exceed WCAG AA contrast (>= 4.5:1) against both `canvas` (#F6F7F
 | `accent-tint` | `#EAF4F4` | `bg-accent-tint` | Info notices, selected item backgrounds | — |
 | `ok` / `ok-tint` | `#2F7D4F` / `#EDF6EF` | `ok`, `ok-tint` | Success notices, active status | 4.7:1 / 5.0:1 |
 | `warn` / `warn-tint` | `#85520C` / `#FFF4DF` | `warn`, `warn-tint` | Warning notices, offline status | 6.1:1 / 6.5:1 |
-| `danger` / `danger-tint` | `#B3362B` / `#FCEEEB` | `danger`, `danger-tint` | Error notices, destructive actions, disabled | 5.6:1 / 6.0:1 |
+| `danger` / `danger-tint` | `#B3362B` / `#FCEEEB` | `danger`, `danger-tint` | Error notices, destructive actions | 5.6:1 / 6.0:1 |
 
 ## 3. Typography
 - **Font family**: Single font family `Be Vietnam Pro` (`font-sans`), bundled locally. System monospace stack (`font-mono`) for identifiers.
@@ -39,7 +39,7 @@ All text tokens exceed WCAG AA contrast (>= 4.5:1) against both `canvas` (#F6F7F
 
 ## 5. State & Signals
 - **Status Pills**: Pills must always carry text (never colour alone).
-- **Independent Signals**: Connectivity (online/offline), readiness (idle/busy), session (active user), and sync state remain distinct indicators.
+- **Independent Signals**: Connectivity (online/offline), readiness (whether the machine will accept a card login now), session (who is logged in) and sync state remain distinct indicators.
 - **Consistency**: Reuse the workstation login screen wording for system states.
 
 ## 6. Shared Components
