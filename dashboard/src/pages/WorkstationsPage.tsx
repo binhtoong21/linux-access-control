@@ -1,8 +1,10 @@
 import React, { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { listWorkstations, type WorkstationFilter } from '../api/endpoints';
 import type { WorkstationFlag } from '../api/types';
-import { formatTime } from '../lib/time';
+import { formatAgo, formatTime, readiness, type ReadinessState } from '../lib/time';
+import { useNow } from '../lib/useNow';
 
 const FLAG_LABELS: Record<WorkstationFlag, string> = {
   overdue_session: 'Quá giờ',
@@ -13,8 +15,65 @@ const FLAG_LABELS: Record<WorkstationFlag, string> = {
   security_alert: 'Cảnh báo an ninh',
 };
 
+export function ReadinessBadge({ state }: { state: ReadinessState }) {
+  switch (state) {
+    case 'ready':
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+          Sẵn sàng
+        </span>
+      );
+    case 'offline_ok':
+      return (
+        <span
+          title="Máy vẫn cho quẹt thẻ theo dữ liệu đã nhận đến khi hết hạn tin cậy"
+          className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800"
+        >
+          Offline, còn dữ liệu
+        </span>
+      );
+    case 'offline_unknown':
+      return (
+        <span
+          title="Lần cuối kết nối, máy chưa chạy dữ liệu mới nhất nên không biết hạn tin cậy còn bao lâu. Bật máy để kiểm tra."
+          className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800"
+        >
+          Offline, không rõ
+        </span>
+      );
+    case 'lease_expired':
+      return (
+        <span
+          title="Máy sẽ từ chối quẹt thẻ cho đến khi kết nối lại server. Bật máy trước giờ sử dụng."
+          className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800"
+        >
+          Hết hạn tin cậy
+        </span>
+      );
+    case 'no_data':
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+          Chưa có dữ liệu
+        </span>
+      );
+    case 'clock_invalid':
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+          Đồng hồ sai
+        </span>
+      );
+    case 'disabled':
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+          Đã vô hiệu hóa
+        </span>
+      );
+  }
+}
+
 export function WorkstationsPage() {
   const [connectivityFilter, setConnectivityFilter] = useState<'all' | 'online' | 'offline'>('all');
+  const now = useNow();
 
   const filter = useMemo<WorkstationFilter | undefined>(() => {
     if (connectivityFilter === 'all') return undefined;
@@ -73,6 +132,7 @@ export function WorkstationsPage() {
                   <th className="px-4 py-3 text-left">Máy</th>
                   <th className="px-4 py-3 text-left">Zone</th>
                   <th className="px-4 py-3 text-left">Kết nối</th>
+                  <th className="px-4 py-3 text-left">Sẵn sàng</th>
                   <th className="px-4 py-3 text-left">Đang dùng</th>
                   <th className="px-4 py-3 text-left">Đồng bộ</th>
                   <th className="px-4 py-3 text-left">Cảnh báo</th>
@@ -81,7 +141,7 @@ export function WorkstationsPage() {
               <tbody className="divide-y divide-gray-200">
                 {data.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                    <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
                       Chưa có máy nào
                     </td>
                   </tr>
@@ -89,22 +149,37 @@ export function WorkstationsPage() {
                   data.map((ws) => (
                     <tr key={ws.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3">
-                        <div className="font-medium text-gray-900">{ws.hostname}</div>
+                        <Link
+                          to={`/workstations/${encodeURIComponent(ws.id)}`}
+                          className="font-medium text-blue-600 hover:underline"
+                        >
+                          {ws.hostname}
+                        </Link>
                         <div className="text-xs text-gray-500">{ws.mqtt_identity}</div>
                       </td>
                       <td className="px-4 py-3 text-gray-700">
                         {ws.zone ? ws.zone.name : '—'}
                       </td>
                       <td className="px-4 py-3">
-                        {ws.connectivity === 'online' ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                            Online
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
-                            Offline
-                          </span>
+                        <div>
+                          {ws.connectivity === 'online' ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                              Online
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                              Offline
+                            </span>
+                          )}
+                        </div>
+                        {ws.last_heartbeat_at && (
+                          <div className="text-xs text-gray-500 mt-0.5">
+                            {formatAgo(ws.last_heartbeat_at, now)}
+                          </div>
                         )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <ReadinessBadge state={readiness(ws, now)} />
                       </td>
                       <td className="px-4 py-3 text-gray-700">
                         {ws.current_session ? (
