@@ -128,6 +128,8 @@ class Agent:
                 self.sessions.extended(extension)
             self.sessions.remind_remaining(decision, extended=extension is not None)
         elif not decision.granted:
+            if decision.reason == "workstation_busy":
+                self.sessions.notify_busy()
             self._push({"event": "card_denied", "reason": decision.reason, "detail": decision.detail})
         elif not self.sessions.make_room(decision):  # stuck teardown: the audit stays "granted" (D-005)
             self.store.discard_pending(pending.session_id, self.wall())
