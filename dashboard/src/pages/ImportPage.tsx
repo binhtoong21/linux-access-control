@@ -58,6 +58,8 @@ export function ImportPage() {
   const [onlyIssues, setOnlyIssues] = useState(false);
 
   const inFlightRef = useRef(false);
+  // Each file pick gets a number; a read that finishes after a newer pick is ignored.
+  const readGenRef = useRef(0);
 
   const handleDownloadTemplate = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -73,6 +75,8 @@ export function ImportPage() {
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const gen = ++readGenRef.current;
+    setCsvText(''); // nothing can be checked until the new file has been read
     setResult(null);
     setLastCheckedText(null);
     setStatusError(null);
@@ -89,6 +93,7 @@ export function ImportPage() {
     try {
       if (typeof file.text === 'function') {
         const text = await file.text();
+        if (gen !== readGenRef.current) return;
         setCsvText(text);
       } else {
         const text = await new Promise<string>((resolve, reject) => {
@@ -97,9 +102,11 @@ export function ImportPage() {
           reader.onerror = () => reject(reader.error);
           reader.readAsText(file);
         });
+        if (gen !== readGenRef.current) return;
         setCsvText(text);
       }
     } catch (e) {
+      if (gen !== readGenRef.current) return;
       console.error('File read error:', e);
       setStatusError('Không thể đọc tệp đã chọn');
       setCsvText('');

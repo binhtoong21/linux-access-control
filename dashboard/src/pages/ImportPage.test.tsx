@@ -358,6 +358,34 @@ describe('ImportPage', () => {
     expect(screen.queryByText('Tổng kết')).not.toBeInTheDocument();
   });
 
+  it('a slow read of an earlier file never replaces the file picked after it', async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/v1/imports/roster' && init?.method === 'POST') {
+        return Promise.resolve({ ok: true, status: 200, text: async () => JSON.stringify(mockCleanResult) });
+      }
+      return Promise.reject(new Error(`Unhandled URL: ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderImportPage();
+
+    let releaseA: (text: string) => void = () => {};
+    const fileA = new File(['A'], 'a.csv', { type: 'text/csv' });
+    Object.defineProperty(fileA, 'text', { value: () => new Promise<string>((resolve) => (releaseA = resolve)) });
+    const fileB = new File(['B'], 'b.csv', { type: 'text/csv' });
+    Object.defineProperty(fileB, 'text', { value: () => Promise.resolve('content-B') });
+
+    const fileInput = screen.getByLabelText('Chọn tệp CSV');
+    await user.upload(fileInput, fileA);
+    await user.upload(fileInput, fileB);
+    releaseA('content-A'); // A finishes last
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Kiểm tra' })).not.toBeDisabled());
+
+    await user.click(screen.getByRole('button', { name: 'Kiểm tra' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string).csv).toBe('content-B');
+  });
+
   it('a 400 response shows the error', async () => {
     const user = userEvent.setup();
 
