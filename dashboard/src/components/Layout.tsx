@@ -106,10 +106,11 @@ export function Layout() {
         </div>
 
         {/* Nav groups */}
-        <nav className="flex-1 overflow-y-auto py-3 space-y-4">
-          {NAV_GROUPS.map((group) => (
-            <div key={group.heading}>
-              <div className="px-3 mb-1 text-xs font-medium text-ink-muted">
+        <nav className="flex-1 overflow-y-auto py-3">
+          {NAV_GROUPS.map((group, index) => (
+            // Groups are separated by a hairline; the heading is a quiet caption and the items sit indented under it.
+            <div key={group.heading} role="group" aria-label={group.heading} className={index > 0 ? 'mt-3 pt-3 border-t border-line' : ''}>
+              <div className="px-3 pb-1 text-xs font-normal text-ink-muted">
                 {group.heading}
               </div>
               <div>
@@ -119,7 +120,7 @@ export function Layout() {
                     to={item.to}
                     onClick={() => setMobileOpen(false)}
                     className={({ isActive }) =>
-                      `flex items-center h-8 px-3 text-sm transition-colors border-l-2 ${
+                      `flex items-center h-8 pl-5 pr-3 text-sm transition-colors border-l-2 ${
                         isActive
                           ? 'bg-accent-tint text-accent font-medium border-accent'
                           : 'border-transparent text-ink hover:bg-canvas'
