@@ -14,6 +14,21 @@ import { errorMessage } from '../lib/errors';
 import { formatAgo, formatDateTime, readiness } from '../lib/time';
 import { useNow } from '../lib/useNow';
 import { ReadinessBadge } from './WorkstationsPage';
+import {
+  Button,
+  ConfirmDialog,
+  EmptyRow,
+  Field,
+  Notice,
+  PageHeader,
+  selectClass,
+  StatusPill,
+  Table,
+  TD,
+  TH,
+  THead,
+  TR,
+} from '../components/ui';
 
 const FLAG_LABELS: Record<WorkstationFlag, string> = {
   overdue_session: 'Quá giờ',
@@ -31,6 +46,8 @@ export function WorkstationDetailPage() {
 
   const [pageError, setPageError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [profileToDisable, setProfileToDisable] = useState<Profile | null>(null);
+  const [disableDialogOpen, setDisableDialogOpen] = useState(false);
   const disablingRef = useRef(false);
   const now = useNow();
 
@@ -82,16 +99,9 @@ export function WorkstationDetailPage() {
     }
   };
 
-  const handleToggleProfileStatus = async (profile: Profile) => {
+  const executeToggleProfile = async (profile: Profile) => {
     if (!workstation || actionLoading) return;
     const newStatus: ProfileStatus = profile.status === 'enabled' ? 'disabled' : 'enabled';
-    if (profile.status === 'enabled' && profile.is_default) {
-      const confirmed = window.confirm(
-        'Đây là profile mặc định. Tắt nó thì các lịch không chỉ định profile sẽ bị từ chối ở máy này. Tiếp tục?',
-      );
-      if (!confirmed) return;
-    }
-
     setActionLoading(true);
     setPageError(null);
     try {
@@ -105,17 +115,17 @@ export function WorkstationDetailPage() {
     }
   };
 
-  const handleDisableWorkstation = async () => {
-    if (!workstation || disablingRef.current || workstation.status !== 'enrolled') return;
-    const promptMessage =
-      'Gõ đúng tên máy ' +
-      workstation.mqtt_identity +
-      ' để vô hiệu hóa. Máy sẽ bị thu hồi chứng chỉ, không thể bật lại trừ khi cài lại và duyệt lại.';
-    const typed = window.prompt(promptMessage);
-    if (typed !== workstation.mqtt_identity) {
+  const handleToggleProfileStatus = (profile: Profile) => {
+    if (!workstation || actionLoading) return;
+    if (profile.status === 'enabled' && profile.is_default) {
+      setProfileToDisable(profile);
       return;
     }
+    void executeToggleProfile(profile);
+  };
 
+  const handleDisableConfirm = async () => {
+    if (!workstation || disablingRef.current || workstation.status !== 'enrolled') return;
     disablingRef.current = true;
     setActionLoading(true);
     setPageError(null);
@@ -123,8 +133,10 @@ export function WorkstationDetailPage() {
       await disableWorkstation(workstation.id);
       await queryClient.invalidateQueries({ queryKey: ['workstation', workstation.id] });
       await queryClient.invalidateQueries({ queryKey: ['workstations'] });
+      setDisableDialogOpen(false);
     } catch (err) {
       setPageError(errorMessage(err));
+      throw err;
     } finally {
       disablingRef.current = false;
       setActionLoading(false);
@@ -132,7 +144,7 @@ export function WorkstationDetailPage() {
   };
 
   if (isLoading) {
-    return <div className="p-8 text-center text-gray-500">Đang tải…</div>;
+    return <div className="py-8 text-center text-sm text-ink-muted">Đang tải…</div>;
   }
 
   if (isError || !workstation) {
@@ -143,12 +155,14 @@ export function WorkstationDetailPage() {
       !workstation;
     return (
       <div className="space-y-4">
-        <Link to="/workstations" className="text-sm text-blue-600 hover:underline">
-          ← Máy trạm
-        </Link>
-        <div className="p-4 bg-red-50 text-red-700 rounded border border-red-200">
-          {is404 ? 'Không tìm thấy máy' : errorMessage(error)}
+        <div>
+          <Link to="/workstations" className="text-sm text-accent hover:underline">
+            Máy trạm
+          </Link>
         </div>
+        <Notice tone="danger">
+          {is404 ? 'Không tìm thấy máy' : errorMessage(error)}
+        </Notice>
       </div>
     );
   }
@@ -156,107 +170,102 @@ export function WorkstationDetailPage() {
   return (
     <div className="space-y-6">
       <div>
-        <Link to="/workstations" className="text-sm text-blue-600 hover:underline">
-          ← Máy trạm
+        <Link to="/workstations" className="text-sm text-accent hover:underline">
+          Máy trạm
         </Link>
       </div>
 
       {pageError && (
-        <div className="p-4 bg-red-50 text-red-700 rounded border border-red-200">
-          {pageError}
-        </div>
+        <Notice tone="danger">{pageError}</Notice>
       )}
 
       {/* Header */}
-      <div className="bg-white p-6 rounded-lg shadow space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b pb-4">
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">{workstation.mqtt_identity}</h1>
-            <p className="text-sm text-gray-500">{workstation.hostname}</p>
-          </div>
-          <div className="flex items-center space-x-3">
+      <PageHeader
+        title={<span className="font-mono">{workstation.mqtt_identity}</span>}
+        description={workstation.hostname}
+        actions={
+          <>
             <Link
               to={`/history?tab=audit&workstation_id=${encodeURIComponent(workstation.id)}`}
-              className="text-sm text-blue-600 hover:underline"
+              className="inline-flex items-center justify-center font-medium rounded transition-colors bg-transparent text-accent hover:bg-accent-tint h-8 px-3 text-sm"
             >
               Lịch sử quẹt thẻ
             </Link>
             <Link
               to={`/history?tab=sessions&workstation_id=${encodeURIComponent(workstation.id)}`}
-              className="text-sm text-blue-600 hover:underline"
+              className="inline-flex items-center justify-center font-medium rounded transition-colors bg-transparent text-accent hover:bg-accent-tint h-8 px-3 text-sm"
             >
               Phiên
             </Link>
-            {workstation.status === 'enrolled' ? (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                Đã ghi danh
-              </span>
-            ) : (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
-                Đã vô hiệu hóa
-              </span>
-            )}
+            <StatusPill tone={workstation.status === 'enrolled' ? 'ok' : 'neutral'}>
+              {workstation.status === 'enrolled' ? 'Đã ghi danh' : 'Đã vô hiệu hóa'}
+            </StatusPill>
             <ReadinessBadge state={readiness(workstation, now)} />
-          </div>
-        </div>
+          </>
+        }
+      />
 
-        {/* Info Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-          <div className="space-y-3">
+      {/* Info panel */}
+      <div className="bg-surface border border-line rounded p-6">
+        <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-sm">
+          <div className="space-y-4">
             <div>
-              <label htmlFor="zone-select" className="block text-gray-500 font-medium mb-1">
-                Zone:
-              </label>
-              <select
-                id="zone-select"
-                value={workstation.zone?.id ?? ''}
-                onChange={handleZoneChange}
-                disabled={actionLoading}
-                className="border border-gray-300 rounded px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">— Không thuộc zone —</option>
-                {zones?.map((zone) => (
-                  <option key={zone.id} value={zone.id}>
-                    {zone.name}
-                  </option>
-                ))}
-              </select>
+              <Field label="Zone:" htmlFor="zone-select">
+                <select
+                  id="zone-select"
+                  value={workstation.zone?.id ?? ''}
+                  onChange={handleZoneChange}
+                  disabled={actionLoading}
+                  className={`w-full ${selectClass}`}
+                >
+                  <option value="">— Không thuộc zone —</option>
+                  {zones?.map((zone) => (
+                    <option key={zone.id} value={zone.id}>
+                      {zone.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
             </div>
 
             <div>
-              <span className="text-gray-500">Kết nối: </span>
-              <span className="text-gray-900 font-medium">
-                {workstation.connectivity === 'online' ? 'Online' : 'Offline'}
-              </span>
-              {workstation.last_heartbeat_at ? (
-                <span className="text-gray-600">
-                  {' '}· {formatDateTime(workstation.last_heartbeat_at)} ({formatAgo(workstation.last_heartbeat_at, now)})
+              <dt className="text-xs font-medium text-ink-muted">Kết nối</dt>
+              <dd className="text-sm text-ink mt-0.5">
+                <span className="font-medium">
+                  {workstation.connectivity === 'online' ? 'Online' : 'Offline'}
                 </span>
-              ) : (
-                <span className="text-gray-500"> · Chưa có heartbeat</span>
-              )}
+                {workstation.last_heartbeat_at ? (
+                  <span className="text-ink-muted">
+                    {' '}· {formatDateTime(workstation.last_heartbeat_at)} ({formatAgo(workstation.last_heartbeat_at, now)})
+                  </span>
+                ) : (
+                  <span className="text-ink-muted"> · Chưa có heartbeat</span>
+                )}
+              </dd>
             </div>
 
             <div>
-              <span className="text-gray-500">Trạng thái tin cậy: </span>
-              <span className="text-gray-900 font-medium">{workstation.trust_state ?? '—'}</span>
+              <dt className="text-xs font-medium text-ink-muted">Trạng thái tin cậy</dt>
+              <dd className="text-sm text-ink font-medium mt-0.5">
+                {workstation.trust_state ?? '—'}
+              </dd>
             </div>
 
             <div>
-              <span className="text-gray-500">Đồng bộ: </span>
-              <span className="text-gray-900">
+              <dt className="text-xs font-medium text-ink-muted">Đồng bộ</dt>
+              <dd className="text-sm text-ink mt-0.5">
                 {workstation.sync.state === 'in_sync' && <span>Đã đồng bộ</span>}
                 {workstation.sync.state === 'pending' && <span>Đang chờ</span>}
                 {workstation.sync.state === 'stuck' && (
-                  <span className="text-red-600 font-medium">Kẹt</span>
+                  <span className="text-danger font-medium">Kẹt</span>
                 )}{' '}
                 ({workstation.sync.acked_version}/{workstation.sync.desired_version})
-              </span>
+              </dd>
             </div>
 
             <div>
-              <span className="text-gray-500">Đang dùng: </span>
-              <span className="text-gray-900">
+              <dt className="text-xs font-medium text-ink-muted">Đang dùng</dt>
+              <dd className="text-sm text-ink mt-0.5">
                 {workstation.current_session ? (
                   <span>
                     {workstation.current_session.user.full_name} ({workstation.current_session.user.external_id})
@@ -265,173 +274,186 @@ export function WorkstationDetailPage() {
                 ) : (
                   '—'
                 )}
-              </span>
+              </dd>
             </div>
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-4">
             <div>
-              <span className="text-gray-500">MAC: </span>
-              <span className="text-gray-900 font-mono">{workstation.mac_address || '—'}</span>
+              <dt className="text-xs font-medium text-ink-muted">MAC</dt>
+              <dd className="text-sm text-ink font-mono mt-0.5">{workstation.mac_address || '—'}</dd>
             </div>
 
             <div>
-              <span className="text-gray-500">Machine ID: </span>
-              <span className="text-gray-900 font-mono text-xs">{workstation.machine_id || '—'}</span>
+              <dt className="text-xs font-medium text-ink-muted">Machine ID</dt>
+              <dd className="text-sm text-ink font-mono text-xs mt-0.5">{workstation.machine_id || '—'}</dd>
             </div>
 
             <div>
-              <span className="text-gray-500">Key version: </span>
-              <span className="text-gray-900 font-mono">{workstation.key_version}</span>
+              <dt className="text-xs font-medium text-ink-muted">Key version</dt>
+              <dd className="text-sm text-ink font-mono mt-0.5">{workstation.key_version}</dd>
             </div>
 
             <div>
-              <span className="text-gray-500">Chứng chỉ hết hạn: </span>
-              <span className="text-gray-900">{formatDateTime(workstation.cert_expires_at)}</span>
+              <dt className="text-xs font-medium text-ink-muted">Chứng chỉ hết hạn</dt>
+              <dd className="text-sm text-ink mt-0.5">{formatDateTime(workstation.cert_expires_at)}</dd>
             </div>
 
             <div>
-              <span className="text-gray-500">Lỗi áp dụng snapshot: </span>
-              {workstation.last_apply_error ? (
-                <span className="text-red-600 font-medium">{workstation.last_apply_error}</span>
-              ) : (
-                <span className="text-gray-900">—</span>
-              )}
+              <dt className="text-xs font-medium text-ink-muted">Lỗi áp dụng snapshot</dt>
+              <dd className="text-sm mt-0.5">
+                {workstation.last_apply_error ? (
+                  <span className="text-danger font-medium">{workstation.last_apply_error}</span>
+                ) : (
+                  <span className="text-ink">—</span>
+                )}
+              </dd>
             </div>
 
             <div>
-              <span className="text-gray-500">Cảnh báo: </span>
-              <div className="inline-flex flex-wrap gap-1 align-middle">
-                {workstation.flags.map((flag) => {
-                  const label = FLAG_LABELS[flag] || flag;
-                  if (flag === 'ingest_rejects' || flag === 'security_alert') {
+              <dt className="text-xs font-medium text-ink-muted">Cảnh báo</dt>
+              <dd className="text-sm mt-0.5">
+                <div className="inline-flex flex-wrap gap-1 align-middle">
+                  {workstation.flags.map((flag) => {
+                    const label = FLAG_LABELS[flag] || flag;
+                    const tone = flag === 'missing_profile' ? 'warn' : 'danger';
+                    if (flag === 'ingest_rejects' || flag === 'security_alert') {
+                      return (
+                        <Link
+                          key={flag}
+                          to={`/issues?workstation_id=${encodeURIComponent(workstation.id)}`}
+                          className="hover:underline"
+                        >
+                          <StatusPill tone={tone}>{label}</StatusPill>
+                        </Link>
+                      );
+                    }
                     return (
-                      <Link
-                        key={flag}
-                        to={`/issues?workstation_id=${encodeURIComponent(workstation.id)}`}
-                        className="inline-block px-1.5 py-0.5 text-xs font-medium rounded bg-red-100 text-red-800 hover:underline"
-                      >
+                      <StatusPill key={flag} tone={tone}>
                         {label}
-                      </Link>
+                      </StatusPill>
                     );
-                  }
-                  return (
-                    <span
-                      key={flag}
-                      className="inline-block px-1.5 py-0.5 text-xs font-medium rounded bg-red-100 text-red-800"
-                    >
-                      {label}
-                    </span>
-                  );
-                })}
-                {workstation.clock_skew_detected && (
-                  <span className="inline-block px-1.5 py-0.5 text-xs font-medium rounded bg-amber-100 text-amber-800">
-                    Lệch giờ
-                  </span>
-                )}
-                {workstation.flags.length === 0 && !workstation.clock_skew_detected && (
-                  <span className="text-gray-400">—</span>
-                )}
-              </div>
+                  })}
+                  {workstation.clock_skew_detected && (
+                    <StatusPill tone="warn">Lệch giờ</StatusPill>
+                  )}
+                  {workstation.flags.length === 0 && !workstation.clock_skew_detected && (
+                    <span className="text-ink-muted">—</span>
+                  )}
+                </div>
+              </dd>
             </div>
           </div>
-        </div>
+        </dl>
       </div>
 
-      {/* Profiles Section */}
-      <div className="bg-white p-6 rounded-lg shadow space-y-4">
-        <h2 className="text-lg font-bold text-gray-900">Profile</h2>
+      {/* Profiles */}
+      <div className="bg-surface border border-line rounded p-6 space-y-4">
+        <h2 className="text-base font-semibold text-ink">Profile</h2>
 
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 text-sm">
-            <thead className="bg-gray-50 text-gray-600 font-medium">
-              <tr>
-                <th className="px-4 py-3 text-left">Tài khoản OS</th>
-                <th className="px-4 py-3 text-left">Tên hiển thị</th>
-                <th className="px-4 py-3 text-left">Trạng thái</th>
-                <th className="px-4 py-3 text-center">Mặc định</th>
-                <th className="px-4 py-3 text-right">Thao tác</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {workstation.profiles.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-4 py-6 text-center text-gray-500">
-                    Máy chưa báo profile nào (Agent tự phát hiện tài khoản thuộc nhóm labstudent).
-                  </td>
-                </tr>
-              ) : (
-                workstation.profiles.map((profile) => (
-                  <tr key={profile.os_username} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-mono font-medium text-gray-900">
-                      {profile.os_username}
-                    </td>
-                    <td className="px-4 py-3 text-gray-700">
-                      {profile.display_name || '—'}
-                    </td>
-                    <td className="px-4 py-3">
-                      {profile.status === 'enabled' ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                          Bật
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
-                          Tắt
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <input
-                        type="radio"
-                        name="default_profile"
-                        checked={profile.is_default}
-                        disabled={actionLoading}
-                        onChange={() => handleSetDefaultProfile(profile)}
-                        aria-label={`Mặc định ${profile.os_username}`}
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
-                      />
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        type="button"
-                        disabled={actionLoading}
-                        onClick={() => handleToggleProfileStatus(profile)}
-                        className={`text-xs px-2.5 py-1 rounded border disabled:opacity-50 ${
-                          profile.status === 'enabled'
-                            ? 'border-red-300 text-red-700 hover:bg-red-50'
-                            : 'border-green-300 text-green-700 hover:bg-green-50'
-                        }`}
-                      >
-                        {profile.status === 'enabled' ? 'Tắt' : 'Bật'}
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+        <Table>
+          <THead>
+            <TR>
+              <TH>Tài khoản OS</TH>
+              <TH>Tên hiển thị</TH>
+              <TH>Trạng thái</TH>
+              <TH className="text-center">Mặc định</TH>
+              <TH className="text-right">Thao tác</TH>
+            </TR>
+          </THead>
+          <tbody>
+            {workstation.profiles.length === 0 ? (
+              <EmptyRow colSpan={5}>
+                Máy chưa báo profile nào (Agent tự phát hiện tài khoản thuộc nhóm labstudent).
+              </EmptyRow>
+            ) : (
+              workstation.profiles.map((profile) => (
+                <TR key={profile.os_username} interactive>
+                  <TD className="font-mono font-medium text-ink">
+                    {profile.os_username}
+                  </TD>
+                  <TD className="text-ink-muted">
+                    {profile.display_name || '—'}
+                  </TD>
+                  <TD>
+                    <StatusPill tone={profile.status === 'enabled' ? 'ok' : 'neutral'}>
+                      {profile.status === 'enabled' ? 'Bật' : 'Tắt'}
+                    </StatusPill>
+                  </TD>
+                  <TD className="text-center">
+                    <input
+                      type="radio"
+                      name="default_profile"
+                      checked={profile.is_default}
+                      disabled={actionLoading}
+                      onChange={() => handleSetDefaultProfile(profile)}
+                      aria-label={`Mặc định ${profile.os_username}`}
+                      className="h-4 w-4 accent-accent"
+                    />
+                  </TD>
+                  <TD className="text-right">
+                    <Button
+                      size="sm"
+                      variant={profile.status === 'enabled' ? 'danger' : 'secondary'}
+                      disabled={actionLoading}
+                      onClick={() => handleToggleProfileStatus(profile)}
+                    >
+                      {profile.status === 'enabled' ? 'Tắt' : 'Bật'}
+                    </Button>
+                  </TD>
+                </TR>
+              ))
+            )}
+          </tbody>
+        </Table>
       </div>
 
-      {/* Disable Workstation (only when status is enrolled) */}
+      {/* Danger zone (only when enrolled) */}
       {workstation.status === 'enrolled' && (
-        <div className="bg-white p-6 rounded-lg shadow flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border border-red-200">
+        <div className="bg-surface border border-line rounded p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h2 className="text-base font-bold text-red-700">Vô hiệu hóa máy</h2>
-            <p className="text-xs text-gray-500 mt-1">
+            <h2 className="text-base font-semibold text-danger">Vô hiệu hóa máy</h2>
+            <p className="text-xs text-ink-muted mt-1">
               Máy sẽ bị thu hồi chứng chỉ và chuyển sang trạng thái đã vô hiệu hóa.
             </p>
           </div>
-          <button
-            type="button"
+          <Button
+            variant="danger"
             disabled={actionLoading}
-            onClick={handleDisableWorkstation}
-            className="px-4 py-2 border border-red-600 text-red-600 rounded text-sm font-medium hover:bg-red-50 disabled:opacity-50"
+            onClick={() => setDisableDialogOpen(true)}
           >
             Vô hiệu hóa máy
-          </button>
+          </Button>
         </div>
       )}
+
+      {/* ConfirmDialog: Turn off default profile */}
+      <ConfirmDialog
+        open={profileToDisable !== null}
+        title="Tắt profile mặc định?"
+        message="Đây là profile mặc định. Tắt nó thì các lịch không chỉ định profile sẽ bị từ chối ở máy này. Tiếp tục?"
+        confirmLabel="Tắt profile"
+        tone="danger"
+        onConfirm={async () => {
+          if (!profileToDisable) return;
+          const target = profileToDisable;
+          setProfileToDisable(null);
+          await executeToggleProfile(target);
+        }}
+        onCancel={() => setProfileToDisable(null)}
+      />
+
+      {/* ConfirmDialog: Disable workstation */}
+      <ConfirmDialog
+        open={disableDialogOpen}
+        title={`Vô hiệu hóa máy ${workstation.mqtt_identity}?`}
+        message="Máy bị thu hồi chứng chỉ ngay. Máy vẫn cho quẹt thẻ đến khi hết hạn tin cậy (tối đa 24 giờ). Không thể bật lại, trừ khi cài lại và duyệt lại."
+        confirmLabel="Vô hiệu hóa"
+        tone="danger"
+        requireText={workstation.mqtt_identity}
+        onConfirm={handleDisableConfirm}
+        onCancel={() => setDisableDialogOpen(false)}
+      />
     </div>
   );
 }
