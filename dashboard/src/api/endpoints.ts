@@ -24,6 +24,11 @@ import type {
   WorkstationDetail,
   WorkstationSummary,
   Zone,
+  Schedule,
+  ScheduleInput,
+  ScheduleStatus,
+  ScheduleValidationResult,
+  ValidateScheduleInput,
 } from './types';
 
 export interface WorkstationFilter {
@@ -313,5 +318,53 @@ export function rejectEnrollment(id: string, note?: string): Promise<EnrollmentR
     body,
   );
 }
+
+export interface ListSchedulesFilter {
+  workstation_id?: string;
+  zone_id?: string;
+  group_id?: string;
+  user_id?: string;
+  status?: ScheduleStatus;
+}
+
+export function listSchedules(f?: ListSchedulesFilter): Promise<Schedule[]> {
+  const params = new URLSearchParams();
+  if (f?.workstation_id) params.set('workstation_id', f.workstation_id);
+  if (f?.zone_id) params.set('zone_id', f.zone_id);
+  if (f?.group_id) params.set('group_id', f.group_id);
+  if (f?.user_id) params.set('user_id', f.user_id);
+  if (f?.status) params.set('status', f.status);
+  const qs = params.toString();
+  return api<Schedule[]>('GET', `/schedules${qs ? `?${qs}` : ''}`);
+}
+
+export function getSchedule(id: string): Promise<Schedule> {
+  return api<Schedule>('GET', `/schedules/${encodeURIComponent(id)}`);
+}
+
+export function createSchedule(input: ScheduleInput): Promise<Schedule> {
+  return api<Schedule>('POST', '/schedules', input);
+}
+
+export function updateSchedule(id: string, input: ScheduleInput): Promise<Schedule> {
+  return api<Schedule>('PATCH', `/schedules/${encodeURIComponent(id)}`, input);
+}
+
+export function deleteSchedule(id: string): Promise<void> {
+  return api<void>('DELETE', `/schedules/${encodeURIComponent(id)}`);
+}
+
+export function enableSchedule(id: string): Promise<Schedule> {
+  return api<Schedule>('POST', `/schedules/${encodeURIComponent(id)}/enable`);
+}
+
+export function disableSchedule(id: string): Promise<Schedule> {
+  return api<Schedule>('POST', `/schedules/${encodeURIComponent(id)}/disable`);
+}
+
+export function validateSchedule(input: ValidateScheduleInput): Promise<ScheduleValidationResult> {
+  return api<ScheduleValidationResult>('POST', '/schedules/validate', input);
+}
+
 
 
