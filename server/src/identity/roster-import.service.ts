@@ -282,7 +282,7 @@ export class RosterImportService {
                 .leftJoin('users', 'users.id', 'cards.owner_id')
                 .select(['cards.id', 'cards.status', 'cards.owner_id', 'users.external_id as owner_external_id'])
                 .where('cards.uid_index', '=', index)
-                .forUpdate()
+                .forUpdate('cards') // only the card row: users is on the nullable side of the join
                 .executeTakeFirst();
 
               if (!existingCard) {
