@@ -7,6 +7,11 @@ import { RequireAuth } from './auth/RequireAuth';
 import { Layout } from './components/Layout';
 import { LoginPage } from './pages/LoginPage';
 import { WorkstationsPage } from './pages/WorkstationsPage';
+import { UsersPage } from './pages/UsersPage';
+import { UserDetailPage } from './pages/UserDetailPage';
+import { GroupsPage } from './pages/GroupsPage';
+import { GroupDetailPage } from './pages/GroupDetailPage';
+import { CardsPage } from './pages/CardsPage';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -33,6 +38,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
               }
             >
               <Route path="/workstations" element={<WorkstationsPage />} />
+              <Route path="/users" element={<UsersPage />} />
+              <Route path="/users/:id" element={<UserDetailPage />} />
+              <Route path="/groups" element={<GroupsPage />} />
+              <Route path="/groups/:id" element={<GroupDetailPage />} />
+              <Route path="/cards" element={<CardsPage />} />
               <Route path="/" element={<Navigate to="/workstations" replace />} />
               <Route path="*" element={<Navigate to="/workstations" replace />} />
             </Route>

@@ -37,3 +37,93 @@ export interface WorkstationSummary {
   } | null;
   flags: WorkstationFlag[];
 }
+
+export interface Page<T> {
+  items: T[];
+  next_cursor: string | null;
+}
+
+export type UserStatus = 'active' | 'inactive';
+
+export interface User {
+  id: string;
+  external_id: string;
+  full_name: string;
+  email: string | null;
+  status: UserStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export type UserDetail = User & {
+  cards: {
+    id: string;
+    status: 'active' | 'disabled' | 'unbound';
+    uid_length: number;
+    created_at: string;
+  }[];
+  groups: {
+    id: string;
+    name: string;
+  }[];
+};
+
+export interface Group {
+  id: string;
+  name: string;
+  description: string | null;
+  member_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export type CardStatus = 'active' | 'disabled' | 'unbound';
+
+export interface CardOwner {
+  id: string;
+  external_id: string;
+  full_name: string;
+}
+
+export interface Card {
+  id: string;
+  status: CardStatus;
+  uid_length: number;
+  owner: CardOwner | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type CardDetail = Card & {
+  uid: string;
+};
+
+export interface AuditWorkstation {
+  id: string;
+  mqtt_identity: string;
+  hostname: string;
+  zone: { id: string; name: string } | null;
+}
+
+export interface AuditLog {
+  id: string;
+  entry_id: string;
+  occurred_at: string;
+  received_at: string;
+  outcome: string;
+  reason: string;
+  detail: unknown;
+  user: unknown;
+  card: unknown;
+  workstation: AuditWorkstation | null;
+  target_os_username: string | null;
+  data_version: number;
+  matched_schedule_ids: string[];
+  has_card_uid: boolean;
+}
+
+export type AuditLogDetail = AuditLog & {
+  card_uid: string | null;
+  reader_raw: string | null;
+};
+

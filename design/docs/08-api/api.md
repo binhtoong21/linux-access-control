@@ -60,7 +60,7 @@ Mọi request ghi (`POST`/`PUT`/`PATCH`/`DELETE`) từ Dashboard, kể cả `POS
 | PATCH | `/groups/{id}` | Sửa | `{name?, description?}` | 200 |
 | DELETE | `/groups/{id}` | Xóa | — | 204; 409 `REFERENCED_BY_SCHEDULE` (BR-017) |
 | GET | `/groups/{id}/members` | Thành viên | — | 200 `User[]` |
-| PUT | `/groups/{id}/members` | Thêm thành viên (hàng loạt, chỉ thêm, thành viên đã có giữ nguyên) | `{user_ids: []}` (1–500 id) | 200 `{added}`; 400 `VALIDATION_ERROR` kèm `details` liệt kê id không tồn tại, khi đó không thêm ai |
+| PUT | `/groups/{id}/members` | Thêm thành viên (hàng loạt, chỉ thêm, thành viên đã có giữ nguyên) | `{user_ids: []}` (1–500 id) | 200 `{added: [user_id]}` (chỉ những người vừa được thêm, sắp theo id); 400 `VALIDATION_ERROR` kèm `details` liệt kê id không tồn tại, khi đó không thêm ai |
 | DELETE | `/groups/{id}/members/{user_id}` | Bớt thành viên | — | 204 |
 
 ### Thẻ (FR-032, FR-033, FR-073)
