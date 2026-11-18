@@ -8,6 +8,7 @@ import { validationExceptionFactory } from './shared/http/app-error';
 export function configureApp(app: INestApplication): void {
   // Behind Nginx on the same host: trust X-Forwarded-For only from loopback, so req.ip is the real client (login throttle).
   (app as NestExpressApplication).set('trust proxy', 'loopback');
+  (app as NestExpressApplication).useBodyParser('json', { limit: '2mb' });
   app.use(cookieParser());
   app.setGlobalPrefix('api/v1');
   app.useGlobalFilters(new ApiExceptionFilter());

@@ -11,7 +11,9 @@ import { CardsController } from './cards.controller';
 import { CardsService } from './cards.service';
 import { GroupsController } from './groups.controller';
 import { GroupsService } from './groups.service';
+import { ImportsController } from './imports.controller';
 import { LoginThrottle } from './login-throttle';
+import { RosterImportService } from './roster-import.service';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
 
@@ -27,13 +29,14 @@ import { UsersService } from './users.service';
       }),
     }),
   ],
-  controllers: [AuthController, AdminsController, UsersController, GroupsController, CardsController],
+  controllers: [AuthController, AdminsController, UsersController, GroupsController, CardsController, ImportsController],
   providers: [
     AuthService,
     AdminsService,
     UsersService,
     GroupsService,
     CardsService,
+    RosterImportService,
     { provide: LoginThrottle, useValue: new LoginThrottle() },
     { provide: APP_GUARD, useClass: AuthGuard },
   ],
