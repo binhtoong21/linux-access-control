@@ -7,7 +7,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { WorkstationsPage } from './WorkstationsPage';
 import type { WorkstationSummary } from '../api/types';
 
-
 const mockWorkstations: WorkstationSummary[] = [
   {
     id: 'ws-1',
@@ -81,21 +80,25 @@ describe('WorkstationsPage', () => {
 
     renderWorkstationsPage();
 
+    expect(await screen.findByText('Máy trạm')).toBeInTheDocument();
+    expect(screen.getByText('Trạng thái các máy trạm, cập nhật mỗi 5 giây.')).toBeInTheDocument();
+
     // Verify row 1 (online, zone Lab A, current session, stuck sync flag)
-    const hostLink1 = await screen.findByRole('link', { name: 'lab-a-01' });
+    const hostLink1 = await screen.findByRole('link', { name: 'ws-01' });
     expect(hostLink1).toHaveAttribute('href', '/workstations/ws-1');
-    expect(screen.getByText('ws-01')).toBeInTheDocument();
+    expect(screen.getByText('lab-a-01')).toBeInTheDocument();
     expect(screen.getByText('Lab A')).toBeInTheDocument();
-    expect(screen.getByText('Online')).toBeInTheDocument();
     const row1 = hostLink1.closest('tr')!;
+    expect(within(row1).getByText('Online')).toBeInTheDocument();
     expect(within(row1).getByText('Sẵn sàng')).toBeInTheDocument();
     expect(screen.getByText(/Nguyễn Văn A \(SV001\)/)).toBeInTheDocument();
     expect(screen.getByText(/Kẹt \(10\/15\)/)).toBeInTheDocument();
     expect(screen.getByText('Kẹt đồng bộ')).toBeInTheDocument();
 
     // Verify row 2 (offline, zone null, no session, in_sync)
-    const hostLink2 = screen.getByRole('link', { name: 'lab-b-02' });
+    const hostLink2 = screen.getByRole('link', { name: 'ws-02' });
     expect(hostLink2).toHaveAttribute('href', '/workstations/ws-2');
+    expect(screen.getByText('lab-b-02')).toBeInTheDocument();
     const row2 = hostLink2.closest('tr')!;
     expect(within(row2).getByText('ws-02')).toBeInTheDocument();
     expect(within(row2).getByText('Offline')).toBeInTheDocument();
@@ -109,6 +112,7 @@ describe('WorkstationsPage', () => {
       {
         ...mockWorkstations[0],
         id: 'ws-ready',
+        mqtt_identity: 'ws-ready-id',
         hostname: 'ws-ready',
         connectivity: 'online',
         trust_state: 'Fresh',
@@ -117,6 +121,7 @@ describe('WorkstationsPage', () => {
       {
         ...mockWorkstations[0],
         id: 'ws-offline-ok',
+        mqtt_identity: 'ws-offline-ok-id',
         hostname: 'ws-offline-ok',
         connectivity: 'offline',
         trust_state: 'Fresh',
@@ -127,6 +132,7 @@ describe('WorkstationsPage', () => {
       {
         ...mockWorkstations[0],
         id: 'ws-offline-unknown',
+        mqtt_identity: 'ws-offline-unknown-id',
         hostname: 'ws-offline-unknown',
         connectivity: 'offline',
         trust_state: 'Fresh',
@@ -135,6 +141,7 @@ describe('WorkstationsPage', () => {
       {
         ...mockWorkstations[0],
         id: 'ws-expired',
+        mqtt_identity: 'ws-expired-id',
         hostname: 'ws-expired',
         connectivity: 'offline',
         trust_state: 'Expired',
@@ -143,6 +150,7 @@ describe('WorkstationsPage', () => {
       {
         ...mockWorkstations[0],
         id: 'ws-clock',
+        mqtt_identity: 'ws-clock-id',
         hostname: 'ws-clock',
         connectivity: 'online',
         trust_state: 'ClockInvalid',
@@ -150,6 +158,7 @@ describe('WorkstationsPage', () => {
       {
         ...mockWorkstations[0],
         id: 'ws-disabled',
+        mqtt_identity: 'ws-disabled-id',
         hostname: 'ws-disabled',
         status: 'disabled',
         connectivity: 'online',
@@ -170,7 +179,7 @@ describe('WorkstationsPage', () => {
 
     renderWorkstationsPage();
 
-    expect(await screen.findByText('ws-ready')).toBeInTheDocument();
+    expect(await screen.findByText('ws-ready-id')).toBeInTheDocument();
 
     expect(screen.getByText('Offline, không rõ')).toBeInTheDocument();
     const okBadge = screen.getByText('Offline, còn dữ liệu');
@@ -206,8 +215,8 @@ describe('WorkstationsPage', () => {
       expect(fetchMock).toHaveBeenCalledWith('/api/v1/workstations', expect.anything());
     });
 
-    const filterSelect = screen.getByLabelText(/Kết nối/i);
-    await user.selectOptions(filterSelect, 'offline');
+    const offlineBtn = screen.getByRole('button', { name: 'Offline' });
+    await user.click(offlineBtn);
 
     await waitFor(() => {
       const offlineCall = fetchMock.mock.calls.find(
@@ -222,6 +231,7 @@ describe('WorkstationsPage', () => {
       {
         ...mockWorkstations[0],
         id: 'ws-flags',
+        mqtt_identity: 'ws-flags-id',
         hostname: 'lab-flags',
         flags: ['ingest_rejects', 'security_alert', 'stuck_sync'],
       },
@@ -251,4 +261,3 @@ describe('WorkstationsPage', () => {
     expect(stuckSpan.tagName.toLowerCase()).toBe('span');
   });
 });
-

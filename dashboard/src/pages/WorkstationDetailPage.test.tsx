@@ -209,7 +209,6 @@ describe('WorkstationDetailPage', () => {
 
   it('turning off the default asks for confirmation and sends nothing when cancelled', async () => {
     const user = userEvent.setup();
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
 
     const fetchMock = vi.fn().mockImplementation((url: string) => {
       if (url === '/api/v1/workstations/ws-1') {
@@ -237,9 +236,16 @@ describe('WorkstationDetailPage', () => {
 
     await user.click(turnOffBtn);
 
-    expect(confirmSpy).toHaveBeenCalledWith(
-      'Đây là profile mặc định. Tắt nó thì các lịch không chỉ định profile sẽ bị từ chối ở máy này. Tiếp tục?',
-    );
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Tắt profile mặc định?')).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(
+        'Đây là profile mặc định. Tắt nó thì các lịch không chỉ định profile sẽ bị từ chối ở máy này. Tiếp tục?',
+      ),
+    ).toBeInTheDocument();
+
+    const cancelBtn = within(dialog).getByRole('button', { name: 'Hủy' });
+    await user.click(cancelBtn);
 
     const profileCalls = fetchMock.mock.calls.filter(([url]) =>
       url.includes('/profiles/student'),
@@ -247,9 +253,62 @@ describe('WorkstationDetailPage', () => {
     expect(profileCalls).toHaveLength(0);
   });
 
+  it('turning off the default and confirming sends PATCH …/profiles/{name} with {"status":"disabled"}', async () => {
+    const user = userEvent.setup();
+    let patchBody: unknown = null;
+
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/v1/workstations/ws-1') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify(mockWorkstationDetail),
+        });
+      }
+      if (url === '/api/v1/zones') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify(mockZones),
+        });
+      }
+      if (
+        url === '/api/v1/workstations/ws-1/profiles/student' &&
+        init?.method === 'PATCH'
+      ) {
+        patchBody = JSON.parse(init.body as string);
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              ...mockWorkstationDetail.profiles[0],
+              status: 'disabled',
+            }),
+        });
+      }
+      return Promise.reject(new Error(`Unhandled URL: ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderWorkstationDetailPage();
+
+    const studentRow = (await screen.findByText('student')).closest('tr')!;
+    const turnOffBtn = within(studentRow).getByRole('button', { name: 'Tắt' });
+
+    await user.click(turnOffBtn);
+
+    const dialog = await screen.findByRole('dialog');
+    const confirmBtn = within(dialog).getByRole('button', { name: 'Tắt profile' });
+    await user.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(patchBody).toEqual({ status: 'disabled' });
+    });
+  });
+
   it('turning off a non-default profile sends {"status":"disabled"} without a confirm', async () => {
     const user = userEvent.setup();
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     let patchBody: unknown = null;
 
     const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
@@ -293,7 +352,7 @@ describe('WorkstationDetailPage', () => {
 
     await user.click(turnOffBtn);
 
-    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     await waitFor(() => {
       expect(patchBody).toEqual({ status: 'disabled' });
     });
@@ -348,7 +407,6 @@ describe('WorkstationDetailPage', () => {
 
   it('disable sends nothing when the typed name is wrong and one POST …/disable with {"confirm":true} when right', async () => {
     const user = userEvent.setup();
-    const promptSpy = vi.spyOn(window, 'prompt');
     let disableCallBody: unknown = null;
 
     const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
@@ -385,14 +443,33 @@ describe('WorkstationDetailPage', () => {
       name: 'Vô hiệu hóa máy',
     });
 
-    // 1. Wrong name
-    promptSpy.mockReturnValueOnce('wrong-hostname');
     await user.click(disableBtn);
+
+    const dialog = await screen.findByRole('dialog');
+    expect(
+      within(dialog).getByText('Vô hiệu hóa máy ws-01?'),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(
+        'Máy bị thu hồi chứng chỉ ngay. Máy vẫn cho quẹt thẻ đến khi hết hạn tin cậy (tối đa 24 giờ). Không thể bật lại, trừ khi cài lại và duyệt lại.',
+      ),
+    ).toBeInTheDocument();
+
+    const confirmBtn = within(dialog).getByRole('button', { name: 'Vô hiệu hóa' });
+    expect(confirmBtn).toBeDisabled();
+
+    // 1. Wrong name
+    const input = within(dialog).getByLabelText(/Gõ ws-01 để xác nhận/i);
+    await user.type(input, 'wrong-hostname');
+    expect(confirmBtn).toBeDisabled();
     expect(disableCallBody).toBeNull();
 
     // 2. Right name: ws-01 (mqtt_identity)
-    promptSpy.mockReturnValueOnce('ws-01');
-    await user.click(disableBtn);
+    await user.clear(input);
+    await user.type(input, 'ws-01');
+    expect(confirmBtn).not.toBeDisabled();
+
+    await user.click(confirmBtn);
 
     await waitFor(() => {
       expect(disableCallBody).toEqual({ confirm: true });
@@ -464,4 +541,3 @@ describe('WorkstationDetailPage', () => {
     expect(stuckSpan.tagName.toLowerCase()).toBe('span');
   });
 });
-

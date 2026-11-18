@@ -5,6 +5,18 @@ import { listWorkstations, type WorkstationFilter } from '../api/endpoints';
 import type { WorkstationFlag } from '../api/types';
 import { formatAgo, formatTime, readiness, type ReadinessState } from '../lib/time';
 import { useNow } from '../lib/useNow';
+import {
+  Button,
+  EmptyRow,
+  Notice,
+  PageHeader,
+  StatusPill,
+  Table,
+  TD,
+  TH,
+  THead,
+  TR,
+} from '../components/ui';
 
 const FLAG_LABELS: Record<WorkstationFlag, string> = {
   overdue_session: 'Quá giờ',
@@ -18,56 +30,40 @@ const FLAG_LABELS: Record<WorkstationFlag, string> = {
 export function ReadinessBadge({ state }: { state: ReadinessState }) {
   switch (state) {
     case 'ready':
-      return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-          Sẵn sàng
-        </span>
-      );
+      return <StatusPill tone="ok">Sẵn sàng</StatusPill>;
     case 'offline_ok':
       return (
-        <span
+        <StatusPill
+          tone="warn"
           title="Máy vẫn cho quẹt thẻ theo dữ liệu đã nhận đến khi hết hạn tin cậy"
-          className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800"
         >
           Offline, còn dữ liệu
-        </span>
+        </StatusPill>
       );
     case 'offline_unknown':
       return (
-        <span
+        <StatusPill
+          tone="warn"
           title="Lần cuối kết nối, máy chưa chạy dữ liệu mới nhất nên không biết hạn tin cậy còn bao lâu. Bật máy để kiểm tra."
-          className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800"
         >
           Offline, không rõ
-        </span>
+        </StatusPill>
       );
     case 'lease_expired':
       return (
-        <span
+        <StatusPill
+          tone="danger"
           title="Máy sẽ từ chối quẹt thẻ cho đến khi kết nối lại server. Bật máy trước giờ sử dụng."
-          className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800"
         >
           Hết hạn tin cậy
-        </span>
+        </StatusPill>
       );
     case 'no_data':
-      return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
-          Chưa có dữ liệu
-        </span>
-      );
+      return <StatusPill tone="neutral">Chưa có dữ liệu</StatusPill>;
     case 'clock_invalid':
-      return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
-          Đồng hồ sai
-        </span>
-      );
+      return <StatusPill tone="danger">Đồng hồ sai</StatusPill>;
     case 'disabled':
-      return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
-          Đã vô hiệu hóa
-        </span>
-      );
+      return <StatusPill tone="neutral">Đã vô hiệu hóa</StatusPill>;
   }
 }
 
@@ -88,171 +84,164 @@ export function WorkstationsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h1 className="text-xl font-bold text-gray-900">Danh sách máy trạm</h1>
-        <div className="flex items-center space-x-2">
-          <label htmlFor="connectivity-filter" className="text-sm font-medium text-gray-700">
-            Kết nối:
-          </label>
-          <select
-            id="connectivity-filter"
-            value={connectivityFilter}
-            onChange={(e) => setConnectivityFilter(e.target.value as 'all' | 'online' | 'offline')}
-            className="border border-gray-300 rounded px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="all">Tất cả</option>
-            <option value="online">Đang online</option>
-            <option value="offline">Offline</option>
-          </select>
-        </div>
-      </div>
+      <PageHeader
+        title="Máy trạm"
+        description="Trạng thái các máy trạm, cập nhật mỗi 5 giây."
+        actions={
+          <div className="flex items-center gap-1">
+            <Button
+              variant={connectivityFilter === 'all' ? 'primary' : 'secondary'}
+              size="sm"
+              onClick={() => setConnectivityFilter('all')}
+            >
+              Tất cả
+            </Button>
+            <Button
+              variant={connectivityFilter === 'online' ? 'primary' : 'secondary'}
+              size="sm"
+              onClick={() => setConnectivityFilter('online')}
+            >
+              Online
+            </Button>
+            <Button
+              variant={connectivityFilter === 'offline' ? 'primary' : 'secondary'}
+              size="sm"
+              onClick={() => setConnectivityFilter('offline')}
+            >
+              Offline
+            </Button>
+          </div>
+        }
+      />
 
       {isError && data && (
-        <div className="p-3 bg-amber-50 text-amber-700 text-sm rounded border border-amber-200">
-          Mất kết nối, đang thử lại…
-        </div>
+        <Notice tone="warn">Mất kết nối, đang thử lại…</Notice>
       )}
 
       {isLoading && (
-        <div className="p-8 text-center text-gray-500">Đang tải…</div>
+        <div className="py-8 text-center text-sm text-ink-muted">Đang tải…</div>
       )}
 
       {isError && !data && (
-        <div className="p-4 bg-red-50 text-red-700 rounded border border-red-200">
+        <Notice tone="danger">
           {error instanceof Error ? error.message : 'Không kết nối được máy chủ'}
-        </div>
+        </Notice>
       )}
 
       {!isLoading && data && (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-gray-50 text-gray-600 font-medium">
-                <tr>
-                  <th className="px-4 py-3 text-left">Máy</th>
-                  <th className="px-4 py-3 text-left">Zone</th>
-                  <th className="px-4 py-3 text-left">Kết nối</th>
-                  <th className="px-4 py-3 text-left">Sẵn sàng</th>
-                  <th className="px-4 py-3 text-left">Đang dùng</th>
-                  <th className="px-4 py-3 text-left">Đồng bộ</th>
-                  <th className="px-4 py-3 text-left">Cảnh báo</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {data.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
-                      Chưa có máy nào
-                    </td>
-                  </tr>
-                ) : (
-                  data.map((ws) => (
-                    <tr key={ws.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3">
-                        <Link
-                          to={`/workstations/${encodeURIComponent(ws.id)}`}
-                          className="font-medium text-blue-600 hover:underline"
-                        >
-                          {ws.hostname}
-                        </Link>
-                        <div className="text-xs text-gray-500">{ws.mqtt_identity}</div>
-                      </td>
-                      <td className="px-4 py-3 text-gray-700">
-                        {ws.zone ? ws.zone.name : '—'}
-                      </td>
-                      <td className="px-4 py-3">
+        <Table>
+          <THead>
+            <TR>
+              <TH>Máy</TH>
+              <TH>Zone</TH>
+              <TH>Kết nối</TH>
+              <TH>Sẵn sàng</TH>
+              <TH>Đang dùng</TH>
+              <TH>Đồng bộ</TH>
+              <TH>Cảnh báo</TH>
+            </TR>
+          </THead>
+          <tbody>
+            {data.length === 0 ? (
+              <EmptyRow colSpan={7}>Chưa có máy nào</EmptyRow>
+            ) : (
+              data.map((ws) => (
+                <TR key={ws.id} interactive>
+                  <TD>
+                    <Link
+                      to={`/workstations/${encodeURIComponent(ws.id)}`}
+                      className="font-mono font-medium text-accent hover:underline block"
+                    >
+                      {ws.mqtt_identity}
+                    </Link>
+                    <div className="text-xs text-ink-muted">{ws.hostname}</div>
+                  </TD>
+                  <TD className="text-ink">
+                    {ws.zone ? ws.zone.name : '—'}
+                  </TD>
+                  <TD>
+                    <div>
+                      <StatusPill tone={ws.connectivity === 'online' ? 'ok' : 'neutral'}>
+                        {ws.connectivity === 'online' ? 'Online' : 'Offline'}
+                      </StatusPill>
+                    </div>
+                    {ws.last_heartbeat_at && (
+                      <div className="text-xs text-ink-muted mt-0.5">
+                        {formatAgo(ws.last_heartbeat_at, now)}
+                      </div>
+                    )}
+                  </TD>
+                  <TD>
+                    <ReadinessBadge state={readiness(ws, now)} />
+                  </TD>
+                  <TD className="text-ink">
+                    {ws.current_session ? (
+                      <div>
                         <div>
-                          {ws.connectivity === 'online' ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                              Online
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
-                              Offline
-                            </span>
-                          )}
+                          {ws.current_session.user.full_name} ({ws.current_session.user.external_id})
                         </div>
-                        {ws.last_heartbeat_at && (
-                          <div className="text-xs text-gray-500 mt-0.5">
-                            {formatAgo(ws.last_heartbeat_at, now)}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <ReadinessBadge state={readiness(ws, now)} />
-                      </td>
-                      <td className="px-4 py-3 text-gray-700">
-                        {ws.current_session ? (
-                          <div>
-                            <div>
-                              {ws.current_session.user.full_name} ({ws.current_session.user.external_id})
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              đến {formatTime(ws.current_session.expires_at)}
-                            </div>
-                          </div>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700">
-                        {ws.sync.state === 'in_sync' && <span>Đã đồng bộ</span>}
-                        {ws.sync.state === 'pending' && (
-                          <span>
-                            Đang chờ ({ws.sync.acked_version}/{ws.sync.desired_version})
-                          </span>
-                        )}
-                        {ws.sync.state === 'stuck' && (
-                          <span className="text-red-600 font-medium">
-                            Kẹt ({ws.sync.acked_version}/{ws.sync.desired_version})
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap gap-1">
-                          {ws.flags.map((flag) => {
-                            const label = FLAG_LABELS[flag] || flag;
-                            if (flag === 'ingest_rejects' || flag === 'security_alert') {
-                              return (
-                                <Link
-                                  key={flag}
-                                  to={`/issues?workstation_id=${encodeURIComponent(ws.id)}`}
-                                  className="inline-block px-1.5 py-0.5 text-xs font-medium rounded bg-red-100 text-red-800 hover:underline"
-                                >
-                                  {label}
-                                </Link>
-                              );
-                            }
-                            return (
-                              <span
-                                key={flag}
-                                className="inline-block px-1.5 py-0.5 text-xs font-medium rounded bg-red-100 text-red-800"
-                              >
-                                {label}
-                              </span>
-                            );
-                          })}
-                          {ws.clock_skew_detected && (
-                            <span className="inline-block px-1.5 py-0.5 text-xs font-medium rounded bg-amber-100 text-amber-800">
-                              Lệch giờ
-                            </span>
-                          )}
-                          {ws.flags.length === 0 && !ws.clock_skew_detected && (
-                            <span className="text-gray-400">—</span>
-                          )}
+                        <div className="text-xs text-ink-muted">
+                          đến {formatTime(ws.current_session.expires_at)}
                         </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                      </div>
+                    ) : (
+                      '—'
+                    )}
+                  </TD>
+                  <TD>
+                    {ws.sync.state === 'in_sync' && (
+                      <StatusPill tone="ok">Đã đồng bộ</StatusPill>
+                    )}
+                    {ws.sync.state === 'pending' && (
+                      <StatusPill tone="info">
+                        Đang chờ ({ws.sync.acked_version}/{ws.sync.desired_version})
+                      </StatusPill>
+                    )}
+                    {ws.sync.state === 'stuck' && (
+                      <StatusPill tone="danger">
+                        Kẹt ({ws.sync.acked_version}/{ws.sync.desired_version})
+                      </StatusPill>
+                    )}
+                  </TD>
+                  <TD>
+                    <div className="flex flex-wrap gap-1">
+                      {ws.flags.map((flag) => {
+                        const label = FLAG_LABELS[flag] || flag;
+                        const tone = flag === 'missing_profile' ? 'warn' : 'danger';
+                        if (flag === 'ingest_rejects' || flag === 'security_alert') {
+                          return (
+                            <Link
+                              key={flag}
+                              to={`/issues?workstation_id=${encodeURIComponent(ws.id)}`}
+                              className="hover:underline"
+                            >
+                              <StatusPill tone={tone}>{label}</StatusPill>
+                            </Link>
+                          );
+                        }
+                        return (
+                          <StatusPill key={flag} tone={tone}>
+                            {label}
+                          </StatusPill>
+                        );
+                      })}
+                      {ws.clock_skew_detected && (
+                        <StatusPill tone="warn">Lệch giờ</StatusPill>
+                      )}
+                      {ws.flags.length === 0 && !ws.clock_skew_detected && (
+                        <span className="text-ink-muted">—</span>
+                      )}
+                    </div>
+                  </TD>
+                </TR>
+              ))
+            )}
+          </tbody>
+        </Table>
       )}
 
       {dataUpdatedAt > 0 && (
-        <div className="text-xs text-gray-500 text-right">
+        <div className="text-xs text-ink-muted text-right">
           Cập nhật lúc {formatTime(dataUpdatedAt, true)}
         </div>
       )}

@@ -8,7 +8,7 @@ import { AuthProvider } from '../auth/AuthProvider';
 import { RequireAuth } from '../auth/RequireAuth';
 import { Layout } from './Layout';
 
-function renderLayoutWithAuth() {
+function renderLayoutWithAuth(initialPath = '/workstations') {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -16,7 +16,7 @@ function renderLayoutWithAuth() {
   return render(
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <MemoryRouter initialEntries={['/workstations']}>
+        <MemoryRouter initialEntries={[initialPath]}>
           <Routes>
             <Route path="/login" element={<div>Màn hình đăng nhập</div>} />
             <Route
@@ -27,6 +27,7 @@ function renderLayoutWithAuth() {
               }
             >
               <Route path="/workstations" element={<div>Nội dung máy trạm</div>} />
+              <Route path="/issues" element={<div>Nội dung sự cố</div>} />
             </Route>
           </Routes>
         </MemoryRouter>
@@ -99,5 +100,61 @@ describe('Layout component', () => {
     await user.click(logoutBtn);
 
     expect(await screen.findByText('Màn hình đăng nhập')).toBeInTheDocument();
+  });
+
+  it('renders sidebar navigation groups and responds to menu button, escape and item click', async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url === '/api/v1/auth/me') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ id: 'adm-1', username: 'admin', display_name: 'Quản trị viên' }),
+        });
+      }
+      return Promise.reject(new Error(`Unhandled URL: ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderLayoutWithAuth();
+
+    // Verify nav groups and product name
+    expect(await screen.findByText('Quản trị')).toBeInTheDocument();
+    expect(screen.getAllByText('NFC Lab').length).toBeGreaterThan(0);
+    expect(screen.getByText('Vận hành')).toBeInTheDocument();
+    expect(screen.getByText('Danh tính')).toBeInTheDocument();
+    expect(screen.getByText('Cấu hình')).toBeInTheDocument();
+
+    // Verify navigation links
+    expect(screen.getByRole('link', { name: 'Máy trạm' })).toHaveAttribute('href', '/workstations');
+    expect(screen.getByRole('link', { name: 'Sự cố' })).toHaveAttribute('href', '/issues');
+    expect(screen.getByRole('link', { name: 'Lịch sử' })).toHaveAttribute('href', '/history');
+    expect(screen.getByRole('link', { name: 'Người dùng' })).toHaveAttribute('href', '/users');
+    expect(screen.getByRole('link', { name: 'Nhóm' })).toHaveAttribute('href', '/groups');
+    expect(screen.getByRole('link', { name: 'Thẻ' })).toHaveAttribute('href', '/cards');
+    expect(screen.getByRole('link', { name: 'Nhập CSV' })).toHaveAttribute('href', '/import');
+    expect(screen.getByRole('link', { name: 'Lịch' })).toHaveAttribute('href', '/schedules');
+    expect(screen.getByRole('link', { name: 'Zone' })).toHaveAttribute('href', '/zones');
+    expect(screen.getByRole('link', { name: 'Duyệt máy' })).toHaveAttribute('href', '/enrollment');
+
+    // Menu button toggles mobile overlay
+    const menuBtn = screen.getByRole('button', { name: 'Menu' });
+    expect(screen.queryByTestId('sidebar-backdrop')).not.toBeInTheDocument();
+
+    await user.click(menuBtn);
+    expect(screen.getByTestId('sidebar-backdrop')).toBeInTheDocument();
+
+    // Escape closes mobile overlay
+    await user.keyboard('{Escape}');
+    expect(screen.queryByTestId('sidebar-backdrop')).not.toBeInTheDocument();
+
+    // Opening again and clicking an item closes mobile overlay and navigates
+    await user.click(menuBtn);
+    expect(screen.getByTestId('sidebar-backdrop')).toBeInTheDocument();
+
+    const issuesLink = screen.getByRole('link', { name: 'Sự cố' });
+    await user.click(issuesLink);
+    expect(screen.queryByTestId('sidebar-backdrop')).not.toBeInTheDocument();
+    expect(await screen.findByText('Nội dung sự cố')).toBeInTheDocument();
   });
 });
