@@ -14,6 +14,7 @@ import type {
   WorkstationSummary,
 } from '../api/types';
 import { alertKindLabel } from '../lib/labels';
+import { errorMessage } from '../lib/errors';
 import { formatDateTime } from '../lib/time';
 
 export function IssuesPage() {
@@ -28,6 +29,7 @@ export function IssuesPage() {
   const [expandedAlerts, setExpandedAlerts] = useState<Record<string, boolean>>({});
 
   const [resolvingIds, setResolvingIds] = useState<Record<string, boolean>>({});
+  const [resolveErrors, setResolveErrors] = useState<Record<string, string>>({});
   const [resolvedOverrides, setResolvedOverrides] = useState<
     Record<string, { resolved_at: string; note: string | null }>
   >({});
@@ -121,6 +123,7 @@ export function IssuesPage() {
       return; // cancelled
     }
 
+    setResolveErrors((prev) => ({ ...prev, [id]: '' }));
     try {
       const trimmed = notePrompt.trim();
       const res = await resolveIngestReject(id, trimmed ? { note: trimmed } : undefined);
@@ -135,6 +138,7 @@ export function IssuesPage() {
       await queryClient.invalidateQueries({ queryKey: ['workstations'] });
     } catch (err) {
       inFlightResolvesRef.current[id] = false;
+      setResolveErrors((prev) => ({ ...prev, [id]: errorMessage(err) }));
     } finally {
       setResolvingIds((prev) => ({ ...prev, [id]: false }));
     }
@@ -297,6 +301,11 @@ export function IssuesPage() {
                           )}
                         </td>
                         <td className="px-4 py-3 text-right whitespace-nowrap">
+                          {!isResolved && resolveErrors[reject.id] && (
+                            <p role="alert" className="mb-1 text-xs text-red-600 whitespace-normal">
+                              Không đánh dấu được: {resolveErrors[reject.id]}
+                            </p>
+                          )}
                           {!isResolved ? (
                             <button
                               type="button"

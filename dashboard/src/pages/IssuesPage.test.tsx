@@ -299,6 +299,33 @@ describe('IssuesPage', () => {
     });
   });
 
+  it('a failed resolve shows the error on the row and can be retried', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'prompt').mockReturnValue('');
+    let attempts = 0;
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, text: async () => JSON.stringify(body) });
+      if (url === '/api/v1/workstations') return ok(mockWorkstations);
+      if (url.startsWith('/api/v1/ingest-rejects') && !url.includes('/resolve')) return ok({ items: [mockUnresolvedReject], next_cursor: null });
+      if (url === '/api/v1/ingest-rejects/rej-1/resolve' && init?.method === 'POST') {
+        attempts++;
+        if (attempts === 1) return Promise.resolve({ ok: false, status: 500, text: async () => '' });
+        return ok({ ...mockUnresolvedReject, resolved_at: '2026-11-18T10:00:00Z', note: null });
+      }
+      if (url.startsWith('/api/v1/workstation-alerts')) return ok({ items: [], next_cursor: null });
+      return Promise.reject(new Error(`Unhandled URL: ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderIssuesPage();
+    await user.click(await screen.findByRole('button', { name: 'Đánh dấu đã xem' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Không đánh dấu được');
+
+    await user.click(screen.getByRole('button', { name: 'Đánh dấu đã xem' }));
+    await waitFor(() => expect(attempts).toBe(2));
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+  });
+
   it('"Đã xem" filter sends resolved=true and renders resolved text', async () => {
     const user = userEvent.setup();
 

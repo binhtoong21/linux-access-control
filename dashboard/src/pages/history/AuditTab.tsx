@@ -114,15 +114,15 @@ export function AuditTab({
   const handleToday = () => {
     const today = getVnDateString();
     setFromTime(`${today}T00:00`);
-    setToTime(`${today}T23:59`);
+    setToTime(`${getVnDateString(new Date(Date.now() + 24 * 60 * 60 * 1000))}T00:00`); // `to` is exclusive: 00:00 of the next day
   };
 
   const handleSevenDays = () => {
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const sevenDaysAgo = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000) /* 7 calendar days including today */;
     const fromDate = getVnDateString(sevenDaysAgo);
     const today = getVnDateString();
     setFromTime(`${fromDate}T00:00`);
-    setToTime(`${today}T23:59`);
+    setToTime(`${getVnDateString(new Date(Date.now() + 24 * 60 * 60 * 1000))}T00:00`); // `to` is exclusive: 00:00 of the next day
   };
 
   const handleClearTime = () => {

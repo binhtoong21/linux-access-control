@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { HistoryPage } from './HistoryPage';
+import { getVnDateString } from './history/AuditTab';
 import type {
   AdminAction,
   AuditLog,
@@ -148,6 +149,28 @@ describe('HistoryPage', () => {
     // Check late record note: only 1 late record has "nhận lúc"
     const lateNotes = screen.getAllByText(/nhận lúc/);
     expect(lateNotes).toHaveLength(1);
+  });
+
+  it('quick ranges end at 00:00 of the next day (to is exclusive) and 7 days include today', async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.startsWith('/api/v1/audit-logs')) {
+        return Promise.resolve({ ok: true, status: 200, text: async () => JSON.stringify({ items: [], next_cursor: null }) });
+      }
+      return Promise.resolve({ ok: true, status: 200, text: async () => JSON.stringify([]) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderHistoryPage();
+
+    const day = 24 * 60 * 60 * 1000;
+    const tomorrow = getVnDateString(new Date(Date.now() + day));
+    const sixDaysAgo = getVnDateString(new Date(Date.now() - 6 * day));
+    const auditUrls = () => fetchMock.mock.calls.map(([u]) => u as string).filter((u) => u.startsWith('/api/v1/audit-logs'));
+
+    await user.click(await screen.findByRole('button', { name: 'Hôm nay' }));
+    await waitFor(() => expect(auditUrls().some((u) => decodeURIComponent(u).includes(`to=${tomorrow}T00:00:00+07:00`))).toBe(true));
+    await user.click(screen.getByRole('button', { name: '7 ngày' }));
+    await waitFor(() => expect(auditUrls().some((u) => decodeURIComponent(u).includes(`from=${sixDaysAgo}T00:00:00+07:00`))).toBe(true));
   });
 
   it('filters send outcome=denied and workstation_id=', async () => {
