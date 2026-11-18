@@ -141,6 +141,17 @@ export interface AuditWorkstation {
   zone: { id: string; name: string } | null;
 }
 
+export interface AuditUser {
+  id: string;
+  external_id: string;
+  full_name: string;
+}
+
+export interface AuditCard {
+  id: string;
+  status: CardStatus;
+}
+
 export interface AuditLog {
   id: string;
   entry_id: string;
@@ -149,13 +160,61 @@ export interface AuditLog {
   outcome: string;
   reason: string;
   detail: unknown;
-  user: unknown;
-  card: unknown;
+  user: AuditUser | null;
+  card: AuditCard | null;
   workstation: AuditWorkstation | null;
   target_os_username: string | null;
   data_version: number;
   matched_schedule_ids: string[];
   has_card_uid: boolean;
+}
+
+export type SessionStatus = 'active' | 'completed' | 'forced_logout' | 'abandoned';
+export type SessionEndReason =
+  | 'user_logout'
+  | 'schedule_expired'
+  | 'workstation_rebooted'
+  | 'superseded'
+  | 'os_session_lost';
+export type SessionEndSource = 'reported' | 'reconstructed' | 'inferred';
+
+export interface Session {
+  id: string;
+  decision_id: string;
+  card_id: string | null;
+  os_username: string;
+  boot_id: string;
+  decided_at: string;
+  started_at: string;
+  expires_at: string;
+  status: SessionStatus;
+  ended_at: string | null;
+  end_reason: SessionEndReason | null;
+  end_source: SessionEndSource | null;
+  user: {
+    id: string;
+    external_id: string;
+    full_name: string;
+  };
+  workstation: {
+    id: string;
+    mqtt_identity: string;
+  };
+}
+
+export interface AdminAction {
+  id: string;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  before: unknown;
+  after: unknown;
+  occurred_at: string;
+  admin: {
+    id: string;
+    username: string;
+    display_name: string;
+  };
 }
 
 export type AuditLogDetail = AuditLog & {
@@ -332,6 +391,37 @@ export interface ScheduleValidationResult {
 }
 
 export type ValidateScheduleInput = ScheduleInput & { schedule_id?: string };
+
+export interface IngestReject {
+  id: string;
+  entry_id: string | null;
+  raw_record: unknown;
+  error: string;
+  received_at: string;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  note: string | null;
+  workstation: {
+    id: string;
+    mqtt_identity: string;
+  };
+}
+
+export type IngestRejectResolvedFilter = 'false' | 'true' | 'all';
+
+export interface WorkstationAlert {
+  id: string;
+  entry_id: string;
+  kind: string;
+  detail: unknown;
+  occurred_at: string;
+  received_at: string;
+  workstation: {
+    id: string;
+    mqtt_identity: string;
+  };
+}
+
 
 
 

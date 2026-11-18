@@ -66,6 +66,26 @@ export function Layout() {
               Lịch
             </NavLink>
             <NavLink
+              to="/history"
+              className={({ isActive }) =>
+                isActive
+                  ? 'text-blue-600 font-medium px-2 py-1 rounded bg-blue-50'
+                  : 'text-gray-600 hover:text-gray-900 px-2 py-1'
+              }
+            >
+              Lịch sử
+            </NavLink>
+            <NavLink
+              to="/issues"
+              className={({ isActive }) =>
+                isActive
+                  ? 'text-blue-600 font-medium px-2 py-1 rounded bg-blue-50'
+                  : 'text-gray-600 hover:text-gray-900 px-2 py-1'
+              }
+            >
+              Sự cố
+            </NavLink>
+            <NavLink
               to="/users"
               className={({ isActive }) =>
                 isActive

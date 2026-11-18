@@ -175,6 +175,18 @@ export function WorkstationDetailPage() {
             <p className="text-sm text-gray-500">{workstation.hostname}</p>
           </div>
           <div className="flex items-center space-x-3">
+            <Link
+              to={`/history?tab=audit&workstation_id=${encodeURIComponent(workstation.id)}`}
+              className="text-sm text-blue-600 hover:underline"
+            >
+              Lịch sử quẹt thẻ
+            </Link>
+            <Link
+              to={`/history?tab=sessions&workstation_id=${encodeURIComponent(workstation.id)}`}
+              className="text-sm text-blue-600 hover:underline"
+            >
+              Phiên
+            </Link>
             {workstation.status === 'enrolled' ? (
               <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
                 Đã ghi danh
@@ -290,14 +302,28 @@ export function WorkstationDetailPage() {
             <div>
               <span className="text-gray-500">Cảnh báo: </span>
               <div className="inline-flex flex-wrap gap-1 align-middle">
-                {workstation.flags.map((flag) => (
-                  <span
-                    key={flag}
-                    className="inline-block px-1.5 py-0.5 text-xs font-medium rounded bg-red-100 text-red-800"
-                  >
-                    {FLAG_LABELS[flag] || flag}
-                  </span>
-                ))}
+                {workstation.flags.map((flag) => {
+                  const label = FLAG_LABELS[flag] || flag;
+                  if (flag === 'ingest_rejects' || flag === 'security_alert') {
+                    return (
+                      <Link
+                        key={flag}
+                        to={`/issues?workstation_id=${encodeURIComponent(workstation.id)}`}
+                        className="inline-block px-1.5 py-0.5 text-xs font-medium rounded bg-red-100 text-red-800 hover:underline"
+                      >
+                        {label}
+                      </Link>
+                    );
+                  }
+                  return (
+                    <span
+                      key={flag}
+                      className="inline-block px-1.5 py-0.5 text-xs font-medium rounded bg-red-100 text-red-800"
+                    >
+                      {label}
+                    </span>
+                  );
+                })}
                 {workstation.clock_skew_detected && (
                   <span className="inline-block px-1.5 py-0.5 text-xs font-medium rounded bg-amber-100 text-amber-800">
                     Lệch giờ

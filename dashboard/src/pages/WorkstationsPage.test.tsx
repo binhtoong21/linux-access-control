@@ -216,4 +216,39 @@ describe('WorkstationsPage', () => {
       expect(offlineCall).toBeDefined();
     });
   });
+
+  it('renders ingest_rejects and security_alert flags as links to /issues?workstation_id={id}', async () => {
+    const wsWithFlags: WorkstationSummary[] = [
+      {
+        ...mockWorkstations[0],
+        id: 'ws-flags',
+        hostname: 'lab-flags',
+        flags: ['ingest_rejects', 'security_alert', 'stuck_sync'],
+      },
+    ];
+
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url === '/api/v1/workstations') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify(wsWithFlags),
+        });
+      }
+      return Promise.reject(new Error(`Unhandled URL: ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderWorkstationsPage();
+
+    const rejectLink = await screen.findByRole('link', { name: 'Nhật ký lỗi' });
+    expect(rejectLink).toHaveAttribute('href', '/issues?workstation_id=ws-flags');
+
+    const alertLink = screen.getByRole('link', { name: 'Cảnh báo an ninh' });
+    expect(alertLink).toHaveAttribute('href', '/issues?workstation_id=ws-flags');
+
+    const stuckSpan = screen.getByText('Kẹt đồng bộ');
+    expect(stuckSpan.tagName.toLowerCase()).toBe('span');
+  });
 });
+

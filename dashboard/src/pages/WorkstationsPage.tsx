@@ -210,14 +210,28 @@ export function WorkstationsPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1">
-                          {ws.flags.map((flag) => (
-                            <span
-                              key={flag}
-                              className="inline-block px-1.5 py-0.5 text-xs font-medium rounded bg-red-100 text-red-800"
-                            >
-                              {FLAG_LABELS[flag] || flag}
-                            </span>
-                          ))}
+                          {ws.flags.map((flag) => {
+                            const label = FLAG_LABELS[flag] || flag;
+                            if (flag === 'ingest_rejects' || flag === 'security_alert') {
+                              return (
+                                <Link
+                                  key={flag}
+                                  to={`/issues?workstation_id=${encodeURIComponent(ws.id)}`}
+                                  className="inline-block px-1.5 py-0.5 text-xs font-medium rounded bg-red-100 text-red-800 hover:underline"
+                                >
+                                  {label}
+                                </Link>
+                              );
+                            }
+                            return (
+                              <span
+                                key={flag}
+                                className="inline-block px-1.5 py-0.5 text-xs font-medium rounded bg-red-100 text-red-800"
+                              >
+                                {label}
+                              </span>
+                            );
+                          })}
                           {ws.clock_skew_detected && (
                             <span className="inline-block px-1.5 py-0.5 text-xs font-medium rounded bg-amber-100 text-amber-800">
                               Lệch giờ
