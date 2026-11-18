@@ -71,6 +71,7 @@ export function formatAgo(
 export type ReadinessState =
   | 'ready'
   | 'offline_ok'
+  | 'offline_unknown'
   | 'lease_expired'
   | 'no_data'
   | 'clock_invalid'
@@ -97,8 +98,14 @@ export function readiness(w: WorkstationSummary, now: number = Date.now()): Read
     return 'ready';
   }
   const leaseMs = LEASE_HOURS * 60 * 60 * 1000;
-  if (now - hbTime <= leaseMs) {
-    return 'offline_ok';
+  if (now - hbTime > leaseMs) {
+    // The lease is renewed at most at a heartbeat, so it ran out at the latest LEASE_HOURS after the last one.
+    return 'lease_expired';
   }
-  return 'lease_expired';
+  // The server renews the lease at a heartbeat only when the machine runs the latest snapshot; otherwise the last
+  // renewal may be older than the last heartbeat and the remaining time is unknown.
+  if (w.sync.state !== 'in_sync' || w.flags.includes('apply_error')) {
+    return 'offline_unknown';
+  }
+  return 'offline_ok';
 }

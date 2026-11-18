@@ -121,6 +121,16 @@ describe('WorkstationsPage', () => {
         connectivity: 'offline',
         trust_state: 'Fresh',
         last_heartbeat_at: new Date(now - 3600000).toISOString(),
+        sync: { state: 'in_sync', desired_version: 15, acked_version: 15 },
+        flags: [],
+      },
+      {
+        ...mockWorkstations[0],
+        id: 'ws-offline-unknown',
+        hostname: 'ws-offline-unknown',
+        connectivity: 'offline',
+        trust_state: 'Fresh',
+        last_heartbeat_at: new Date(now - 3600000).toISOString(),
       },
       {
         ...mockWorkstations[0],
@@ -162,6 +172,7 @@ describe('WorkstationsPage', () => {
 
     expect(await screen.findByText('ws-ready')).toBeInTheDocument();
 
+    expect(screen.getByText('Offline, không rõ')).toBeInTheDocument();
     const okBadge = screen.getByText('Offline, còn dữ liệu');
     expect(okBadge).toHaveAttribute(
       'title',

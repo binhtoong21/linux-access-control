@@ -12,6 +12,7 @@ import { ApiError } from '../api/client';
 import type { Profile, ProfileStatus, WorkstationFlag } from '../api/types';
 import { errorMessage } from '../lib/errors';
 import { formatAgo, formatDateTime, readiness } from '../lib/time';
+import { useNow } from '../lib/useNow';
 import { ReadinessBadge } from './WorkstationsPage';
 
 const FLAG_LABELS: Record<WorkstationFlag, string> = {
@@ -31,6 +32,7 @@ export function WorkstationDetailPage() {
   const [pageError, setPageError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const disablingRef = useRef(false);
+  const now = useNow();
 
   const {
     data: workstation,
@@ -182,7 +184,7 @@ export function WorkstationDetailPage() {
                 Đã vô hiệu hóa
               </span>
             )}
-            <ReadinessBadge state={readiness(workstation)} />
+            <ReadinessBadge state={readiness(workstation, now)} />
           </div>
         </div>
 
@@ -216,7 +218,7 @@ export function WorkstationDetailPage() {
               </span>
               {workstation.last_heartbeat_at ? (
                 <span className="text-gray-600">
-                  {' '}· {formatDateTime(workstation.last_heartbeat_at)} ({formatAgo(workstation.last_heartbeat_at)})
+                  {' '}· {formatDateTime(workstation.last_heartbeat_at)} ({formatAgo(workstation.last_heartbeat_at, now)})
                 </span>
               ) : (
                 <span className="text-gray-500"> · Chưa có heartbeat</span>

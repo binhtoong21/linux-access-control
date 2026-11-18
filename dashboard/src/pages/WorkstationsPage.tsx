@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { listWorkstations, type WorkstationFilter } from '../api/endpoints';
 import type { WorkstationFlag } from '../api/types';
 import { formatAgo, formatTime, readiness, type ReadinessState } from '../lib/time';
+import { useNow } from '../lib/useNow';
 
 const FLAG_LABELS: Record<WorkstationFlag, string> = {
   overdue_session: 'Quá giờ',
@@ -29,6 +30,15 @@ export function ReadinessBadge({ state }: { state: ReadinessState }) {
           className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800"
         >
           Offline, còn dữ liệu
+        </span>
+      );
+    case 'offline_unknown':
+      return (
+        <span
+          title="Lần cuối kết nối, máy chưa chạy dữ liệu mới nhất nên không biết hạn tin cậy còn bao lâu. Bật máy để kiểm tra."
+          className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800"
+        >
+          Offline, không rõ
         </span>
       );
     case 'lease_expired':
@@ -63,6 +73,7 @@ export function ReadinessBadge({ state }: { state: ReadinessState }) {
 
 export function WorkstationsPage() {
   const [connectivityFilter, setConnectivityFilter] = useState<'all' | 'online' | 'offline'>('all');
+  const now = useNow();
 
   const filter = useMemo<WorkstationFilter | undefined>(() => {
     if (connectivityFilter === 'all') return undefined;
@@ -163,12 +174,12 @@ export function WorkstationsPage() {
                         </div>
                         {ws.last_heartbeat_at && (
                           <div className="text-xs text-gray-500 mt-0.5">
-                            {formatAgo(ws.last_heartbeat_at)}
+                            {formatAgo(ws.last_heartbeat_at, now)}
                           </div>
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        <ReadinessBadge state={readiness(ws)} />
+                        <ReadinessBadge state={readiness(ws, now)} />
                       </td>
                       <td className="px-4 py-3 text-gray-700">
                         {ws.current_session ? (

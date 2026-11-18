@@ -131,6 +131,15 @@ describe('time utilities', () => {
       expect(readiness(ws, now)).toBe('offline_ok');
     });
 
+    it('returns "offline_unknown" when the machine was not running the latest snapshot at its last heartbeat', () => {
+      // The lease is renewed only while in sync, so a recent Fresh heartbeat does not prove a recent lease.
+      const twoHoursAgo = new Date(now - 2 * 3600 * 1000).toISOString();
+      const offline = { ...baseWs, connectivity: 'offline' as const, last_heartbeat_at: twoHoursAgo };
+      expect(readiness({ ...offline, sync: { state: 'pending', desired_version: 2, acked_version: 1 } }, now)).toBe('offline_unknown');
+      expect(readiness({ ...offline, sync: { state: 'stuck', desired_version: 2, acked_version: 1 } }, now)).toBe('offline_unknown');
+      expect(readiness({ ...offline, flags: ['apply_error'] }, now)).toBe('offline_unknown');
+    });
+
     it('returns "lease_expired" when offline and heartbeat older than LEASE_HOURS', () => {
       const olderThanLease = new Date(now - (LEASE_HOURS + 1) * 3600 * 1000).toISOString();
       const ws: WorkstationSummary = {
