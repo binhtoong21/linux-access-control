@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { Button } from './ui';
@@ -41,16 +41,49 @@ export function Layout() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const headerRef = useRef<HTMLElement>(null);
+  const asideRef = useRef<HTMLElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
+  const wasOpenRef = useRef(false);
 
+  // Below 900 px the sidebar is an overlay: while it is open, focus stays inside it and the page behind is inert;
+  // closing it returns focus to the Menu button.
   useEffect(() => {
-    if (!mobileOpen) return;
+    const behind = [headerRef.current, mainRef.current];
+    if (!mobileOpen) {
+      behind.forEach((el) => el?.removeAttribute('inert'));
+      if (wasOpenRef.current) headerRef.current?.querySelector<HTMLButtonElement>('button')?.focus();
+      wasOpenRef.current = false;
+      return;
+    }
+    wasOpenRef.current = true;
+    behind.forEach((el) => el?.setAttribute('inert', ''));
+    const focusables = () =>
+      Array.from(asideRef.current?.querySelectorAll<HTMLElement>('a[href], button:not([disabled])') ?? []);
+    focusables()[0]?.focus();
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setMobileOpen(false);
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const items = focusables();
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
       }
     };
     document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      behind.forEach((el) => el?.removeAttribute('inert'));
+    };
   }, [mobileOpen]);
 
   const handleLogout = async () => {
@@ -68,7 +101,7 @@ export function Layout() {
   return (
     <div className="min-h-screen bg-canvas flex flex-col min-[900px]:flex-row">
       {/* 48 px top bar below 900 px */}
-      <header className="h-12 bg-surface border-b border-line flex items-center px-4 min-[900px]:hidden shrink-0">
+      <header ref={headerRef} className="h-12 bg-surface border-b border-line flex items-center px-4 min-[900px]:hidden shrink-0">
         <Button
           variant="quiet"
           size="sm"
@@ -93,6 +126,7 @@ export function Layout() {
 
       {/* Sidebar (220 px) */}
       <aside
+        ref={asideRef}
         className={`bg-surface border-r border-line flex flex-col ${
           mobileOpen
             ? 'fixed inset-y-0 left-0 z-50 w-[220px] shadow-md min-[900px]:static min-[900px]:z-auto min-[900px]:shadow-none'
@@ -158,7 +192,7 @@ export function Layout() {
       </aside>
 
       {/* Main content area */}
-      <main className="flex-1 p-6 max-w-[1200px] w-full mx-auto overflow-y-auto">
+      <main ref={mainRef} className="flex-1 p-6 max-w-[1200px] w-full mx-auto overflow-y-auto">
         <Outlet />
       </main>
     </div>

@@ -143,10 +143,18 @@ describe('Layout component', () => {
 
     await user.click(menuBtn);
     expect(screen.getByTestId('sidebar-backdrop')).toBeInTheDocument();
+    // Focus moves into the overlay and the page behind it is inert
+    expect(screen.getByRole('link', { name: 'Máy trạm' })).toHaveFocus();
+    expect(screen.getByRole('main')).toHaveAttribute('inert');
+    // Shift+Tab from the first item wraps to the last focusable element of the sidebar
+    await user.keyboard('{Shift>}{Tab}{/Shift}');
+    expect(screen.getByRole('button', { name: 'Đăng xuất' })).toHaveFocus();
 
-    // Escape closes mobile overlay
+    // Escape closes mobile overlay and returns focus to Menu
     await user.keyboard('{Escape}');
     expect(screen.queryByTestId('sidebar-backdrop')).not.toBeInTheDocument();
+    expect(menuBtn).toHaveFocus();
+    expect(screen.getByRole('main')).not.toHaveAttribute('inert');
 
     // Opening again and clicking an item closes mobile overlay and navigates
     await user.click(menuBtn);
