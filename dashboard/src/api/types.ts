@@ -201,4 +201,58 @@ export interface ImportResult {
   rows: RowResult[];
 }
 
+export interface CreateZoneInput {
+  name: string;
+  location: string;
+  description?: string | null;
+}
+
+export interface UpdateZoneChanges {
+  name?: string;
+  location?: string;
+  description?: string | null;
+}
+
+export type EnrollmentStatus = 'pending' | 'approved' | 'rejected';
+
+export interface EnrollmentDuplicateOf {
+  id: string;
+  mqtt_identity: string;
+}
+
+export interface EnrollmentWorkstationRef {
+  id: string;
+  mqtt_identity: string;
+}
+
+export interface EnrollmentRequest {
+  id: string;
+  hostname: string;
+  mac_address: string;
+  machine_id: string;
+  status: EnrollmentStatus;
+  submitted_at: string;
+  reviewed_at: string | null;
+  duplicate_mac_detected: boolean;
+  duplicate_of: EnrollmentDuplicateOf | null;
+  workstation: EnrollmentWorkstationRef | null;
+  note?: string | null;
+}
+
+export interface ApproveEnrollmentNewInput {
+  mqtt_identity: string;
+  zone_id?: string | null;
+}
+
+export interface ApproveEnrollmentBatchInput {
+  zone_id: string;
+  request_ids: string[];
+  name_prefix: string;
+}
+
+export interface BatchApprovalResult {
+  approved: { id: string; mqtt_identity: string; workstation_id: string }[];
+  skipped: { id: string; reason: string }[];
+}
+
 

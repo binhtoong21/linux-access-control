@@ -5,6 +5,8 @@ export function errorMessage(err: unknown): string {
     switch (err.code) {
       case 'DUPLICATE':
         return 'Đã tồn tại (trùng mã hoặc tên).';
+      case 'DUPLICATE_REQUIRES_REINSTALL':
+        return 'Yêu cầu này trùng một máy đã có: chỉ duyệt được thành cài lại máy đó.';
       case 'NOT_FOUND':
         return 'Không tìm thấy (có thể đã bị xóa).';
       case 'CARD_ALREADY_BOUND':

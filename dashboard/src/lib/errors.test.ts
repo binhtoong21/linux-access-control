@@ -8,6 +8,13 @@ describe('errorMessage', () => {
     expect(errorMessage(err)).toBe('Đã tồn tại (trùng mã hoặc tên).');
   });
 
+  it('maps DUPLICATE_REQUIRES_REINSTALL', () => {
+    const err = new ApiError(409, 'DUPLICATE_REQUIRES_REINSTALL', 'requires reinstall');
+    expect(errorMessage(err)).toBe(
+      'Yêu cầu này trùng một máy đã có: chỉ duyệt được thành cài lại máy đó.',
+    );
+  });
+
   it('maps NOT_FOUND', () => {
     const err = new ApiError(404, 'NOT_FOUND', 'not found');
     expect(errorMessage(err)).toBe('Không tìm thấy (có thể đã bị xóa).');

@@ -1,16 +1,23 @@
 import { api } from './client';
 import type {
   Admin,
+  ApproveEnrollmentBatchInput,
+  ApproveEnrollmentNewInput,
   AuditLog,
   AuditLogDetail,
+  BatchApprovalResult,
   Card,
   CardDetail,
   CardStatus,
+  CreateZoneInput,
+  EnrollmentRequest,
+  EnrollmentStatus,
   Group,
   ImportResult,
   Page,
   Profile,
   ProfileStatus,
+  UpdateZoneChanges,
   User,
   UserDetail,
   UserStatus,
@@ -79,6 +86,18 @@ export function disableWorkstation(id: string): Promise<WorkstationDetail> {
 
 export function listZones(): Promise<Zone[]> {
   return api<Zone[]>('GET', '/zones');
+}
+
+export function createZone(input: CreateZoneInput): Promise<Zone> {
+  return api<Zone>('POST', '/zones', input);
+}
+
+export function updateZone(id: string, changes: UpdateZoneChanges): Promise<Zone> {
+  return api<Zone>('PATCH', `/zones/${encodeURIComponent(id)}`, changes);
+}
+
+export function deleteZone(id: string): Promise<void> {
+  return api<void>('DELETE', `/zones/${encodeURIComponent(id)}`);
 }
 
 export interface ListUsersFilter {
@@ -246,6 +265,53 @@ export function getAuditLog(id: string): Promise<AuditLogDetail> {
 
 export function importRoster(csv: string, apply: boolean): Promise<ImportResult> {
   return api<ImportResult>('POST', '/imports/roster', { csv, apply });
+}
+
+export function listEnrollmentRequests(
+  status: EnrollmentStatus = 'pending',
+): Promise<EnrollmentRequest[]> {
+  return api<EnrollmentRequest[]>(
+    'GET',
+    `/enrollment-requests?status=${encodeURIComponent(status)}`,
+  );
+}
+
+export function approveEnrollmentNew(
+  id: string,
+  input: ApproveEnrollmentNewInput,
+): Promise<EnrollmentRequest> {
+  return api<EnrollmentRequest>(
+    'POST',
+    `/enrollment-requests/${encodeURIComponent(id)}/approve`,
+    {
+      mode: 'new',
+      mqtt_identity: input.mqtt_identity,
+      zone_id: input.zone_id ?? null,
+    },
+  );
+}
+
+export function approveEnrollmentReinstall(id: string): Promise<EnrollmentRequest> {
+  return api<EnrollmentRequest>(
+    'POST',
+    `/enrollment-requests/${encodeURIComponent(id)}/approve`,
+    { mode: 'reinstall' },
+  );
+}
+
+export function approveEnrollmentBatch(
+  input: ApproveEnrollmentBatchInput,
+): Promise<BatchApprovalResult> {
+  return api<BatchApprovalResult>('POST', '/enrollment-requests/approve-batch', input);
+}
+
+export function rejectEnrollment(id: string, note?: string): Promise<EnrollmentRequest> {
+  const body = note ? { note } : {};
+  return api<EnrollmentRequest>(
+    'POST',
+    `/enrollment-requests/${encodeURIComponent(id)}/reject`,
+    body,
+  );
 }
 
 

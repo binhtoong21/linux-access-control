@@ -36,6 +36,26 @@ export function Layout() {
               Máy trạm
             </NavLink>
             <NavLink
+              to="/zones"
+              className={({ isActive }) =>
+                isActive
+                  ? 'text-blue-600 font-medium px-2 py-1 rounded bg-blue-50'
+                  : 'text-gray-600 hover:text-gray-900 px-2 py-1'
+              }
+            >
+              Zone
+            </NavLink>
+            <NavLink
+              to="/enrollment"
+              className={({ isActive }) =>
+                isActive
+                  ? 'text-blue-600 font-medium px-2 py-1 rounded bg-blue-50'
+                  : 'text-gray-600 hover:text-gray-900 px-2 py-1'
+              }
+            >
+              Duyệt máy
+            </NavLink>
+            <NavLink
               to="/users"
               className={({ isActive }) =>
                 isActive
