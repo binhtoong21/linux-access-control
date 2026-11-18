@@ -20,6 +20,9 @@ import { SchedulesPage } from './pages/SchedulesPage';
 import { ScheduleFormPage } from './pages/ScheduleFormPage';
 import { HistoryPage } from './pages/HistoryPage';
 import { IssuesPage } from './pages/IssuesPage';
+import '@fontsource/be-vietnam-pro/400.css';
+import '@fontsource/be-vietnam-pro/500.css';
+import '@fontsource/be-vietnam-pro/600.css';
 import './index.css';
 
 const queryClient = new QueryClient({
