@@ -1,4 +1,21 @@
 import React, { useRef, useState, useEffect } from 'react';
+import {
+  Button,
+  ConfirmDialog,
+  EmptyRow,
+  Field,
+  fieldDescribedBy,
+  inputClass,
+  selectClass,
+  Notice,
+  PageHeader,
+  StatusPill,
+  Table,
+  THead,
+  TH,
+  TR,
+  TD,
+} from '../components/ui';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -32,6 +49,8 @@ function formatBatchSkipReason(reason: string): string {
 export function EnrollmentPage() {
   const queryClient = useQueryClient();
   const inFlightRef = useRef(false);
+  const [reinstallTarget, setReinstallTarget] = useState<EnrollmentRequest | null>(null);
+  const [rejectTarget, setRejectTarget] = useState<EnrollmentRequest | null>(null);
 
   const [status, setStatus] = useState<EnrollmentStatus>('pending');
   const [inFlight, setInFlight] = useState(false);
@@ -135,11 +154,6 @@ export function EnrollmentPage() {
 
   const handleApproveReinstall = async (req: EnrollmentRequest) => {
     if (!req.duplicate_of) return;
-    const confirmed = window.confirm(
-      `Duyệt cài lại máy ${req.duplicate_of.mqtt_identity}? Chứng chỉ cũ bị thu hồi; máy giữ tên, zone và lịch.`,
-    );
-    if (!confirmed) return;
-
     if (inFlightRef.current) return;
     inFlightRef.current = true;
     setInFlight(true);
@@ -149,17 +163,14 @@ export function EnrollmentPage() {
       await approveEnrollmentReinstall(req.id);
       await queryClient.invalidateQueries({ queryKey: ['enrollment'] });
       await queryClient.invalidateQueries({ queryKey: ['workstations'] });
-    } catch (err) {
-      setPageError(errorMessage(err));
+      setReinstallTarget(null);
     } finally {
       inFlightRef.current = false;
       setInFlight(false);
     }
   };
 
-  const handleReject = async (id: string) => {
-    const note = window.prompt('Lý do từ chối (không bắt buộc):');
-    if (note === null) return; // user cancelled, sends nothing
+  const handleReject = async (id: string, note: string) => {
 
     if (inFlightRef.current) return;
     inFlightRef.current = true;
@@ -170,8 +181,7 @@ export function EnrollmentPage() {
       await rejectEnrollment(id, note.trim() || undefined);
       await queryClient.invalidateQueries({ queryKey: ['enrollment'] });
       await queryClient.invalidateQueries({ queryKey: ['workstations'] });
-    } catch (err) {
-      setPageError(errorMessage(err));
+      setRejectTarget(null);
     } finally {
       inFlightRef.current = false;
       setInFlight(false);
@@ -217,75 +227,59 @@ export function EnrollmentPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h1 className="text-xl font-bold text-gray-900">Duyệt máy</h1>
-      </div>
+      <PageHeader title="Duyệt máy" />
 
       {pageError && (
-        <div className="p-4 bg-red-50 text-red-700 rounded border border-red-200">
-          {pageError}
-        </div>
+        <Notice tone="danger">{pageError}</Notice>
       )}
 
       {/* Status tabs */}
-      <div className="border-b border-gray-200">
+      <div className="border-b border-line">
         <nav className="-mb-px flex space-x-8">
-          <button
+          <Button
+            variant={status === 'pending' ? 'primary' : 'secondary'}
+            aria-pressed={status === 'pending'}
             type="button"
             onClick={() => handleTabChange('pending')}
-            className={`py-2 px-1 border-b-2 font-medium text-sm ${
-              status === 'pending'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
           >
             Đang chờ
-          </button>
-          <button
+          </Button>
+          <Button
+            variant={status === 'approved' ? 'primary' : 'secondary'}
+            aria-pressed={status === 'approved'}
             type="button"
             onClick={() => handleTabChange('approved')}
-            className={`py-2 px-1 border-b-2 font-medium text-sm ${
-              status === 'approved'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
           >
             Đã duyệt
-          </button>
-          <button
+          </Button>
+          <Button
+            variant={status === 'rejected' ? 'primary' : 'secondary'}
+            aria-pressed={status === 'rejected'}
             type="button"
             onClick={() => handleTabChange('rejected')}
-            className={`py-2 px-1 border-b-2 font-medium text-sm ${
-              status === 'rejected'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
           >
             Đã từ chối
-          </button>
+          </Button>
         </nav>
       </div>
 
       {/* Batch Bar (only on pending when >= 1 row checked) */}
       {status === 'pending' && checkedIds.length > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+        <div className="bg-accent-tint border border-accent rounded p-4 space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-            <span className="font-semibold text-sm text-blue-900">
+            <span className="font-semibold text-sm text-accent">
               Đã chọn {checkedIds.length} máy
             </span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="batch-zone" className="block text-xs font-medium text-gray-700 mb-1">
-                Zone *
-              </label>
+            <Field htmlFor="batch-zone" label="Zone *">
               <select
                 id="batch-zone"
                 value={batchZoneId}
                 onChange={(e) => setBatchZoneId(e.target.value)}
                 disabled={inFlight}
-                className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className={`w-full ${selectClass}`}
               >
                 {zones?.map((z) => (
                   <option key={z.id} value={z.id}>
@@ -293,14 +287,17 @@ export function EnrollmentPage() {
                   </option>
                 ))}
               </select>
-            </div>
+            </Field>
 
-            <div>
-              <label htmlFor="batch-prefix" className="block text-xs font-medium text-gray-700 mb-1">
-                Tiền tố tên *
-              </label>
+            <Field
+              htmlFor="batch-prefix"
+              label="Tiền tố tên *"
+              error={batchError}
+              hint={<>Tên máy sẽ là <span className="font-mono">{namePrefix || '{prefix}'}NN</span>, nối tiếp số lớn nhất đã dùng.</>}
+            >
               <input
                 id="batch-prefix"
+                aria-describedby={fieldDescribedBy('batch-prefix', { error: batchError, hint: true })}
                 type="text"
                 value={namePrefix}
                 onChange={(e) => {
@@ -309,310 +306,307 @@ export function EnrollmentPage() {
                 }}
                 placeholder="Ví dụ: lab-pc-"
                 disabled={inFlight}
-                className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className={`w-full font-mono ${inputClass}`}
               />
-            </div>
+            </Field>
           </div>
 
-          <p className="text-xs text-gray-600">
-            Tên máy sẽ là {namePrefix || '{prefix}'}NN, nối tiếp số lớn nhất đã dùng.
-          </p>
 
-          {batchError && <div className="text-xs text-red-600">{batchError}</div>}
 
           <div className="flex justify-end">
-            <button
+            <Button
+              variant="primary"
               type="button"
               disabled={inFlight || !batchZoneId}
               onClick={handleApproveBatch}
-              className="px-4 py-1.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
             >
               Duyệt {checkedIds.length} máy
-            </button>
+            </Button>
           </div>
         </div>
       )}
 
       {/* Batch Results Banner */}
       {batchResult && (
-        <div className="bg-white border border-gray-300 rounded-lg p-4 space-y-3">
+        <Notice tone={batchResult.skipped.length ? 'warn' : 'ok'}>
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-gray-900">Kết quả duyệt hàng loạt</h2>
-            <button
+            <h2 className="text-base font-semibold text-ink">Kết quả duyệt hàng loạt</h2>
+            <Button
+              variant="quiet"
               type="button"
               onClick={() => setBatchResult(null)}
-              className="text-xs text-gray-500 hover:text-gray-700"
             >
               Đóng
-            </button>
+            </Button>
           </div>
           {batchResult.approved.length > 0 && (
             <div>
-              <span className="text-xs font-semibold text-green-700">Đã duyệt: </span>
-              <span className="text-xs text-gray-800">
+              <StatusPill tone="ok">Đã duyệt: </StatusPill>
+              <span className="text-xs text-ink font-mono">
                 {batchResult.approved.map((item) => item.mqtt_identity).join(', ')}
               </span>
             </div>
           )}
           {batchResult.skipped.length > 0 && (
             <div className="space-y-1">
-              <span className="text-xs font-semibold text-amber-700">Bỏ qua:</span>
-              <ul className="text-xs text-gray-700 list-disc list-inside">
+              <StatusPill tone="warn">Bỏ qua:</StatusPill>
+              <ul className="text-xs text-ink list-disc list-inside">
                 {batchResult.skipped.map((item) => (
                   <li key={item.id}>
-                    Yêu cầu {item.id}: {formatBatchSkipReason(item.reason)}
+                    Yêu cầu <span className="font-mono">{item.id}</span>: {formatBatchSkipReason(item.reason)}
                   </li>
                 ))}
               </ul>
             </div>
           )}
-        </div>
+        </Notice>
       )}
 
-      {isLoading && <div className="p-8 text-center text-gray-500">Đang tải…</div>}
+      {isLoading && <Notice tone="info">Đang tải…</Notice>}
 
       {isError && (
-        <div className="p-4 bg-red-50 text-red-700 rounded border border-red-200">
-          {errorMessage(error)}
-        </div>
+        <Notice tone="danger">{errorMessage(error)}</Notice>
       )}
 
       {!isLoading && !isError && (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="overflow-x-auto">
-            {status === 'pending' ? (
-              <table className="min-w-full divide-y divide-gray-200 text-sm">
-                <thead className="bg-gray-50 text-gray-600 font-medium">
-                  <tr>
-                    <th className="w-10 px-4 py-3 text-center"></th>
-                    <th className="px-4 py-3 text-left">Hostname</th>
-                    <th className="px-4 py-3 text-left">MAC</th>
-                    <th className="px-4 py-3 text-left">Machine ID</th>
-                    <th className="px-4 py-3 text-left">Gửi lúc</th>
-                    <th className="px-4 py-3 text-left">Trùng</th>
-                    <th className="px-4 py-3 text-right">Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {requests && requests.length > 0 ? (
-                    requests.map((req) => {
-                      const isRowApproving = approvingRowId === req.id;
-                      const hasDuplicateMac = req.duplicate_mac_detected;
-                      const isReinstall = Boolean(req.duplicate_of);
-                      const isDuplicateOther = hasDuplicateMac && !isReinstall;
+        <>
+          {status === 'pending' ? (
+            <Table>
+              <THead>
+                <TR>
+                  <TH className="w-10 text-center"></TH>
+                  <TH className="text-left">Hostname</TH>
+                  <TH className="text-left">MAC</TH>
+                  <TH className="text-left">Machine ID</TH>
+                  <TH className="text-left">Gửi lúc</TH>
+                  <TH className="text-left">Trùng</TH>
+                  <TH className="text-right">Thao tác</TH>
+                </TR>
+              </THead>
+              <tbody>
+                {requests && requests.length > 0 ? (
+                  requests.map((req) => {
+                    const isRowApproving = approvingRowId === req.id;
+                    const hasDuplicateMac = req.duplicate_mac_detected;
+                    const isReinstall = Boolean(req.duplicate_of);
+                    const isDuplicateOther = hasDuplicateMac && !isReinstall;
 
-                      return (
-                        <React.Fragment key={req.id}>
-                          <tr className="hover:bg-gray-50">
-                            <td className="px-4 py-3 text-center">
-                              {!hasDuplicateMac && (
-                                <input
-                                  type="checkbox"
-                                  checked={checkedIds.includes(req.id)}
-                                  onChange={() => handleToggleCheck(req.id)}
-                                  aria-label={`Chọn ${req.hostname}`}
-                                  disabled={inFlight}
-                                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                                />
-                              )}
-                            </td>
-                            <td className="px-4 py-3 font-medium text-gray-900">{req.hostname}</td>
-                            <td className="px-4 py-3 font-mono text-gray-700">{req.mac_address}</td>
-                            <td className="px-4 py-3">
-                              <span title={req.machine_id} className="font-mono text-xs text-gray-600">
-                                {req.machine_id.length > 12
-                                  ? `${req.machine_id.slice(0, 12)}…`
-                                  : req.machine_id}
+                    return (
+                      <React.Fragment key={req.id}>
+                        <TR className="hover:bg-canvas">
+                          <TD className="text-center">
+                            {!hasDuplicateMac && (
+                              <input
+                                type="checkbox"
+                                checked={checkedIds.includes(req.id)}
+                                onChange={() => handleToggleCheck(req.id)}
+                                aria-label={`Chọn ${req.hostname}`}
+                                disabled={inFlight}
+                                className="h-4 w-4 rounded border-control accent-accent focus:ring-accent"
+                              />
+                            )}
+                          </TD>
+                          <TD className="font-medium text-ink">{req.hostname}</TD>
+                          <TD className="font-mono text-ink">{req.mac_address}</TD>
+                          <TD>
+                            <span title={req.machine_id} className="font-mono text-xs text-ink-muted">
+                              {req.machine_id.length > 12
+                                ? `${req.machine_id.slice(0, 12)}…`
+                                : req.machine_id}
+                            </span>
+                          </TD>
+                          <TD className="text-ink-muted">
+                            {formatDateTime(req.submitted_at)}
+                          </TD>
+                          <TD className="text-xs">
+                            {isReinstall && req.duplicate_of && (
+                              <StatusPill tone="warn">
+                                Trùng máy <span className="font-mono">{req.duplicate_of.mqtt_identity}</span>
+                              </StatusPill>
+                            )}
+                            {isDuplicateOther && (
+                              <StatusPill tone="warn">
+                                Trùng yêu cầu khác đang chờ
+                              </StatusPill>
+                            )}
+                            {!hasDuplicateMac && !isReinstall && (
+                              <span className="text-ink-muted">—</span>
+                            )}
+                          </TD>
+                          <TD className="text-right space-x-2">
+                            {!hasDuplicateMac && !isReinstall && !isRowApproving && (
+                              <Button
+                                variant="quiet"
+                                type="button"
+                                disabled={inFlight}
+                                onClick={() => handleOpenInlineApprove(req)}
+                              >
+                                Duyệt
+                              </Button>
+                            )}
+                            {isReinstall && req.duplicate_of && (
+                              <Button
+                                variant="quiet"
+                                type="button"
+                                disabled={inFlight}
+                                onClick={() => setReinstallTarget(req)}
+                              >
+                                Duyệt cài lại <span className="font-mono">{req.duplicate_of.mqtt_identity}</span>
+                              </Button>
+                            )}
+                            {isDuplicateOther && (
+                              <span className="text-xs text-ink-muted mr-2">
+                                Duyệt yêu cầu kia trước; yêu cầu này sẽ thành cài lại.
                               </span>
-                            </td>
-                            <td className="px-4 py-3 text-gray-600">
-                              {formatDateTime(req.submitted_at)}
-                            </td>
-                            <td className="px-4 py-3 text-xs">
-                              {isReinstall && req.duplicate_of && (
-                                <span className="text-amber-700 font-medium">
-                                  Trùng máy {req.duplicate_of.mqtt_identity}
-                                </span>
-                              )}
-                              {isDuplicateOther && (
-                                <span className="text-amber-700 font-medium">
-                                  Trùng yêu cầu khác đang chờ
-                                </span>
-                              )}
-                              {!hasDuplicateMac && !isReinstall && (
-                                <span className="text-gray-400">—</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-right space-x-2">
-                              {!hasDuplicateMac && !isReinstall && !isRowApproving && (
-                                <button
-                                  type="button"
-                                  disabled={inFlight}
-                                  onClick={() => handleOpenInlineApprove(req)}
-                                  className="text-xs px-2.5 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-                                >
-                                  Duyệt
-                                </button>
-                              )}
-                              {isReinstall && req.duplicate_of && (
-                                <button
-                                  type="button"
-                                  disabled={inFlight}
-                                  onClick={() => handleApproveReinstall(req)}
-                                  className="text-xs px-2.5 py-1 bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50"
-                                >
-                                  Duyệt cài lại {req.duplicate_of.mqtt_identity}
-                                </button>
-                              )}
-                              {isDuplicateOther && (
-                                <span className="text-xs text-gray-500 mr-2">
-                                  Duyệt yêu cầu kia trước; yêu cầu này sẽ thành cài lại.
-                                </span>
-                              )}
-                              {!isRowApproving && (
-                                <button
-                                  type="button"
-                                  disabled={inFlight}
-                                  onClick={() => handleReject(req.id)}
-                                  className="text-xs px-2.5 py-1 border border-red-300 text-red-700 rounded hover:bg-red-50 disabled:opacity-50"
-                                >
-                                  Từ chối
-                                </button>
-                              )}
-                            </td>
-                          </tr>
+                            )}
+                            {!isRowApproving && (
+                              <Button
+                                variant="quiet"
+                                type="button"
+                                disabled={inFlight}
+                                onClick={() => setRejectTarget(req)}
+                              >
+                                Từ chối
+                              </Button>
+                            )}
+                          </TD>
+                        </TR>
 
-                          {/* Inline Approve Form Row */}
-                          {isRowApproving && (
-                            <tr className="bg-blue-50/50">
-                              <td colSpan={7} className="px-4 py-3">
-                                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                                  <div className="flex-1">
-                                    <label htmlFor="new-identity" className="sr-only">
-                                      Tên máy
-                                    </label>
-                                    <input
-                                      id="new-identity"
-                                      type="text"
-                                      value={newMqttIdentity}
-                                      onChange={(e) => {
-                                        setNewMqttIdentity(e.target.value);
-                                        setInlineApproveError(null);
-                                      }}
-                                      placeholder="Tên máy (mqtt_identity)"
-                                      aria-label="Tên máy"
-                                      disabled={inFlight}
-                                      className="w-full border border-gray-300 rounded px-2.5 py-1 text-sm bg-white"
-                                    />
-                                  </div>
-                                  <div className="w-48">
-                                    <label htmlFor="new-zone" className="sr-only">
-                                      Zone
-                                    </label>
-                                    <select
-                                      id="new-zone"
-                                      value={newZoneId}
-                                      onChange={(e) => setNewZoneId(e.target.value)}
-                                      aria-label="Zone"
-                                      disabled={inFlight}
-                                      className="w-full border border-gray-300 rounded px-2.5 py-1 text-sm bg-white"
-                                    >
-                                      <option value="">— Không thuộc zone —</option>
-                                      {zones?.map((z) => (
-                                        <option key={z.id} value={z.id}>
-                                          {z.name}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </div>
-                                  <div className="flex items-center space-x-2">
-                                    <button
-                                      type="button"
-                                      disabled={inFlight}
-                                      onClick={() => handleSubmitInlineApprove(req.id)}
-                                      className="px-3 py-1 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700 disabled:opacity-50"
-                                    >
-                                      Xác nhận
-                                    </button>
-                                    <button
-                                      type="button"
-                                      disabled={inFlight}
-                                      onClick={handleCancelInlineApprove}
-                                      className="px-3 py-1 border border-gray-300 text-gray-700 rounded text-xs hover:bg-gray-50 disabled:opacity-50"
-                                    >
-                                      Hủy
-                                    </button>
-                                  </div>
+                        {/* Inline Approve Form Row */}
+                        {isRowApproving && (
+                          <TR className="bg-accent-tint">
+                            <TD colSpan={7}>
+                              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                                <Field htmlFor="new-identity" label="Tên máy" error={inlineApproveError}>
+                                  <input
+                                    id="new-identity"
+                                    aria-describedby={fieldDescribedBy('new-identity', { error: inlineApproveError })}
+                                    type="text"
+                                    value={newMqttIdentity}
+                                    onChange={(e) => {
+                                      setNewMqttIdentity(e.target.value);
+                                      setInlineApproveError(null);
+                                    }}
+                                    placeholder="Tên máy (mqtt_identity)"
+                                    aria-label="Tên máy"
+                                    disabled={inFlight}
+                                    className={`w-full font-mono ${inputClass}`}
+                                  />
+                                </Field>
+                                <Field htmlFor="new-zone" label="Zone">
+                                  <select
+                                    id="new-zone"
+                                    value={newZoneId}
+                                    onChange={(e) => setNewZoneId(e.target.value)}
+                                    aria-label="Zone"
+                                    disabled={inFlight}
+                                    className={`w-full ${selectClass}`}
+                                  >
+                                    <option value="">— Không thuộc zone —</option>
+                                    {zones?.map((z) => (
+                                      <option key={z.id} value={z.id}>
+                                        {z.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </Field>
+                                <div className="flex items-center space-x-2">
+                                  <Button
+                                    variant="primary"
+                                    type="button"
+                                    disabled={inFlight}
+                                    onClick={() => handleSubmitInlineApprove(req.id)}
+                                  >
+                                    Xác nhận
+                                  </Button>
+                                  <Button
+                                    variant="secondary"
+                                    type="button"
+                                    disabled={inFlight}
+                                    onClick={handleCancelInlineApprove}
+                                  >
+                                    Hủy
+                                  </Button>
                                 </div>
-                                {inlineApproveError && (
-                                  <div className="text-xs text-red-600 mt-2">
-                                    {inlineApproveError}
-                                  </div>
-                                )}
-                              </td>
-                            </tr>
-                          )}
-                        </React.Fragment>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
-                        Không có yêu cầu nào
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            ) : (
-              /* Approved / Rejected Read-only table */
-              <table className="min-w-full divide-y divide-gray-200 text-sm">
-                <thead className="bg-gray-50 text-gray-600 font-medium">
-                  <tr>
-                    <th className="px-4 py-3 text-left">Hostname</th>
-                    <th className="px-4 py-3 text-left">MAC</th>
-                    <th className="px-4 py-3 text-left">
-                      {status === 'approved' ? 'Duyệt lúc' : 'Từ chối lúc'}
-                    </th>
-                    <th className="px-4 py-3 text-left">Máy</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {requests && requests.length > 0 ? (
-                    requests.map((req) => (
-                      <tr key={req.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 font-medium text-gray-900">{req.hostname}</td>
-                        <td className="px-4 py-3 font-mono text-gray-700">{req.mac_address}</td>
-                        <td className="px-4 py-3 text-gray-600">
-                          {formatDateTime(req.reviewed_at)}
-                        </td>
-                        <td className="px-4 py-3">
-                          {req.workstation ? (
-                            <Link
-                              to={`/workstations/${req.workstation.id}`}
-                              className="text-blue-600 hover:underline font-mono"
-                            >
-                              {req.workstation.mqtt_identity}
-                            </Link>
-                          ) : (
-                            <span className="text-gray-400">—</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
-                        Không có yêu cầu nào
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </div>
+                              </div>
+                            </TD>
+                          </TR>
+                        )}
+                      </React.Fragment>
+                    );
+                  })
+                ) : (
+                  <EmptyRow colSpan={7}>
+                    Không có yêu cầu nào
+                  </EmptyRow>
+                )}
+              </tbody>
+            </Table>
+          ) : (
+            /* Approved / Rejected Read-only table */
+            <Table>
+              <THead>
+                <TR>
+                  <TH className="text-left">Hostname</TH>
+                  <TH className="text-left">MAC</TH>
+                  <TH className="text-left">
+                    {status === 'approved' ? 'Duyệt lúc' : 'Từ chối lúc'}
+                  </TH>
+                  <TH className="text-left">Máy</TH>
+                </TR>
+              </THead>
+              <tbody>
+                {requests && requests.length > 0 ? (
+                  requests.map((req) => (
+                    <TR key={req.id} className="hover:bg-canvas">
+                      <TD className="font-medium text-ink">{req.hostname}</TD>
+                      <TD className="font-mono text-ink">{req.mac_address}</TD>
+                      <TD className="text-ink-muted">
+                        {formatDateTime(req.reviewed_at)}
+                      </TD>
+                      <TD>
+                        {req.workstation ? (
+                          <Link
+                            to={`/workstations/${req.workstation.id}`}
+                            className="text-accent hover:underline font-mono"
+                          >
+                            {req.workstation.mqtt_identity}
+                          </Link>
+                        ) : (
+                          <span className="text-ink-muted">—</span>
+                        )}
+                      </TD>
+                    </TR>
+                  ))
+                ) : (
+                  <EmptyRow colSpan={4}>
+                    Không có yêu cầu nào
+                  </EmptyRow>
+                )}
+              </tbody>
+            </Table>
+          )}
+        </>
       )}
+      <ConfirmDialog
+        open={reinstallTarget !== null}
+        title={`Duyệt cài lại máy ${reinstallTarget?.duplicate_of?.mqtt_identity ?? ''}?`}
+        message={`Duyệt cài lại máy ${reinstallTarget?.duplicate_of?.mqtt_identity ?? ''}? Chứng chỉ cũ bị thu hồi; máy giữ tên, zone và lịch.`}
+        confirmLabel="Duyệt cài lại"
+        tone="danger"
+        onCancel={() => setReinstallTarget(null)}
+        onConfirm={async () => { if (reinstallTarget) await handleApproveReinstall(reinstallTarget); }}
+      />
+      <ConfirmDialog
+        open={rejectTarget !== null}
+        title={`Từ chối yêu cầu ${rejectTarget?.hostname ?? ''}?`}
+        message="Yêu cầu sẽ bị từ chối. Lý do từ chối (không bắt buộc):"
+        input={{ label: 'Lý do từ chối (không bắt buộc):' }}
+        confirmLabel="Từ chối"
+        tone="danger"
+        onCancel={() => setRejectTarget(null)}
+        onConfirm={async (note) => { if (rejectTarget) await handleReject(rejectTarget.id, note ?? ''); }}
+      />
     </div>
   );
 }

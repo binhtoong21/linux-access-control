@@ -251,8 +251,6 @@ describe('SchedulesPage', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const confirmSpy = vi.spyOn(window, 'confirm');
-
     renderSchedulesPage();
 
     await screen.findByText('Lịch thực hành Mạng');
@@ -260,20 +258,20 @@ describe('SchedulesPage', () => {
     const deleteBtn = within(row1).getByRole('button', { name: 'Xóa' });
 
     // 1. User cancels confirm
-    confirmSpy.mockReturnValueOnce(false);
     await user.click(deleteBtn);
 
-    expect(confirmSpy).toHaveBeenCalledWith(
-      'Xóa lịch Lịch thực hành Mạng? Người dùng sẽ không vào được theo lịch này sau khi máy nhận dữ liệu mới.',
-    );
+    expect(within(screen.getByRole('dialog')).getByText(
+      'Xóa lịch Lịch thực hành Mạng? Người dùng sẽ không vào được theo lịch này sau khi máy nhận dữ liệu mới.')).toBeInTheDocument();
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Hủy' }));
     expect(deleteUrl).toBeNull();
 
     // 2. User confirms
-    confirmSpy.mockReturnValueOnce(true);
     await user.click(deleteBtn);
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Xóa' }));
 
     await waitFor(() => {
       expect(deleteUrl).toBe('/api/v1/schedules/sched-1');
+      expect(fetchMock.mock.calls.filter(([url, init]) => url === '/api/v1/schedules/sched-1' && init?.method === 'DELETE')).toHaveLength(1);
     });
   });
 });
