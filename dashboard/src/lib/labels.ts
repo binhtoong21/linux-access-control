@@ -118,3 +118,19 @@ export function endSourceNote(source?: string | null): string {
       return '';
   }
 }
+
+export function alertKindLabel(kind: string): string {
+  switch (kind) {
+    case 'snapshot_signature_invalid':
+      return 'Snapshot có chữ ký sai (bị từ chối)';
+    case 'edge_db_recovered':
+      return 'CSDL trên máy hỏng và đã dựng lại';
+    case 'key_version_mismatch':
+      return 'Máy dùng khóa cũ (cần cài lại?)';
+    case 'teardown_failed_stuck_resource':
+      return 'Không dọn được phiên cũ';
+    default:
+      return kind;
+  }
+}
+

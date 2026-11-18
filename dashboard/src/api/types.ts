@@ -392,5 +392,36 @@ export interface ScheduleValidationResult {
 
 export type ValidateScheduleInput = ScheduleInput & { schedule_id?: string };
 
+export interface IngestReject {
+  id: string;
+  entry_id: string | null;
+  raw_record: unknown;
+  error: string;
+  received_at: string;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  note: string | null;
+  workstation: {
+    id: string;
+    mqtt_identity: string;
+  };
+}
+
+export type IngestRejectResolvedFilter = 'false' | 'true' | 'all';
+
+export interface WorkstationAlert {
+  id: string;
+  entry_id: string;
+  kind: string;
+  detail: unknown;
+  occurred_at: string;
+  received_at: string;
+  workstation: {
+    id: string;
+    mqtt_identity: string;
+  };
+}
+
+
 
 

@@ -137,6 +137,14 @@ describe('WorkstationDetailPage', () => {
     expect(screen.getByText('lab-a-01')).toBeInTheDocument();
     expect(screen.getByText('Đã ghi danh')).toBeInTheDocument();
     expect(screen.getByText('Sẵn sàng')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Lịch sử quẹt thẻ' })).toHaveAttribute(
+      'href',
+      '/history?tab=audit&workstation_id=ws-1',
+    );
+    expect(screen.getByRole('link', { name: 'Phiên' })).toHaveAttribute(
+      'href',
+      '/history?tab=sessions&workstation_id=ws-1',
+    );
     expect(screen.getByText('00:11:22:33:44:55')).toBeInTheDocument();
     expect(screen.getByText('mach-1234')).toBeInTheDocument();
     expect(screen.getByText('student')).toBeInTheDocument();
@@ -418,4 +426,42 @@ describe('WorkstationDetailPage', () => {
 
     expect(await screen.findByText('Không tìm thấy máy')).toBeInTheDocument();
   });
+
+  it('renders ingest_rejects and security_alert flag badges as links to /issues?workstation_id={id}', async () => {
+    const detailWithFlags: WorkstationDetail = {
+      ...mockWorkstationDetail,
+      flags: ['ingest_rejects', 'security_alert', 'stuck_sync'],
+    };
+
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url === '/api/v1/workstations/ws-1') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify(detailWithFlags),
+        });
+      }
+      if (url === '/api/v1/zones') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify(mockZones),
+        });
+      }
+      return Promise.reject(new Error(`Unhandled URL: ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderWorkstationDetailPage('ws-1');
+
+    const rejectBadgeLink = await screen.findByRole('link', { name: 'Nhật ký lỗi' });
+    expect(rejectBadgeLink).toHaveAttribute('href', '/issues?workstation_id=ws-1');
+
+    const alertBadgeLink = screen.getByRole('link', { name: 'Cảnh báo an ninh' });
+    expect(alertBadgeLink).toHaveAttribute('href', '/issues?workstation_id=ws-1');
+
+    const stuckSpan = screen.getByText('Kẹt đồng bộ');
+    expect(stuckSpan.tagName.toLowerCase()).toBe('span');
+  });
 });
+

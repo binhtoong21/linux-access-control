@@ -15,6 +15,8 @@ import type {
   EnrollmentStatus,
   Group,
   ImportResult,
+  IngestReject,
+  IngestRejectResolvedFilter,
   Page,
   Profile,
   ProfileStatus,
@@ -24,6 +26,7 @@ import type {
   User,
   UserDetail,
   UserStatus,
+  WorkstationAlert,
   WorkstationDetail,
   WorkstationSummary,
   Zone,
@@ -422,6 +425,55 @@ export function disableSchedule(id: string): Promise<Schedule> {
 export function validateSchedule(input: ValidateScheduleInput): Promise<ScheduleValidationResult> {
   return api<ScheduleValidationResult>('POST', '/schedules/validate', input);
 }
+
+export interface ListIngestRejectsFilter {
+  workstation_id?: string;
+  resolved?: IngestRejectResolvedFilter;
+  limit?: number;
+  cursor?: string;
+}
+
+export function listIngestRejects(f?: ListIngestRejectsFilter): Promise<Page<IngestReject>> {
+  const params = new URLSearchParams();
+  if (f?.workstation_id) params.set('workstation_id', f.workstation_id);
+  if (f?.resolved !== undefined) params.set('resolved', f.resolved);
+  if (f?.cursor) params.set('cursor', f.cursor);
+  if (f?.limit !== undefined && f?.limit !== null) params.set('limit', String(f.limit));
+  const qs = params.toString();
+  return api<Page<IngestReject>>('GET', `/ingest-rejects${qs ? `?${qs}` : ''}`);
+}
+
+export interface ResolveIngestRejectInput {
+  note?: string;
+}
+
+export function resolveIngestReject(
+  id: string,
+  input?: ResolveIngestRejectInput,
+): Promise<IngestReject> {
+  const body = input?.note !== undefined ? { note: input.note } : {};
+  return api<IngestReject>('POST', `/ingest-rejects/${encodeURIComponent(id)}/resolve`, body);
+}
+
+export interface ListWorkstationAlertsFilter {
+  workstation_id?: string;
+  from?: string;
+  limit?: number;
+  cursor?: string;
+}
+
+export function listWorkstationAlerts(
+  f?: ListWorkstationAlertsFilter,
+): Promise<Page<WorkstationAlert>> {
+  const params = new URLSearchParams();
+  if (f?.workstation_id) params.set('workstation_id', f.workstation_id);
+  if (f?.from) params.set('from', f.from);
+  if (f?.cursor) params.set('cursor', f.cursor);
+  if (f?.limit !== undefined && f?.limit !== null) params.set('limit', String(f.limit));
+  const qs = params.toString();
+  return api<Page<WorkstationAlert>>('GET', `/workstation-alerts${qs ? `?${qs}` : ''}`);
+}
+
 
 
 

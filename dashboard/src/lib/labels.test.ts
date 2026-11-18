@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  alertKindLabel,
   endReasonLabel,
   endSourceNote,
   outcomeLabel,
@@ -101,4 +102,26 @@ describe('labels lib', () => {
       expect(endSourceNote(undefined)).toBe('');
     });
   });
+
+  describe('alertKindLabel', () => {
+    it('translates known alert kinds', () => {
+      expect(alertKindLabel('snapshot_signature_invalid')).toBe(
+        'Snapshot có chữ ký sai (bị từ chối)',
+      );
+      expect(alertKindLabel('edge_db_recovered')).toBe(
+        'CSDL trên máy hỏng và đã dựng lại',
+      );
+      expect(alertKindLabel('key_version_mismatch')).toBe(
+        'Máy dùng khóa cũ (cần cài lại?)',
+      );
+      expect(alertKindLabel('teardown_failed_stuck_resource')).toBe(
+        'Không dọn được phiên cũ',
+      );
+    });
+
+    it('returns raw string for unknown kind', () => {
+      expect(alertKindLabel('unknown_alert_kind')).toBe('unknown_alert_kind');
+    });
+  });
 });
+
