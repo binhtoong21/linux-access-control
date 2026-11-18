@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@fontsource/be-vietnam-pro':
+        specifier: 5.2.8
+        version: 5.2.8
       '@tanstack/react-query':
         specifier: 5.62.0
         version: 5.62.0(react@18.3.1)
@@ -340,6 +343,9 @@ packages:
     engines: {node: '>=18'}
     cpu: [x64]
     os: [win32]
+
+  '@fontsource/be-vietnam-pro@5.2.8':
+    resolution: {integrity: sha512-lqTtfpkAy0GdFH0fqwR0sW4VP+3CNGaQV6SpW2TSZaNmixZMlou+2dp5ErGidrS1MPiDDPfPbfW2i358PVFLZA==}
 
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
@@ -1672,6 +1678,8 @@ snapshots:
 
   '@esbuild/win32-x64@0.24.2':
     optional: true
+
+  '@fontsource/be-vietnam-pro@5.2.8': {}
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:
