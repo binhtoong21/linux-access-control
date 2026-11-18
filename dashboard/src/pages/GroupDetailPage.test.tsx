@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -198,7 +198,6 @@ describe('GroupDetailPage', () => {
 
   it('delete with REFERENCED_BY_SCHEDULE shows the message and stays', async () => {
     const user = userEvent.setup();
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
 
     const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
       if (url === '/api/v1/groups') {
@@ -239,6 +238,10 @@ describe('GroupDetailPage', () => {
     const deleteBtn = screen.getByRole('button', { name: 'Xóa nhóm' });
     await user.click(deleteBtn);
 
+    const dialog = await screen.findByRole('dialog');
+    const confirmBtn = within(dialog).getByRole('button', { name: 'Xóa nhóm' });
+    await user.click(confirmBtn);
+
     expect(
       await screen.findByText(
         'Đang được lịch sử dụng, không xóa được. Sửa hoặc xóa lịch trước.',
@@ -251,7 +254,6 @@ describe('GroupDetailPage', () => {
 
   it('remove member sends DELETE .../members/{user_id} only after confirm', async () => {
     const user = userEvent.setup();
-    const confirmSpy = vi.spyOn(window, 'confirm');
 
     let deleteCallDetails: string | null = null;
 
@@ -288,15 +290,19 @@ describe('GroupDetailPage', () => {
     const removeButtons = await screen.findAllByRole('button', { name: 'Bỏ khỏi nhóm' });
     expect(removeButtons).toHaveLength(2);
 
-    // First attempt: confirm = false
-    confirmSpy.mockReturnValueOnce(false);
+    // First attempt: click cancel in dialog
     await user.click(removeButtons[0]);
+    const dialog1 = await screen.findByRole('dialog');
+    const cancelBtn = within(dialog1).getByRole('button', { name: 'Hủy' });
+    await user.click(cancelBtn);
 
     expect(deleteCallDetails).toBeNull();
 
-    // Second attempt: confirm = true
-    confirmSpy.mockReturnValueOnce(true);
+    // Second attempt: confirm in dialog
     await user.click(removeButtons[0]);
+    const dialog2 = await screen.findByRole('dialog');
+    const confirmBtn = within(dialog2).getByRole('button', { name: 'Bỏ khỏi nhóm' });
+    await user.click(confirmBtn);
 
     await waitFor(() => {
       expect(deleteCallDetails).toBe('/api/v1/groups/g-1/members/u-1');

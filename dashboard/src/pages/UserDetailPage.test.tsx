@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -246,19 +246,27 @@ describe('UserDetailPage', () => {
     const viewUidBtn = await screen.findByRole('button', { name: 'Xem UID' });
     await user.click(viewUidBtn);
 
-    expect(await screen.findByText('04A32B1C5D6E80')).toBeInTheDocument();
+    expect(await screen.findByText('04 A3 2B 1C 5D 6E 80')).toBeInTheDocument();
   });
 
-  it('deactivate sends nothing when window.confirm returns false', async () => {
+  it('deactivate sends nothing when cancelled and deactivates on confirm', async () => {
     const user = userEvent.setup();
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    let deactivateCallsCount = 0;
 
-    const fetchMock = vi.fn().mockImplementation((url: string) => {
-      if (url === '/api/v1/users/u-1') {
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/v1/users/u-1' && (!init || init.method === 'GET')) {
         return Promise.resolve({
           ok: true,
           status: 200,
           text: async () => JSON.stringify(mockUserDetail),
+        });
+      }
+      if (url === '/api/v1/users/u-1/deactivate' && init?.method === 'POST') {
+        deactivateCallsCount++;
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ ...mockUserDetail, status: 'inactive' }),
         });
       }
       return Promise.reject(new Error(`Unhandled URL: ${url}`));
@@ -270,10 +278,29 @@ describe('UserDetailPage', () => {
     const deactivateBtn = await screen.findByRole('button', { name: 'Vô hiệu hóa' });
     await user.click(deactivateBtn);
 
-    expect(confirmSpy).toHaveBeenCalled();
-    const deactivateCalls = fetchMock.mock.calls.filter(
-      ([url]) => url.includes('/deactivate'),
-    );
-    expect(deactivateCalls).toHaveLength(0);
+    const dialog = await screen.findByRole('dialog');
+    expect(
+      within(dialog).getByText('Vô hiệu hóa người dùng Nguyễn Văn A?'),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(
+        'Vô hiệu hóa người này? Mọi thẻ của họ sẽ bị từ chối ở các máy sau khi máy nhận dữ liệu mới.',
+      ),
+    ).toBeInTheDocument();
+
+    const cancelBtn = within(dialog).getByRole('button', { name: 'Hủy' });
+    await user.click(cancelBtn);
+
+    expect(deactivateCallsCount).toBe(0);
+
+    // Click again and confirm
+    await user.click(deactivateBtn);
+    const dialog2 = await screen.findByRole('dialog');
+    const confirmBtn = within(dialog2).getByRole('button', { name: 'Vô hiệu hóa' });
+    await user.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(deactivateCallsCount).toBe(1);
+    });
   });
 });

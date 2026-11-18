@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { listUsers } from '../api/endpoints';
 import type { User } from '../api/types';
 import { errorMessage } from '../lib/errors';
+import { inputClass } from './ui';
 
 export function UserPicker({
   onPick,
@@ -50,27 +51,27 @@ export function UserPicker({
         disabled={disabled}
         onChange={(e) => setText(e.target.value)}
         placeholder={placeholder ?? 'Tìm người dùng...'}
-        className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+        className={`w-full ${inputClass}`}
       />
       {enabled && (
-        <div className="absolute left-0 right-0 mt-1 bg-white border border-gray-200 rounded shadow-lg max-h-52 overflow-y-auto z-10 divide-y divide-gray-100">
+        <div className="absolute left-0 right-0 mt-1 bg-surface border border-line rounded shadow-md max-h-52 overflow-y-auto z-10 divide-y divide-line">
           {isLoading && (
-            <div className="p-3 text-xs text-gray-500 text-center">Đang tìm…</div>
+            <div className="p-3 text-xs text-ink-muted text-center">Đang tìm…</div>
           )}
           {isError && (
-            <div className="p-3 text-xs text-red-600 text-center space-y-1">
+            <div className="p-3 text-xs text-danger text-center space-y-1">
               <div>{errorMessage(error)}</div>
               <button
                 type="button"
                 onClick={() => refetch()}
-                className="text-xs text-blue-600 hover:underline font-medium"
+                className="text-xs text-accent hover:underline font-medium"
               >
                 Thử lại
               </button>
             </div>
           )}
           {!isLoading && !isError && users.length === 0 && (
-            <div className="p-3 text-xs text-gray-500 text-center">Không tìm thấy</div>
+            <div className="p-3 text-xs text-ink-muted text-center">Không tìm thấy</div>
           )}
           {!isLoading &&
             !isError &&
@@ -80,7 +81,7 @@ export function UserPicker({
                 type="button"
                 disabled={disabled}
                 onClick={() => handlePick(u)}
-                className="w-full text-left px-3 py-2 text-sm text-gray-800 hover:bg-blue-50 focus:bg-blue-50 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full text-left px-3 py-2 text-sm text-ink hover:bg-accent-tint focus:bg-accent-tint focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {u.external_id} — {u.full_name}
               </button>

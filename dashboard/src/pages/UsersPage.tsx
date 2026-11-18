@@ -4,6 +4,21 @@ import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { createUser, listUsers } from '../api/endpoints';
 import type { User, UserStatus } from '../api/types';
 import { errorMessage } from '../lib/errors';
+import {
+  Button,
+  EmptyRow,
+  Field,
+  inputClass,
+  Notice,
+  PageHeader,
+  selectClass,
+  StatusPill,
+  Table,
+  TD,
+  TH,
+  THead,
+  TR,
+} from '../components/ui';
 
 function formatDate(iso: string): string {
   const date = new Date(iso);
@@ -103,85 +118,76 @@ export function UsersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h1 className="text-xl font-bold text-gray-900">Người dùng</h1>
-        <button
-          type="button"
-          onClick={() => setShowCreateForm((prev) => !prev)}
-          className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700"
-        >
-          Thêm người dùng
-        </button>
-      </div>
+      <PageHeader
+        title="Người dùng"
+        actions={
+          <Button
+            variant="primary"
+            onClick={() => setShowCreateForm((prev) => !prev)}
+          >
+            Thêm người dùng
+          </Button>
+        }
+      />
 
       {showCreateForm && (
         <form
           onSubmit={handleCreate}
-          className="bg-white p-4 rounded-lg shadow border border-gray-200 space-y-4"
+          className="bg-surface p-4 rounded border border-line space-y-4"
         >
-          <div className="font-semibold text-gray-800 text-sm">Thêm người dùng mới</div>
+          <div className="font-semibold text-ink text-sm">Thêm người dùng mới</div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <label htmlFor="create-external-id" className="block text-sm font-medium text-gray-700">
-                Mã *
-              </label>
+            <Field label="Mã *" htmlFor="create-external-id">
               <input
                 id="create-external-id"
                 type="text"
                 value={createExternalId}
                 onChange={(e) => setCreateExternalId(e.target.value)}
-                className="mt-1 w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className={`w-full ${inputClass}`}
                 placeholder="Ví dụ: SV001"
               />
-            </div>
-            <div>
-              <label htmlFor="create-full-name" className="block text-sm font-medium text-gray-700">
-                Họ tên *
-              </label>
+            </Field>
+            <Field label="Họ tên *" htmlFor="create-full-name">
               <input
                 id="create-full-name"
                 type="text"
                 value={createFullName}
                 onChange={(e) => setCreateFullName(e.target.value)}
-                className="mt-1 w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className={`w-full ${inputClass}`}
                 placeholder="Ví dụ: Nguyễn Văn A"
               />
-            </div>
-            <div>
-              <label htmlFor="create-email" className="block text-sm font-medium text-gray-700">
-                Email
-              </label>
+            </Field>
+            <Field label="Email" htmlFor="create-email">
               <input
                 id="create-email"
                 type="email"
                 value={createEmail}
                 onChange={(e) => setCreateEmail(e.target.value)}
-                className="mt-1 w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className={`w-full ${inputClass}`}
                 placeholder="Tùy chọn"
               />
-            </div>
+            </Field>
           </div>
           {createError && (
-            <div className="text-sm text-red-600">{createError}</div>
+            <Notice tone="danger">{createError}</Notice>
           )}
-          <div className="flex justify-end space-x-2">
-            <button
-              type="button"
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="secondary"
               onClick={() => {
                 setShowCreateForm(false);
                 setCreateError(null);
               }}
-              className="px-3 py-1.5 border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-100"
             >
               Hủy
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
+              variant="primary"
               disabled={isSubmitting}
-              className="px-4 py-1.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
             >
               {isSubmitting ? 'Đang lưu…' : 'Lưu'}
-            </button>
+            </Button>
           </div>
         </form>
       )}
@@ -193,18 +199,18 @@ export function UsersPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Tìm theo mã hoặc tên"
-            className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className={`w-full ${inputClass}`}
           />
         </div>
-        <div className="flex items-center space-x-2 w-full sm:w-auto justify-end">
-          <label htmlFor="status-filter" className="text-sm font-medium text-gray-700 whitespace-nowrap">
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+          <label htmlFor="status-filter" className="text-sm font-medium text-ink whitespace-nowrap">
             Trạng thái:
           </label>
           <select
             id="status-filter"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'inactive')}
-            className="border border-gray-300 rounded px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className={selectClass}
           >
             <option value="all">Tất cả</option>
             <option value="active">Đang hoạt động</option>
@@ -214,92 +220,76 @@ export function UsersPage() {
       </div>
 
       {isLoading && (
-        <div className="p-8 text-center text-gray-500">Đang tải…</div>
+        <div className="py-8 text-center text-sm text-ink-muted">Đang tải…</div>
       )}
 
       {isError && (
-        <div className="p-4 bg-red-50 text-red-700 rounded border border-red-200">
-          {errorMessage(error)}
-        </div>
+        <Notice tone="danger">{errorMessage(error)}</Notice>
       )}
 
       {!isLoading && !isError && (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-gray-50 text-gray-600 font-medium">
-                <tr>
-                  <th className="px-4 py-3 text-left">Mã</th>
-                  <th className="px-4 py-3 text-left">Họ tên</th>
-                  <th className="px-4 py-3 text-left">Email</th>
-                  <th className="px-4 py-3 text-left">Trạng thái</th>
-                  <th className="px-4 py-3 text-left">Ngày tạo</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {users.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
-                      Chưa có người dùng nào
-                    </td>
-                  </tr>
-                ) : (
-                  users.map((u) => (
-                    <tr
-                      key={u.id}
-                      onClick={() => navigate(`/users/${u.id}`)}
-                      className="hover:bg-gray-50 cursor-pointer"
+        <Table>
+          <THead>
+            <TR>
+              <TH>Mã</TH>
+              <TH>Họ tên</TH>
+              <TH>Email</TH>
+              <TH>Trạng thái</TH>
+              <TH>Ngày tạo</TH>
+            </TR>
+          </THead>
+          <tbody>
+            {users.length === 0 ? (
+              <EmptyRow colSpan={5}>Chưa có người dùng nào</EmptyRow>
+            ) : (
+              users.map((u) => (
+                <TR
+                  key={u.id}
+                  interactive
+                  onClick={() => navigate(`/users/${u.id}`)}
+                  className="cursor-pointer"
+                >
+                  <TD className="font-mono font-medium text-accent">
+                    <Link
+                      to={`/users/${u.id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="hover:underline"
                     >
-                      <td className="px-4 py-3 font-medium text-blue-600">
-                        <Link
-                          to={`/users/${u.id}`}
-                          onClick={(e) => e.stopPropagation()}
-                          className="hover:underline"
-                        >
-                          {u.external_id}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-3 text-gray-900">
-                        <Link
-                          to={`/users/${u.id}`}
-                          onClick={(e) => e.stopPropagation()}
-                          className="hover:underline"
-                        >
-                          {u.full_name}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-3 text-gray-700">{u.email || '—'}</td>
-                      <td className="px-4 py-3">
-                        {u.status === 'active' ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                            Đang hoạt động
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
-                            Đã vô hiệu hóa
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700">{formatDate(u.created_at)}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                      {u.external_id}
+                    </Link>
+                  </TD>
+                  <TD className="text-ink">
+                    <Link
+                      to={`/users/${u.id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="hover:underline"
+                    >
+                      {u.full_name}
+                    </Link>
+                  </TD>
+                  <TD className="text-ink-muted">{u.email || '—'}</TD>
+                  <TD>
+                    <StatusPill tone={u.status === 'active' ? 'ok' : 'neutral'}>
+                      {u.status === 'active' ? 'Đang hoạt động' : 'Đã vô hiệu hóa'}
+                    </StatusPill>
+                  </TD>
+                  <TD className="text-ink-muted">{formatDate(u.created_at)}</TD>
+                </TR>
+              ))
+            )}
+          </tbody>
+        </Table>
       )}
 
       {hasNextPage && (
         <div className="text-center pt-2">
-          <button
-            type="button"
+          <Button
+            variant="secondary"
             onClick={() => fetchNextPage()}
             disabled={isFetchingNextPage}
-            className="px-4 py-2 border border-gray-300 rounded text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
           >
             {isFetchingNextPage ? 'Đang tải…' : 'Tải thêm'}
-          </button>
+          </Button>
         </div>
       )}
     </div>
