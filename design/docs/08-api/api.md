@@ -75,6 +75,22 @@ UID chỉ đi vào API, không bao giờ được trả ra trong danh sách; ch�
 | POST | `/cards/{id}/unbind` | Gỡ khỏi user → `unbound` | — | 200 |
 | POST | `/cards/{id}/bind` | Gắn thẻ `unbound` cho user → `active` | `{user_id}` | 200; 409 `INVALID_STATE_TRANSITION` |
 
+### Nhập danh sách (FR-034, D-033.2)
+| Method | Path | Mô tả | Request | Response |
+|---|---|---|---|---|
+| POST | `/imports/roster` | Kiểm tra (mặc định) hoặc áp dụng một tệp CSV user, nhóm, thẻ | `{csv: string, apply?: boolean}` (tối đa 2000 dòng; body JSON tối đa 2 MB) | 200 `ImportResult`; 400 `VALIDATION_ERROR` khi lỗi cả tệp (thiếu cột `external_id`/`full_name`, cột trùng, nháy kép sai, không có dòng, quá 2000 dòng) |
+
+CSV: dòng đầu là tên cột (không phân biệt hoa thường, thứ tự tùy ý) `external_id`, `full_name` (bắt buộc), `email`, `groups` (tên nhóm ngăn bằng `;`), `card_uid` (tùy chọn); cột khác bị bỏ qua và liệt kê trong `ignored_columns`. Chấp nhận BOM UTF-8, CRLF, trường trong `"…"` theo RFC 4180; sau dấu nháy đóng chỉ được có khoảng trắng.
+
+`ImportResult`: `{applied, summary: {rows, users_created, users_updated, users_unchanged, groups_created: [tên], memberships_added, cards_registered, cards_bound, errors, warnings}, ignored_columns, rows: [{line, external_id, action: create|update|unchanged|error, groups_added: [tên], card: register|bind|unchanged|null, errors: [{code, message}], warnings: [{code, message}]}]}`. Không bao giờ chứa UID.
+
+Quy tắc:
+- Kiểm tra và áp dụng chạy cùng một đường xử lý trong một giao dịch; kiểm tra thì luôn rollback. Áp dụng là tất cả hoặc không: còn một dòng lỗi thì `applied: false` và không ghi gì.
+- Khóa là `external_id`. User có rồi: cập nhật `full_name`, và `email` khi ô email không rỗng (ô rỗng không xóa email); user `inactive` không được kích hoạt lại (cảnh báo `USER_INACTIVE`). Nhóm tìm không phân biệt hoa thường, chưa có thì tạo. Thành viên chỉ thêm.
+- Thẻ: UID mới thì đăng ký; `unbound` thì gắn; đã thuộc đúng user thì không đổi (kể cả đang khóa); thuộc người khác thì lỗi `CARD_ALREADY_BOUND`, không chuyển chủ. VR-007, VR-013 như đăng ký từng thẻ.
+- Mã lỗi theo dòng: `INVALID_EXTERNAL_ID`, `INVALID_FULL_NAME`, `INVALID_EMAIL`, `INVALID_GROUP_NAME`, `INVALID_UID`, `RANDOM_UID_NOT_SUPPORTED`, `DUPLICATE_IN_FILE`, `CARD_ALREADY_BOUND`, `CONFLICT` (thao tác khác tạo cùng dữ liệu trong lúc nhập: chạy kiểm tra lại).
+- Áp dụng thành công ghi một mục `admin_audit_logs` (`roster.import`, kèm `summary`); event Identity (`UserUpdated`, `GroupMembershipChanged` mỗi nhóm một lần, `CardBound`) ghi cùng giao dịch như thao tác lẻ.
+
 ### Zone và Máy trạm (FR-041, FR-042, FR-062)
 | Method | Path | Mô tả | Request | Response |
 |---|---|---|---|---|
