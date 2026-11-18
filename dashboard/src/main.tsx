@@ -16,6 +16,8 @@ import { CardsPage } from './pages/CardsPage';
 import { ImportPage } from './pages/ImportPage';
 import { ZonesPage } from './pages/ZonesPage';
 import { EnrollmentPage } from './pages/EnrollmentPage';
+import { SchedulesPage } from './pages/SchedulesPage';
+import { ScheduleFormPage } from './pages/ScheduleFormPage';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -45,6 +47,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
               <Route path="/workstations/:id" element={<WorkstationDetailPage />} />
               <Route path="/zones" element={<ZonesPage />} />
               <Route path="/enrollment" element={<EnrollmentPage />} />
+              <Route path="/schedules" element={<SchedulesPage />} />
+              <Route path="/schedules/new" element={<ScheduleFormPage />} />
+              <Route path="/schedules/:id/edit" element={<ScheduleFormPage />} />
               <Route path="/users" element={<UsersPage />} />
               <Route path="/users/:id" element={<UserDetailPage />} />
               <Route path="/groups" element={<GroupsPage />} />

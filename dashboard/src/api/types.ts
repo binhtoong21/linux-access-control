@@ -255,4 +255,83 @@ export interface BatchApprovalResult {
   skipped: { id: string; reason: string }[];
 }
 
+export type DayOfWeek =
+  | 'MONDAY'
+  | 'TUESDAY'
+  | 'WEDNESDAY'
+  | 'THURSDAY'
+  | 'FRIDAY'
+  | 'SATURDAY'
+  | 'SUNDAY';
+
+export type ScheduleStatus = 'enabled' | 'disabled';
+
+export interface ScheduleSubjectInput {
+  type: 'user' | 'group';
+  id: string;
+}
+
+export interface ScheduleTargetInput {
+  type: 'workstation' | 'zone';
+  id: string;
+}
+
+export interface ScheduleInput {
+  name: string;
+  subject: ScheduleSubjectInput;
+  target: ScheduleTargetInput;
+  valid_from: string;
+  valid_to: string | null;
+  days_of_week: DayOfWeek[];
+  start_time: string;
+  end_time: string;
+  target_os_username: string | null;
+}
+
+export interface ScheduleSubject extends ScheduleSubjectInput {
+  name: string;
+  external_id?: string;
+}
+
+export interface ScheduleTarget extends ScheduleTargetInput {
+  name: string;
+}
+
+export interface Schedule {
+  id: string;
+  name: string;
+  subject: ScheduleSubject;
+  target: ScheduleTarget;
+  valid_from: string;
+  valid_to: string | null;
+  days_of_week: DayOfWeek[];
+  start_time: string;
+  end_time: string;
+  target_os_username: string | null;
+  status: ScheduleStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ScheduleWarning {
+  code: 'ambiguous_profile' | 'missing_profile';
+  message: string;
+  workstations: { id: string; mqtt_identity: string }[];
+  schedule?: { id: string; name: string };
+  target_os_username?: string | null;
+}
+
+export interface ScheduleValidationErrorDetail {
+  field: string;
+  constraints: string[];
+}
+
+export interface ScheduleValidationResult {
+  errors: ScheduleValidationErrorDetail[];
+  warnings: ScheduleWarning[];
+}
+
+export type ValidateScheduleInput = ScheduleInput & { schedule_id?: string };
+
+
 
