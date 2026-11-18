@@ -301,6 +301,35 @@ describe('ScheduleFormPage', () => {
     expect(saveButton).toBeDisabled();
   });
 
+  it('a failed check keeps Lưu disabled and never saves', async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, text: async () => JSON.stringify(body) });
+      if (url === '/api/v1/groups') return ok(mockGroups);
+      if (url === '/api/v1/zones') return ok(mockZones);
+      if (url === '/api/v1/workstations') return ok(mockWorkstations);
+      if (url === '/api/v1/schedules/validate' && init?.method === 'POST') {
+        return Promise.resolve({ ok: false, status: 500, text: async () => '' });
+      }
+      return Promise.reject(new Error(`Unhandled URL: ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderScheduleForm();
+    await user.type(screen.getByLabelText(/Tên \*/), 'Lịch A');
+    await user.selectOptions(await screen.findByLabelText('Chọn nhóm'), 'g-1');
+    await user.selectOptions(await screen.findByLabelText('Chọn zone'), 'z-1');
+    await user.click(screen.getByRole('button', { name: 'T2–T6' }));
+    await user.type(screen.getByLabelText(/Giờ bắt đầu \*/), '07:30');
+    await user.type(screen.getByLabelText(/Giờ kết thúc \*/), '11:30');
+
+    expect(await screen.findByText(/Không kiểm tra được lịch/)).toBeInTheDocument();
+    const saveButton = screen.getByRole('button', { name: 'Lưu' });
+    expect(saveButton).toBeDisabled();
+    await user.click(saveButton);
+    expect(fetchMock.mock.calls.some(([u, i]) => u === '/api/v1/schedules' && (i as RequestInit | undefined)?.method === 'POST')).toBe(false);
+  });
+
   it('a missing_profile warning shows the machine and saving asks confirm (cancel = no POST)', async () => {
     const user = userEvent.setup();
     let postCallOccurred = false;

@@ -198,6 +198,9 @@ function ScheduleForm({ initialSchedule, scheduleId }: ScheduleFormProps) {
     data: validationResult,
     isLoading: isValidating,
     isFetching,
+    isError: checkFailed,
+    error: checkError,
+    refetch: retryCheck,
   } = useQuery({
     queryKey: ['schedules', 'validate', scheduleId ?? 'new', inputJson],
     queryFn: () =>
@@ -221,9 +224,17 @@ function ScheduleForm({ initialSchedule, scheduleId }: ScheduleFormProps) {
   const checkPending =
     isDebouncing || isValidating || isFetching || (isLocallyValid && debouncedInput === null);
 
+  // Saving needs a successful check of exactly what is in the form now: a failed or stale check could hide a warning.
+  const checkOk =
+    !checkPending &&
+    !checkFailed &&
+    validationResult !== undefined &&
+    currentInput !== null &&
+    inputJson === JSON.stringify(currentInput);
+
   const isSaveDisabled =
     !isLocallyValid ||
-    checkPending ||
+    !checkOk ||
     (validationResult?.errors && validationResult.errors.length > 0) ||
     isSaving;
 
@@ -231,7 +242,7 @@ function ScheduleForm({ initialSchedule, scheduleId }: ScheduleFormProps) {
     e.preventDefault();
     if (inFlightRef.current || isSaving) return;
     if (!isLocallyValid || !currentInput) return;
-    if (checkPending) return;
+    if (!checkOk) return;
     if (validationResult?.errors && validationResult.errors.length > 0) return;
 
     if (validationResult?.warnings && validationResult.warnings.length > 0) {
@@ -720,6 +731,18 @@ function ScheduleForm({ initialSchedule, scheduleId }: ScheduleFormProps) {
         </div>
 
         {/* Warnings Section */}
+        {checkFailed && !checkPending && (
+          <div className="mb-4 p-3 rounded border border-red-200 bg-red-50 text-sm text-red-700 flex items-center justify-between">
+            <span>Không kiểm tra được lịch: {errorMessage(checkError)}. Chưa thể lưu.</span>
+            <button
+              type="button"
+              onClick={() => void retryCheck()}
+              className="ml-3 px-2 py-1 text-xs border border-red-300 rounded hover:bg-red-100"
+            >
+              Thử lại
+            </button>
+          </div>
+        )}
         {validationResult?.warnings && validationResult.warnings.length > 0 && (
           <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-900 space-y-2">
             <div className="font-semibold text-sm">Cảnh báo:</div>
