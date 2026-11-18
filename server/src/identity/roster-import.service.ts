@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { sql } from 'kysely';
 import { Db, KYSELY } from '../infra/database/database.module';
+import { isUniqueViolation } from '../infra/database/pg-errors';
 import { recordAdminAction } from '../shared/admin-audit';
 import { InvalidUidError, normalizeUid } from '../shared/crypto/crypto-v1';
 import { isRandomUid, UidVault } from '../shared/crypto/uid-vault';
@@ -342,7 +343,13 @@ export class RosterImportService {
             }
           } catch (err) {
             await sql`ROLLBACK TO SAVEPOINT roster_row`.execute(trx);
-            throw err;
+            // Another admin action created the same user, group or card between our lookup and insert: report it on the
+            // row (the whole import is then refused) instead of failing the request; running the check again resolves it.
+            if (!isUniqueViolation(err)) throw err;
+            errors.push({ code: 'CONFLICT', message: 'Data changed while importing; run the check again' });
+            action = 'error';
+            cardAction = null;
+            rowGroupsAdded = [];
           }
 
           if (rowSuccess) {

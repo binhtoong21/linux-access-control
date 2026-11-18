@@ -121,6 +121,14 @@ describe('parseRoster', () => {
     expect(() => parseRoster(csv)).toThrow('unterminated quoted field at line 2');
   });
 
+  it('rejects text after a closing quote instead of dropping it, but allows trailing spaces', () => {
+    expect(() => parseRoster('external_id,full_name,card_uid\nSV001,A,"04A32B1C5D6E81"INVALID')).toThrow(
+      'unexpected character after a closing quote at line 2',
+    );
+    expect(() => parseRoster('external_id,full_name,groups\nSV001,A,"Lab A";Lab B')).toThrow(RosterFormatError);
+    expect(parseRoster('external_id,full_name\n"SV001"  ,"A" \n').rows[0]).toMatchObject({ external_id: 'SV001', full_name: 'A' });
+  });
+
   it('throws when there are no data rows or file exceeds MAX_ROSTER_ROWS', () => {
     expect(() => parseRoster('')).toThrow('no data rows');
     expect(() => parseRoster('   \n\n  ')).toThrow('no data rows');

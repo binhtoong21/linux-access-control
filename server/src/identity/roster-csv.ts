@@ -87,9 +87,12 @@ function parseCsvRecords(text: string): RawRecord[] {
           throw new RosterFormatError(`unterminated quoted field at line ${quoteStartLine}`);
         }
 
-        // Consume trailing horizontal whitespace after closing quote up to delimiter or newline
-        while (pos < content.length && content[pos] !== ',' && content[pos] !== '\r' && content[pos] !== '\n') {
+        // Only spaces or tabs may follow the closing quote; anything else is malformed CSV, never silently dropped.
+        while (pos < content.length && (content[pos] === ' ' || content[pos] === '\t')) {
           pos++;
+        }
+        if (pos < content.length && content[pos] !== ',' && content[pos] !== '\r' && content[pos] !== '\n') {
+          throw new RosterFormatError(`unexpected character after a closing quote at line ${currentLine}`);
         }
       } else {
         // Unquoted field
