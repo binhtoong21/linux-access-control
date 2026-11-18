@@ -65,6 +65,16 @@ export function Layout() {
             >
               Thẻ
             </NavLink>
+            <NavLink
+              to="/import"
+              className={({ isActive }) =>
+                isActive
+                  ? 'text-blue-600 font-medium px-2 py-1 rounded bg-blue-50'
+                  : 'text-gray-600 hover:text-gray-900 px-2 py-1'
+              }
+            >
+              Nhập CSV
+            </NavLink>
           </nav>
         </div>
         <div className="flex items-center space-x-4">
