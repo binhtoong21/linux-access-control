@@ -226,8 +226,6 @@ describe('ImportPage', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
-
     renderImportPage(queryClient);
 
     const fileInput = screen.getByLabelText('Chọn tệp CSV');
@@ -243,9 +241,13 @@ describe('ImportPage', () => {
     // Double click simulation
     await Promise.all([user.click(applyBtn), user.click(applyBtn)]);
 
-    expect(confirmSpy).toHaveBeenCalledWith(
-      'Áp dụng 2 dòng? Thay đổi có hiệu lực tại máy sau khi máy nhận dữ liệu mới.',
-    );
+    expect(within(screen.getByRole('dialog')).getByText(
+      'Áp dụng 2 dòng? Thay đổi có hiệu lực tại máy sau khi máy nhận dữ liệu mới.')).toBeInTheDocument();
+    const dialog = screen.getByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Hủy' }));
+    expect(applyCallCount).toBe(0);
+    await user.click(applyBtn);
+    await user.dblClick(within(screen.getByRole('dialog')).getByRole('button', { name: 'Áp dụng' }));
     expect(applyCallCount).toBe(1);
 
     expect(await screen.findByText('Đã áp dụng.')).toBeInTheDocument();
@@ -261,7 +263,6 @@ describe('ImportPage', () => {
 
   it('applied: false on apply shows the changed-data message', async () => {
     const user = userEvent.setup();
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
 
     const conflictResult: ImportResult = {
       applied: false,
@@ -315,12 +316,13 @@ describe('ImportPage', () => {
 
     const applyBtn = await screen.findByRole('button', { name: 'Áp dụng' });
     await user.click(applyBtn);
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Áp dụng' }));
 
+    // The dialog closes and the page shows why, with the new per-row errors.
     expect(
-      await screen.findByText(
-        'Không áp dụng được: dữ liệu đã thay đổi từ lần kiểm tra, xem các lỗi bên dưới.',
-      ),
+      await screen.findByText('Không áp dụng được: dữ liệu đã thay đổi từ lần kiểm tra, xem các lỗi bên dưới.'),
     ).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByText('Data changed while importing; run the check again')).toBeInTheDocument();
   });
 
@@ -490,4 +492,31 @@ describe('ImportPage', () => {
     expect(screen.queryByText('SV_OK')).not.toBeInTheDocument();
     expect(screen.getByText('SV_BAD')).toBeInTheDocument();
   });
+
+  it('an apply failure stays inside the dialog and can be retried successfully', async () => {
+    const user = userEvent.setup();
+    let applyCalls = 0;
+    const fetchMock = vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
+      const { apply } = JSON.parse(init?.body as string);
+      if (apply && ++applyCalls === 1) {
+        return Promise.resolve({ ok: false, status: 500, text: async () => '' });
+      }
+      return Promise.resolve({ ok: true, status: 200, text: async () => JSON.stringify({ ...mockCleanResult, applied: apply }) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderImportPage();
+    await user.upload(screen.getByLabelText('Chọn tệp CSV'), new File(['csv'], 'retry.csv', { type: 'text/csv' }));
+    await user.click(screen.getByRole('button', { name: 'Kiểm tra' }));
+    await screen.findByText('Tổng kết');
+    await user.click(screen.getByRole('button', { name: 'Áp dụng' }));
+    const dialog = screen.getByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Áp dụng' }));
+    expect(await within(dialog).findByRole('alert')).toBeInTheDocument();
+    expect(applyCalls).toBe(1);
+    await user.click(within(dialog).getByRole('button', { name: 'Áp dụng' }));
+    expect(await screen.findByText('Đã áp dụng.')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(applyCalls).toBe(2);
+  });
+
 });

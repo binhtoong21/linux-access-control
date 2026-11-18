@@ -370,7 +370,7 @@ describe('CardsPage', () => {
     const viewUidBtn = await screen.findByRole('button', { name: 'Xem UID' });
     await user.click(viewUidBtn);
 
-    expect(await screen.findByText('04A32B1C5D6E80')).toBeInTheDocument();
+    expect(await screen.findByText('04 A3 2B 1C 5D 6E 80')).toBeInTheDocument();
   });
 
   it('prevents double register while a request is in-flight', async () => {

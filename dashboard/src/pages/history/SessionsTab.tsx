@@ -9,6 +9,21 @@ import { errorMessage } from '../../lib/errors';
 import { useNow } from '../../lib/useNow';
 import { UserPicker } from '../../components/UserPicker';
 import { getVnDateString, toVnIso } from './AuditTab';
+import {
+  Button,
+  EmptyRow,
+  Field,
+  fieldDescribedBy,
+  inputClass,
+  Notice,
+  selectClass,
+  StatusPill,
+  Table,
+  TD,
+  TH,
+  THead,
+  TR,
+} from '../../components/ui';
 
 export function SessionsTab({
   initialWorkstationId,
@@ -111,33 +126,33 @@ export function SessionsTab({
     switch (st) {
       case 'active':
         return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+          <StatusPill tone="ok">
             {sessionStatusLabel(st)}
-          </span>
+          </StatusPill>
         );
       case 'completed':
         return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+          <StatusPill tone="neutral">
             {sessionStatusLabel(st)}
-          </span>
+          </StatusPill>
         );
       case 'forced_logout':
         return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+          <StatusPill tone="danger">
             {sessionStatusLabel(st)}
-          </span>
+          </StatusPill>
         );
       case 'abandoned':
         return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
+          <StatusPill tone="warn">
             {sessionStatusLabel(st)}
-          </span>
+          </StatusPill>
         );
       default:
         return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+          <StatusPill tone="neutral">
             {st}
-          </span>
+          </StatusPill>
         );
     }
   };
@@ -145,19 +160,17 @@ export function SessionsTab({
   return (
     <div className="space-y-4">
       {/* Filters Section */}
-      <div className="bg-white p-4 rounded-lg shadow border border-gray-200 space-y-4">
+      <div className="bg-surface p-4 rounded border border-line space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {/* Máy */}
-          <div>
-            <label htmlFor="session-filter-workstation" className="block text-xs font-semibold text-gray-700 mb-1">
-              Máy
-            </label>
+          <Field label="Máy" htmlFor="session-filter-workstation">
             <select
               id="session-filter-workstation"
+              aria-describedby={fieldDescribedBy('session-filter-workstation', {})}
               aria-label="Chọn máy"
               value={workstationId}
               onChange={(e) => setWorkstationId(e.target.value)}
-              className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`w-full ${selectClass}`}
             >
               <option value="">-- Tất cả máy --</option>
               {workstations?.map((ws) => (
@@ -166,43 +179,41 @@ export function SessionsTab({
                 </option>
               ))}
             </select>
-          </div>
+          </Field>
 
           {/* Người dùng */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1">
-              Người dùng
-            </label>
-            {selectedUser ? (
-              <div className="flex items-center space-x-2 border border-gray-300 rounded px-3 py-1.5 bg-gray-50">
-                <span className="text-sm text-gray-900 flex-1 truncate">
-                  {selectedUser.external_id} — {selectedUser.full_name}
-                </span>
-                <button
-                  type="button"
-                  onClick={handleClearUser}
-                  className="text-xs text-red-600 hover:text-red-800 font-bold"
-                  aria-label="Xóa chọn người dùng"
-                >
-                  ✕
-                </button>
-              </div>
-            ) : (
-              <UserPicker onPick={handleSelectUser} placeholder="Tìm người dùng..." />
-            )}
-          </div>
+          <Field label="Người dùng" htmlFor="session-filter-user">
+            <div id="session-filter-user">
+              {selectedUser ? (
+                <div className="flex items-center space-x-2 border border-control rounded px-3 py-1.5 bg-canvas">
+                  <span className="text-sm text-ink flex-1 truncate">
+                    {selectedUser.external_id} — {selectedUser.full_name}
+                  </span>
+                  <Button
+                    variant="quiet"
+                    size="sm"
+                    type="button"
+                    onClick={handleClearUser}
+                    aria-label="Xóa chọn người dùng"
+                  >
+                    ✕
+                  </Button>
+                </div>
+              ) : (
+                <UserPicker onPick={handleSelectUser} placeholder="Tìm người dùng..." />
+              )}
+            </div>
+          </Field>
 
           {/* Trạng thái */}
-          <div>
-            <label htmlFor="session-filter-status" className="block text-xs font-semibold text-gray-700 mb-1">
-              Trạng thái
-            </label>
+          <Field label="Trạng thái" htmlFor="session-filter-status">
             <select
               id="session-filter-status"
+              aria-describedby={fieldDescribedBy('session-filter-status', {})}
               aria-label="Chọn trạng thái"
               value={status}
               onChange={(e) => setStatus(e.target.value as SessionStatus | '')}
-              className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`w-full ${selectClass}`}
             >
               <option value="">Tất cả trạng thái</option>
               <option value="active">Đang dùng (active)</option>
@@ -210,58 +221,53 @@ export function SessionsTab({
               <option value="forced_logout">Bị đăng xuất (forced_logout)</option>
               <option value="abandoned">Bị bỏ dở (abandoned)</option>
             </select>
-          </div>
+          </Field>
         </div>
 
         {/* Time filters */}
-        <div className="pt-2 border-t border-gray-100 flex flex-wrap items-center gap-3 text-sm">
-          <div className="flex items-center space-x-2">
-            <label htmlFor="session-filter-from" className="text-xs font-semibold text-gray-700 whitespace-nowrap">
-              Từ:
-            </label>
+        <div className="pt-2 border-t border-line flex flex-wrap items-center gap-3 text-sm">
+          <Field label="Từ:" htmlFor="session-filter-from">
             <input
               id="session-filter-from"
+              aria-describedby={fieldDescribedBy('session-filter-from', {})}
               type="datetime-local"
               value={fromTime}
               onChange={(e) => setFromTime(e.target.value)}
-              className="border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`w-full ${inputClass}`}
             />
-          </div>
-          <div className="flex items-center space-x-2">
-            <label htmlFor="session-filter-to" className="text-xs font-semibold text-gray-700 whitespace-nowrap">
-              Đến:
-            </label>
+          </Field>
+          <Field label="Đến:" htmlFor="session-filter-to">
             <input
               id="session-filter-to"
+              aria-describedby={fieldDescribedBy('session-filter-to', {})}
               type="datetime-local"
               value={toTime}
               onChange={(e) => setToTime(e.target.value)}
-              className="border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`w-full ${inputClass}`}
             />
-          </div>
+          </Field>
           <div className="flex items-center space-x-2">
-            <button
+            <Button
               type="button"
               onClick={handleToday}
-              className="px-2.5 py-1 text-xs border border-gray-300 rounded text-gray-700 hover:bg-gray-100"
             >
               Hôm nay
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               onClick={handleSevenDays}
-              className="px-2.5 py-1 text-xs border border-gray-300 rounded text-gray-700 hover:bg-gray-100"
             >
               7 ngày
-            </button>
+            </Button>
             {(fromTime || toTime) && (
-              <button
+              <Button
+                variant="quiet"
+                size="sm"
                 type="button"
                 onClick={handleClearTime}
-                className="px-2.5 py-1 text-xs text-blue-600 hover:underline"
               >
                 Xóa giờ
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -269,130 +275,123 @@ export function SessionsTab({
 
       {/* Error display */}
       {isError && (
-        <div className="p-4 bg-red-50 text-red-700 rounded border border-red-200 text-sm">
+        <Notice tone="danger">
           {errorMessage(error)}
-        </div>
+        </Notice>
       )}
 
       {/* Loading state */}
       {isLoading && (
-        <div className="p-8 text-center text-gray-500">Đang tải danh sách phiên…</div>
+        <Notice tone="info">Đang tải danh sách phiên…</Notice>
       )}
 
       {/* Main Table */}
       {!isLoading && !isError && (
-        <div className="bg-white rounded-lg shadow overflow-hidden border border-gray-200">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-gray-50 text-gray-600 font-medium">
-                <tr>
-                  <th className="px-4 py-3 text-left">Máy</th>
-                  <th className="px-4 py-3 text-left">Người</th>
-                  <th className="px-4 py-3 text-left">Profile</th>
-                  <th className="px-4 py-3 text-left">Bắt đầu</th>
-                  <th className="px-4 py-3 text-left">Hạn</th>
-                  <th className="px-4 py-3 text-left">Kết thúc</th>
-                  <th className="px-4 py-3 text-left">Trạng thái</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {sessions.length > 0 ? (
-                  sessions.map((s) => {
-                    const isOverdue =
-                      s.status === 'active' && new Date(s.expires_at).getTime() < now;
-                    const isEnded = s.status !== 'active' || s.ended_at !== null;
-                    const sourceNote = endSourceNote(s.end_source);
+        <div className="space-y-4">
+          <Table>
+            <THead>
+              <TR>
+                <TH className="text-left">Máy</TH>
+                <TH className="text-left">Người</TH>
+                <TH className="text-left">Profile</TH>
+                <TH className="text-left">Bắt đầu</TH>
+                <TH className="text-left">Hạn</TH>
+                <TH className="text-left">Kết thúc</TH>
+                <TH className="text-left">Trạng thái</TH>
+              </TR>
+            </THead>
+            <tbody>
+              {sessions.length > 0 ? (
+                sessions.map((s) => {
+                  const isOverdue =
+                    s.status === 'active' && new Date(s.expires_at).getTime() < now;
+                  const isEnded = s.status !== 'active' || s.ended_at !== null;
+                  const sourceNote = endSourceNote(s.end_source);
 
-                    return (
-                      <tr key={s.id} className="hover:bg-gray-50">
-                        {/* Máy */}
-                        <td className="px-4 py-3 font-mono text-xs text-gray-900 whitespace-nowrap">
-                          {s.workstation ? (
-                            <Link
-                              to={`/workstations/${s.workstation.id}`}
-                              className="text-blue-600 hover:underline"
-                            >
-                              {s.workstation.mqtt_identity}
-                            </Link>
-                          ) : (
-                            '—'
-                          )}
-                        </td>
+                  return (
+                    <TR key={s.id} interactive>
+                      {/* Máy */}
+                      <TD className="font-mono text-xs text-ink whitespace-nowrap">
+                        {s.workstation ? (
+                          <Link
+                            to={`/workstations/${s.workstation.id}`}
+                            className="text-accent hover:underline"
+                          >
+                            {s.workstation.mqtt_identity}
+                          </Link>
+                        ) : (
+                          '—'
+                        )}
+                      </TD>
 
-                        {/* Người */}
-                        <td className="px-4 py-3 text-gray-900">
-                          {s.user ? (
-                            <Link
-                              to={`/users/${s.user.id}`}
-                              className="text-blue-600 hover:underline"
-                            >
-                              {s.user.external_id} — {s.user.full_name}
-                            </Link>
-                          ) : (
-                            '—'
-                          )}
-                        </td>
+                      {/* Người */}
+                      <TD className="text-ink">
+                        {s.user ? (
+                          <Link
+                            to={`/users/${s.user.id}`}
+                            className="text-accent hover:underline"
+                          >
+                            {s.user.external_id} — {s.user.full_name}
+                          </Link>
+                        ) : (
+                          '—'
+                        )}
+                      </TD>
 
-                        {/* Profile */}
-                        <td className="px-4 py-3 text-gray-700 font-mono text-xs">
-                          {s.os_username || '—'}
-                        </td>
+                      {/* Profile */}
+                      <TD className="text-ink font-mono text-xs">
+                        {s.os_username || '—'}
+                      </TD>
 
-                        {/* Bắt đầu */}
-                        <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
-                          {formatDateTime(s.started_at)}
-                        </td>
+                      {/* Bắt đầu */}
+                      <TD className="text-ink whitespace-nowrap">
+                        {formatDateTime(s.started_at)}
+                      </TD>
 
-                        {/* Hạn */}
-                        <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
-                          {formatDateTime(s.expires_at)}
-                        </td>
+                      {/* Hạn */}
+                      <TD className="text-ink whitespace-nowrap">
+                        {formatDateTime(s.expires_at)}
+                      </TD>
 
-                        {/* Kết thúc */}
-                        <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
-                          {s.ended_at ? formatDateTime(s.ended_at) : '—'}
-                        </td>
+                      {/* Kết thúc */}
+                      <TD className="text-ink whitespace-nowrap">
+                        {s.ended_at ? formatDateTime(s.ended_at) : '—'}
+                      </TD>
 
-                        {/* Trạng thái */}
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          {getStatusBadge(s.status)}
-                          {isOverdue && (
-                            <div className="text-xs text-red-600 font-medium mt-0.5">
-                              quá hạn chưa kết thúc
-                            </div>
-                          )}
-                          {isEnded && s.end_reason && (
-                            <div className="text-xs text-gray-500 mt-0.5">
-                              {endReasonLabel(s.end_reason)}
-                              {sourceNote ? ` ${sourceNote}` : ''}
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
-                      Không tìm thấy phiên nào
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                      {/* Trạng thái */}
+                      <TD className="whitespace-nowrap">
+                        {getStatusBadge(s.status)}
+                        {isOverdue && (
+                          <div className="mt-0.5">
+                            <StatusPill tone="danger">quá hạn chưa kết thúc</StatusPill>
+                          </div>
+                        )}
+                        {isEnded && s.end_reason && (
+                          <div className="text-xs text-ink-muted mt-0.5">
+                            {endReasonLabel(s.end_reason)}
+                            {sourceNote ? ` ${sourceNote}` : ''}
+                          </div>
+                        )}
+                      </TD>
+                    </TR>
+                  );
+                })
+              ) : (
+                <EmptyRow colSpan={7}>Không tìm thấy phiên nào</EmptyRow>
+              )}
+            </tbody>
+          </Table>
 
           {/* Tải thêm button */}
           {hasNextPage && (
-            <div className="p-4 text-center border-t border-gray-200">
-              <button
+            <div className="p-4 text-center border-t border-line">
+              <Button
                 type="button"
                 onClick={() => fetchNextPage()}
                 disabled={isFetchingNextPage}
-                className="px-4 py-2 border border-gray-300 rounded text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
               >
                 {isFetchingNextPage ? 'Đang tải…' : 'Tải thêm'}
-              </button>
+              </Button>
             </div>
           )}
         </div>

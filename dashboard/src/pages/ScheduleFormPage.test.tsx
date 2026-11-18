@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -386,8 +386,6 @@ describe('ScheduleFormPage', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const confirmSpy = vi.spyOn(window, 'confirm');
-
     renderScheduleForm();
 
     await user.type(screen.getByLabelText(/Tên \*/), 'Lịch học máy thiếu profile');
@@ -408,18 +406,19 @@ describe('ScheduleFormPage', () => {
     expect(saveButton).toBeEnabled();
 
     // 1. User cancels confirm -> NO post
-    confirmSpy.mockReturnValueOnce(false);
     await user.click(saveButton);
 
-    expect(confirmSpy).toHaveBeenCalledWith('Lịch có cảnh báo (xem bên dưới). Vẫn lưu?');
+    expect(within(screen.getByRole('dialog')).getByText('Lịch có cảnh báo (xem bên dưới). Vẫn lưu?')).toBeInTheDocument();
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Hủy' }));
     expect(postCallOccurred).toBe(false);
 
     // 2. User confirms -> POST sent
-    confirmSpy.mockReturnValueOnce(true);
     await user.click(saveButton);
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Lưu' }));
 
     await waitFor(() => {
       expect(postCallOccurred).toBe(true);
+      expect(fetchMock.mock.calls.filter(([url, init]) => url === '/api/v1/schedules' && init?.method === 'POST')).toHaveLength(1);
     });
   });
 
@@ -589,4 +588,41 @@ describe('ScheduleFormPage', () => {
     await new Promise((r) => setTimeout(r, 200));
     expect(postCallCount).toBe(1);
   });
+
+  it('changing a checked form blocks saving until the new form passes its own check', async () => {
+    const user = userEvent.setup();
+    let releaseCheck: (value: unknown) => void = () => {};
+    const ok = (body: unknown) => ({ ok: true, status: 200, text: async () => JSON.stringify(body) });
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/v1/groups') return Promise.resolve(ok(mockGroups));
+      if (url === '/api/v1/zones') return Promise.resolve(ok(mockZones));
+      if (url === '/api/v1/workstations') return Promise.resolve(ok(mockWorkstations));
+      if (url === '/api/v1/schedules/sched-1' && init?.method !== 'PATCH') return Promise.resolve(ok(mockExistingSchedule));
+      if (url === '/api/v1/schedules/validate') {
+        const input = JSON.parse(init?.body as string);
+        if (input.name === mockExistingSchedule.name) return Promise.resolve(ok({ errors: [], warnings: [] }));
+        return new Promise((resolve) => { releaseCheck = resolve; });
+      }
+      if (url === '/api/v1/schedules/sched-1' && init?.method === 'PATCH') return Promise.resolve(ok(mockExistingSchedule));
+      return Promise.reject(new Error(`Unhandled URL: ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderScheduleForm('/schedules/sched-1/edit');
+    const nameInput = await screen.findByLabelText(/Tên \*/);
+    const save = screen.getByRole('button', { name: 'Lưu' });
+    await waitFor(() => expect(save).toBeEnabled());
+    await user.type(nameInput, ' updated');
+    expect(save).toBeDisabled();
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url, init]) =>
+      url === '/api/v1/schedules/validate' && JSON.parse(init?.body as string).name.endsWith(' updated'),
+    )).toBe(true));
+    expect(save).toBeDisabled();
+    await user.click(save);
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'PATCH')).toHaveLength(0);
+    releaseCheck(ok({ errors: [], warnings: [] }));
+    await waitFor(() => expect(save).toBeEnabled());
+    await user.click(save);
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'PATCH')).toHaveLength(1));
+  });
+
 });

@@ -585,11 +585,14 @@ describe('HistoryPage', () => {
 
     // UID must NOT be in document before Xem UID
     expect(screen.queryByText('04A32B1C5D6E80')).not.toBeInTheDocument();
+    expect(screen.queryByText('04 A3 2B 1C 5D 6E 80')).not.toBeInTheDocument();
+    expect(fetchMock.mock.calls.filter(([url]) => url === '/api/v1/audit-logs/log-reveal')).toHaveLength(0);
 
     const xemUidBtn = await screen.findByRole('button', { name: 'Xem UID' });
     await user.click(xemUidBtn);
 
     // UID is revealed inline
-    expect(await screen.findByText('04A32B1C5D6E80')).toBeInTheDocument();
+    expect(await screen.findByText('04 A3 2B 1C 5D 6E 80')).toHaveClass('font-mono');
+    expect(fetchMock.mock.calls.filter(([url]) => url === '/api/v1/audit-logs/log-reveal')).toHaveLength(1);
   });
 });

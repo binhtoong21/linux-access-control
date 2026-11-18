@@ -159,8 +159,6 @@ describe('EnrollmentPage', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const confirmSpy = vi.spyOn(window, 'confirm');
-
     renderEnrollmentPage();
 
     expect(await screen.findByText('lab-pc-dup')).toBeInTheDocument();
@@ -170,16 +168,15 @@ describe('EnrollmentPage', () => {
     });
 
     // 1. Cancel confirm
-    confirmSpy.mockReturnValueOnce(false);
     await user.click(reinstallBtn);
-    expect(confirmSpy).toHaveBeenCalledWith(
-      'Duyệt cài lại máy ws-pc-old? Chứng chỉ cũ bị thu hồi; máy giữ tên, zone và lịch.',
-    );
+    expect(within(screen.getByRole('dialog')).getByText(
+      'Duyệt cài lại máy ws-pc-old? Chứng chỉ cũ bị thu hồi; máy giữ tên, zone và lịch.')).toBeInTheDocument();
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Hủy' }));
     expect(postCallDetails).toBeNull();
 
     // 2. Accept confirm
-    confirmSpy.mockReturnValueOnce(true);
     await user.click(reinstallBtn);
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Duyệt cài lại' }));
 
     await waitFor(() => {
       expect(postCallDetails).not.toBeNull();
@@ -187,6 +184,7 @@ describe('EnrollmentPage', () => {
 
     expect(postCallDetails!.url).toBe('/api/v1/enrollment-requests/req-dup/approve');
     expect(JSON.parse(postCallDetails!.body)).toEqual({ mode: 'reinstall' });
+    expect(fetchMock.mock.calls.filter(([url, init]) => url === '/api/v1/enrollment-requests/req-dup/approve' && init?.method === 'POST')).toHaveLength(1);
   });
 
   it('new approval rejects an invalid name locally and sends {"mode":"new","mqtt_identity":…,"zone_id":…}', async () => {
@@ -388,23 +386,21 @@ describe('EnrollmentPage', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const promptSpy = vi.spyOn(window, 'prompt');
-
     renderEnrollmentPage();
 
     expect(await screen.findByText('lab-pc-01')).toBeInTheDocument();
     const row1 = screen.getByText('lab-pc-01').closest('tr')!;
     const rejectBtn = within(row1).getByRole('button', { name: 'Từ chối' });
 
-    // 1. Cancel prompt -> sends nothing
-    promptSpy.mockReturnValueOnce(null);
+    // 1. Cancel dialog -> sends nothing
     await user.click(rejectBtn);
-    expect(promptSpy).toHaveBeenCalledWith('Lý do từ chối (không bắt buộc):');
+    expect(within(screen.getByRole('dialog')).getByLabelText('Lý do từ chối (không bắt buộc):')).toBeInTheDocument();
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Hủy' }));
     expect(rejectCallDetails).toBeNull();
 
-    // 2. Empty note prompt -> sends {}
-    promptSpy.mockReturnValueOnce('');
+    // 2. Empty note dialog -> sends {}
     await user.click(rejectBtn);
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Từ chối' }));
 
     await waitFor(() => {
       expect(rejectCallDetails).not.toBeNull();
@@ -412,6 +408,14 @@ describe('EnrollmentPage', () => {
 
     expect(rejectCallDetails!.url).toBe('/api/v1/enrollment-requests/req-1/reject');
     expect(JSON.parse(rejectCallDetails!.body)).toEqual({});
+    expect(fetchMock.mock.calls.filter(([url, init]) => url === '/api/v1/enrollment-requests/req-1/reject' && init?.method === 'POST')).toHaveLength(1);
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await user.click(rejectBtn);
+    await user.type(within(screen.getByRole('dialog')).getByLabelText('Lý do từ chối (không bắt buộc):'), '  Sai phòng  ');
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Từ chối' }));
+    await waitFor(() => expect(JSON.parse(rejectCallDetails!.body)).toEqual({ note: 'Sai phòng' }));
+    expect(fetchMock.mock.calls.filter(([url, init]) => url === '/api/v1/enrollment-requests/req-1/reject' && init?.method === 'POST')).toHaveLength(2);
   });
 
   it('DUPLICATE_REQUIRES_REINSTALL shows its message', async () => {

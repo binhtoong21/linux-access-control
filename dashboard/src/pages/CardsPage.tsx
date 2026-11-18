@@ -14,6 +14,22 @@ import {
 import type { AuditLog, Card, CardStatus, User } from '../api/types';
 import { errorMessage } from '../lib/errors';
 import { UserPicker } from '../components/UserPicker';
+import {
+  Button,
+  ConfirmDialog,
+  Dialog,
+  EmptyRow,
+  inputClass,
+  Notice,
+  PageHeader,
+  selectClass,
+  StatusPill,
+  Table,
+  TD,
+  TH,
+  THead,
+  TR,
+} from '../components/ui';
 
 function formatDate(iso: string): string {
   const date = new Date(iso);
@@ -41,6 +57,12 @@ function formatDateTime(iso: string): string {
   }).format(date);
 }
 
+function formatUid(raw: string): string {
+  const clean = raw.replace(/[\s:]/g, '').toUpperCase();
+  const chunks = clean.match(/.{1,2}/g);
+  return chunks ? chunks.join(' ') : clean;
+}
+
 export function CardsPage() {
   const queryClient = useQueryClient();
 
@@ -55,6 +77,7 @@ export function CardsPage() {
 
   // Binding existing unbound card
   const [bindingCard, setBindingCard] = useState<Card | null>(null);
+  const [cardToUnbind, setCardToUnbind] = useState<Card | null>(null);
 
   // Section 2: Thẻ vừa quẹt state
   const [swipeErrorMsg, setSwipeErrorMsg] = useState<string | null>(null);
@@ -146,21 +169,16 @@ export function CardsPage() {
     }
   };
 
-  const handleUnbindCard = async (card: Card) => {
-    const confirmed = window.confirm('Gỡ thẻ này khỏi người dùng?');
-    if (!confirmed) return;
-
-    setCardsErrorMsg(null);
-    setCardsSuccessMsg(null);
+  const handleUnbindConfirm = async () => {
+    if (!cardToUnbind) return;
     setActionLoading(true);
     try {
-      await unbindCard(card.id);
+      await unbindCard(cardToUnbind.id);
       await queryClient.invalidateQueries({ queryKey: ['cards'] });
-      if (card.owner) {
-        await queryClient.invalidateQueries({ queryKey: ['user', card.owner.id] });
+      if (cardToUnbind.owner) {
+        await queryClient.invalidateQueries({ queryKey: ['user', cardToUnbind.owner.id] });
       }
-    } catch (err) {
-      setCardsErrorMsg(errorMessage(err));
+      setCardToUnbind(null);
     } finally {
       setActionLoading(false);
     }
@@ -229,19 +247,15 @@ export function CardsPage() {
   return (
     <div className="space-y-8">
       {/* SECTION 1: Tra cứu thẻ */}
-      <div className="bg-white p-6 rounded-lg shadow space-y-4">
-        <h1 className="text-xl font-bold text-gray-900">Tra cứu thẻ</h1>
+      <div className="space-y-4">
+        <PageHeader title="Tra cứu thẻ" />
 
         {cardsErrorMsg && (
-          <div className="p-4 bg-red-50 text-red-700 rounded border border-red-200 text-sm">
-            {cardsErrorMsg}
-          </div>
+          <Notice tone="danger">{cardsErrorMsg}</Notice>
         )}
 
         {cardsSuccessMsg && (
-          <div className="p-4 bg-green-50 text-green-700 rounded border border-green-200 text-sm">
-            {cardsSuccessMsg}
-          </div>
+          <Notice tone="ok">{cardsSuccessMsg}</Notice>
         )}
 
         <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
@@ -255,18 +269,18 @@ export function CardsPage() {
               value={uidInput}
               onChange={(e) => setUidInput(e.target.value)}
               placeholder="Nhập UID (ví dụ: 04 A3 2B 1C 5D 6E 80)"
-              className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`w-full ${inputClass} uppercase`}
             />
           </div>
-          <div className="flex items-center space-x-2 w-full sm:w-auto justify-end">
-            <label htmlFor="card-status-filter" className="text-sm font-medium text-gray-700 whitespace-nowrap">
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+            <label htmlFor="card-status-filter" className="text-sm font-medium text-ink whitespace-nowrap">
               Trạng thái:
             </label>
             <select
               id="card-status-filter"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as 'all' | CardStatus)}
-              className="border border-gray-300 rounded px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={selectClass}
             >
               <option value="all">Tất cả</option>
               <option value="active">Đang dùng</option>
@@ -277,335 +291,298 @@ export function CardsPage() {
         </div>
 
         {isLoadingCards && (
-          <div className="p-8 text-center text-gray-500">Đang tải thẻ…</div>
+          <div className="py-8 text-center text-sm text-ink-muted">Đang tải thẻ…</div>
         )}
 
         {isCardsError && (
-          <div className="p-4 bg-red-50 text-red-700 rounded border border-red-200 text-sm">
-            {errorMessage(cardsError)}
-          </div>
+          <Notice tone="danger">{errorMessage(cardsError)}</Notice>
         )}
 
         {!isLoadingCards && !isCardsError && (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-gray-50 text-gray-600 font-medium">
-                <tr>
-                  <th className="px-4 py-3 text-left">Thẻ</th>
-                  <th className="px-4 py-3 text-left">Trạng thái</th>
-                  <th className="px-4 py-3 text-left">Chủ thẻ</th>
-                  <th className="px-4 py-3 text-left">Ngày đăng ký</th>
-                  <th className="px-4 py-3 text-right">Thao tác</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {cards.length > 0 ? (
-                  cards.map((c) => (
-                    <tr key={c.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 font-medium text-gray-900">
-                        {c.uid_length} byte
-                      </td>
-                      <td className="px-4 py-3">
-                        {c.status === 'active' && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                            Đang dùng
-                          </span>
-                        )}
-                        {c.status === 'disabled' && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
-                            Đã khóa
-                          </span>
-                        )}
-                        {c.status === 'unbound' && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
-                            Chưa gắn
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-gray-900">
-                        {c.owner ? (
-                          <Link
-                            to={`/users/${c.owner.id}`}
-                            className="text-blue-600 hover:underline font-medium"
-                          >
-                            {c.owner.full_name} ({c.owner.external_id})
-                          </Link>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700">{formatDate(c.created_at)}</td>
-                      <td className="px-4 py-3 text-right space-x-2">
-                        {c.status === 'active' && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => handleDisableCard(c)}
-                              disabled={actionLoading}
-                              className="text-xs px-2.5 py-1 border border-amber-300 text-amber-700 rounded hover:bg-amber-50 disabled:opacity-50"
-                            >
-                              Khóa
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleUnbindCard(c)}
-                              disabled={actionLoading}
-                              className="text-xs px-2.5 py-1 border border-red-300 text-red-700 rounded hover:bg-red-50 disabled:opacity-50"
-                            >
-                              Gỡ
-                            </button>
-                          </>
-                        )}
-                        {c.status === 'disabled' && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => handleEnableCard(c)}
-                              disabled={actionLoading}
-                              className="text-xs px-2.5 py-1 border border-green-300 text-green-700 rounded hover:bg-green-50 disabled:opacity-50"
-                            >
-                              Mở khóa
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleUnbindCard(c)}
-                              disabled={actionLoading}
-                              className="text-xs px-2.5 py-1 border border-red-300 text-red-700 rounded hover:bg-red-50 disabled:opacity-50"
-                            >
-                              Gỡ
-                            </button>
-                          </>
-                        )}
-                        {c.status === 'unbound' && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setBindingCard(c);
-                              setCardsErrorMsg(null);
-                            }}
+          <Table>
+            <THead>
+              <TR>
+                <TH>Thẻ</TH>
+                <TH>Trạng thái</TH>
+                <TH>Chủ thẻ</TH>
+                <TH>Ngày đăng ký</TH>
+                <TH className="text-right">Thao tác</TH>
+              </TR>
+            </THead>
+            <tbody>
+              {cards.length > 0 ? (
+                cards.map((c) => (
+                  <TR key={c.id}>
+                    <TD className="font-medium text-ink">
+                      {c.uid_length} byte
+                    </TD>
+                    <TD>
+                      <StatusPill
+                        tone={
+                          c.status === 'active'
+                            ? 'ok'
+                            : c.status === 'disabled'
+                              ? 'warn'
+                              : 'neutral'
+                        }
+                      >
+                        {c.status === 'active'
+                          ? 'Đang dùng'
+                          : c.status === 'disabled'
+                            ? 'Đã khóa'
+                            : 'Chưa gắn'}
+                      </StatusPill>
+                    </TD>
+                    <TD className="text-ink">
+                      {c.owner ? (
+                        <Link
+                          to={`/users/${c.owner.id}`}
+                          className="text-accent hover:underline font-medium"
+                        >
+                          {c.owner.full_name} ({c.owner.external_id})
+                        </Link>
+                      ) : (
+                        <span className="text-ink-muted">—</span>
+                      )}
+                    </TD>
+                    <TD className="text-ink-muted">{formatDate(c.created_at)}</TD>
+                    <TD className="text-right space-x-2">
+                      {c.status === 'active' && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => handleDisableCard(c)}
                             disabled={actionLoading}
-                            className="text-xs px-2.5 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
                           >
-                            Gắn cho…
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
-                      Không tìm thấy thẻ nào
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                            Khóa
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => setCardToUnbind(c)}
+                            disabled={actionLoading}
+                          >
+                            Gỡ
+                          </Button>
+                        </>
+                      )}
+                      {c.status === 'disabled' && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => handleEnableCard(c)}
+                            disabled={actionLoading}
+                          >
+                            Mở khóa
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => setCardToUnbind(c)}
+                            disabled={actionLoading}
+                          >
+                            Gỡ
+                          </Button>
+                        </>
+                      )}
+                      {c.status === 'unbound' && (
+                        <Button
+                          size="sm"
+                          variant="primary"
+                          onClick={() => {
+                            setBindingCard(c);
+                            setCardsErrorMsg(null);
+                          }}
+                          disabled={actionLoading}
+                        >
+                          Gắn cho…
+                        </Button>
+                      )}
+                    </TD>
+                  </TR>
+                ))
+              ) : (
+                <EmptyRow colSpan={5}>
+                  Không tìm thấy thẻ nào
+                </EmptyRow>
+              )}
+            </tbody>
+          </Table>
         )}
 
         {hasNextPage && (
           <div className="text-center pt-2">
-            <button
-              type="button"
+            <Button
+              variant="secondary"
               onClick={() => fetchNextPage()}
               disabled={isFetchingNextPage}
-              className="px-4 py-2 border border-gray-300 rounded text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
             >
               {isFetchingNextPage ? 'Đang tải…' : 'Tải thêm'}
-            </button>
+            </Button>
           </div>
         )}
       </div>
 
-      {/* Modal for binding unbound card to user */}
-      {bindingCard && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 space-y-4">
-            <div className="flex justify-between items-center">
-              <h3 className="text-base font-semibold text-gray-900">
-                Gắn thẻ cho người dùng
-              </h3>
-              <button
-                type="button"
-                onClick={() => setBindingCard(null)}
-                className="text-gray-400 hover:text-gray-600 text-lg leading-none"
-              >
-                ✕
-              </button>
-            </div>
-            <p className="text-sm text-gray-600">
-              Chọn người dùng để gắn thẻ ({bindingCard.uid_length} byte):
-            </p>
-            <UserPicker
-              onPick={handlePickUserForBind}
-              placeholder="Tìm người dùng..."
-              disabled={actionLoading}
-            />
-            <div className="flex justify-end pt-2">
-              <button
-                type="button"
-                onClick={() => setBindingCard(null)}
-                className="px-3 py-1.5 border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-100"
-              >
-                Hủy
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* SECTION 2: Thẻ vừa quẹt chưa đăng ký */}
-      <div className="bg-white p-6 rounded-lg shadow space-y-4">
+      <div className="bg-surface border border-line rounded p-6 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h2 className="text-lg font-bold text-gray-900">
+            <h2 className="text-base font-semibold text-ink">
               Thẻ vừa quẹt chưa đăng ký
             </h2>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-sm text-ink-muted mt-1">
               Quẹt thẻ mới ở bất kỳ máy trạm nào, rồi bấm Làm mới.
             </p>
           </div>
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => refetchLogs()}
             disabled={isFetchingLogs}
-            className="px-3 py-1.5 border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50 whitespace-nowrap self-start sm:self-auto"
           >
             {isFetchingLogs ? 'Đang làm mới…' : 'Làm mới'}
-          </button>
+          </Button>
         </div>
 
         {swipeErrorMsg && (
-          <div className="p-4 bg-red-50 text-red-700 rounded border border-red-200 text-sm">
-            {swipeErrorMsg}
-          </div>
+          <Notice tone="danger">{swipeErrorMsg}</Notice>
         )}
 
         {swipeSuccessMsg && (
-          <div className="p-4 bg-green-50 text-green-700 rounded border border-green-200 text-sm">
-            {swipeSuccessMsg}
-          </div>
+          <Notice tone="ok">{swipeSuccessMsg}</Notice>
         )}
 
         {isLoadingLogs && (
-          <div className="p-8 text-center text-gray-500">Đang tải lịch sử quẹt thẻ…</div>
+          <div className="py-8 text-center text-sm text-ink-muted">Đang tải lịch sử quẹt thẻ…</div>
         )}
 
         {isLogsError && (
-          <div className="p-4 bg-red-50 text-red-700 rounded border border-red-200 text-sm">
-            {errorMessage(logsError)}
-          </div>
+          <Notice tone="danger">{errorMessage(logsError)}</Notice>
         )}
 
         {!isLoadingLogs && !isLogsError && (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-gray-50 text-gray-600 font-medium">
-                <tr>
-                  <th className="px-4 py-3 text-left">Thời điểm</th>
-                  <th className="px-4 py-3 text-left">Máy</th>
-                  <th className="px-4 py-3 text-left">UID</th>
-                  <th className="px-4 py-3 text-right">Thao tác</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {unknownCards.length > 0 ? (
-                  unknownCards.map((log) => (
-                    <tr key={log.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-gray-700">
-                        {formatDateTime(log.occurred_at)}
-                      </td>
-                      <td className="px-4 py-3 text-gray-900 font-mono text-xs">
-                        {log.workstation?.mqtt_identity || '—'}
-                      </td>
-                      <td className="px-4 py-3">
-                        {log.has_card_uid === false ? (
-                          '—'
-                        ) : logUids[log.id] ? (
-                          <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded border border-gray-300">
-                            {logUids[log.id]}
-                          </span>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => handleViewLogUid(log.id)}
-                            disabled={loadingLogUids[log.id] || actionLoading}
-                            className="text-xs text-blue-600 hover:underline disabled:opacity-50"
-                          >
-                            {loadingLogUids[log.id] ? 'Đang đọc…' : 'Xem UID'}
-                          </button>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        {log.has_card_uid === false ? (
-                          '—'
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setRegisterSwipeTarget(log);
-                              setSwipeErrorMsg(null);
-                            }}
-                            disabled={actionLoading}
-                            className="text-xs px-2.5 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-                          >
-                            Gắn cho người dùng…
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
-                      Chưa có thẻ nào quẹt gần đây
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          <Table>
+            <THead>
+              <TR>
+                <TH>Thời điểm</TH>
+                <TH>Máy</TH>
+                <TH>UID</TH>
+                <TH className="text-right">Thao tác</TH>
+              </TR>
+            </THead>
+            <tbody>
+              {unknownCards.length > 0 ? (
+                unknownCards.map((log) => (
+                  <TR key={log.id}>
+                    <TD className="text-ink-muted">
+                      {formatDateTime(log.occurred_at)}
+                    </TD>
+                    <TD className="font-mono text-xs text-ink">
+                      {log.workstation?.mqtt_identity || '—'}
+                    </TD>
+                    <TD>
+                      {log.has_card_uid === false ? (
+                        <span className="text-ink-muted">—</span>
+                      ) : logUids[log.id] ? (
+                        <span className="font-mono text-xs text-ink">
+                          {formatUid(logUids[log.id])}
+                        </span>
+                      ) : (
+                        <Button
+                          variant="quiet"
+                          size="sm"
+                          onClick={() => handleViewLogUid(log.id)}
+                          disabled={loadingLogUids[log.id] || actionLoading}
+                        >
+                          {loadingLogUids[log.id] ? 'Đang đọc…' : 'Xem UID'}
+                        </Button>
+                      )}
+                    </TD>
+                    <TD className="text-right">
+                      {log.has_card_uid === false ? (
+                        <span className="text-ink-muted">—</span>
+                      ) : (
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={() => {
+                            setRegisterSwipeTarget(log);
+                            setSwipeErrorMsg(null);
+                          }}
+                          disabled={actionLoading}
+                        >
+                          Gắn cho người dùng…
+                        </Button>
+                      )}
+                    </TD>
+                  </TR>
+                ))
+              ) : (
+                <EmptyRow colSpan={4}>
+                  Chưa có thẻ nào quẹt gần đây
+                </EmptyRow>
+              )}
+            </tbody>
+          </Table>
         )}
       </div>
 
-      {/* Modal for registering unknown card swipe to user */}
-      {registerSwipeTarget && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 space-y-4">
-            <div className="flex justify-between items-center">
-              <h3 className="text-base font-semibold text-gray-900">
-                Gắn thẻ cho người dùng
-              </h3>
-              <button
-                type="button"
-                onClick={() => setRegisterSwipeTarget(null)}
-                className="text-gray-400 hover:text-gray-600 text-lg leading-none"
-              >
-                ✕
-              </button>
-            </div>
-            <p className="text-sm text-gray-600">
-              Chọn người dùng để gắn thẻ quẹt lúc{' '}
-              {formatDateTime(registerSwipeTarget.occurred_at)}:
-            </p>
-            <UserPicker
-              onPick={handlePickUserForSwipe}
-              placeholder="Tìm người dùng..."
-              disabled={actionLoading}
-            />
-            <div className="flex justify-end pt-2">
-              <button
-                type="button"
-                onClick={() => setRegisterSwipeTarget(null)}
-                className="px-3 py-1.5 border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-100"
-              >
-                Hủy
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Dialog for binding unbound card to user */}
+      <Dialog
+        open={Boolean(bindingCard)}
+        onClose={() => setBindingCard(null)}
+        title="Gắn thẻ cho người dùng"
+        description={
+          bindingCard ? `Chọn người dùng để gắn thẻ (${bindingCard.uid_length} byte):` : undefined
+        }
+        footer={
+          <Button variant="secondary" onClick={() => setBindingCard(null)}>
+            Hủy
+          </Button>
+        }
+      >
+        <UserPicker
+          onPick={handlePickUserForBind}
+          placeholder="Tìm người dùng..."
+          disabled={actionLoading}
+        />
+      </Dialog>
+
+      {/* Dialog for registering unknown card swipe to user */}
+      <Dialog
+        open={Boolean(registerSwipeTarget)}
+        onClose={() => setRegisterSwipeTarget(null)}
+        title="Gắn thẻ cho người dùng"
+        description={
+          registerSwipeTarget
+            ? `Chọn người dùng để gắn thẻ quẹt lúc ${formatDateTime(registerSwipeTarget.occurred_at)}:`
+            : undefined
+        }
+        footer={
+          <Button variant="secondary" onClick={() => setRegisterSwipeTarget(null)}>
+            Hủy
+          </Button>
+        }
+      >
+        <UserPicker
+          onPick={handlePickUserForSwipe}
+          placeholder="Tìm người dùng..."
+          disabled={actionLoading}
+        />
+      </Dialog>
+
+      {/* ConfirmDialog: Unbind card */}
+      <ConfirmDialog
+        open={cardToUnbind !== null}
+        title="Gỡ thẻ khỏi người dùng?"
+        message="Gỡ thẻ này khỏi người dùng?"
+        confirmLabel="Gỡ thẻ"
+        tone="danger"
+        onConfirm={handleUnbindConfirm}
+        onCancel={() => setCardToUnbind(null)}
+      />
     </div>
   );
 }

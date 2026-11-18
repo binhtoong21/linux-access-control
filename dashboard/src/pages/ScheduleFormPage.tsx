@@ -1,4 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
+import {
+  Button,
+  ConfirmDialog,
+  Field,
+  fieldDescribedBy,
+  inputClass,
+  selectClass,
+  Notice,
+  PageHeader,
+} from '../components/ui';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -62,6 +72,7 @@ function ScheduleForm({ initialSchedule, scheduleId }: ScheduleFormProps) {
   const [pageError, setPageError] = useState<string | null>(null);
   const [saveFieldErrors, setSaveFieldErrors] = useState<Record<string, string[]>>({});
   const inFlightRef = useRef(false);
+  const [warningInput, setWarningInput] = useState<string | null>(null);
 
   // Aux queries
   const { data: groups } = useQuery({
@@ -140,22 +151,22 @@ function ScheduleForm({ initialSchedule, scheduleId }: ScheduleFormProps) {
 
   const currentInput: ScheduleInput | null = isLocallyValid
     ? {
-        name: name.trim(),
-        subject: {
-          type: subjectType,
-          id: subjectId,
-        },
-        target: {
-          type: targetType,
-          id: targetId,
-        },
-        valid_from: validFrom,
-        valid_to: validTo ? validTo : null,
-        days_of_week: daysOfWeek,
-        start_time: startTime.trim(),
-        end_time: endTime.trim(),
-        target_os_username: targetOsUsername.trim() ? targetOsUsername.trim() : null,
-      }
+      name: name.trim(),
+      subject: {
+        type: subjectType,
+        id: subjectId,
+      },
+      target: {
+        type: targetType,
+        id: targetId,
+      },
+      valid_from: validFrom,
+      valid_to: validTo ? validTo : null,
+      days_of_week: daysOfWeek,
+      start_time: startTime.trim(),
+      end_time: endTime.trim(),
+      target_os_username: targetOsUsername.trim() ? targetOsUsername.trim() : null,
+    }
     : null;
 
   // 500 ms debounce for live validation
@@ -238,16 +249,21 @@ function ScheduleForm({ initialSchedule, scheduleId }: ScheduleFormProps) {
     (validationResult?.errors && validationResult.errors.length > 0) ||
     isSaving;
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (inFlightRef.current || isSaving) return;
-    if (!isLocallyValid || !currentInput) return;
-    if (!checkOk) return;
-    if (validationResult?.errors && validationResult.errors.length > 0) return;
+  useEffect(() => {
+    if (warningInput !== null && warningInput !== JSON.stringify(currentInput)) {
+      setWarningInput(null);
+    }
+  }, [warningInput, JSON.stringify(currentInput)]);
 
-    if (validationResult?.warnings && validationResult.warnings.length > 0) {
-      const ok = window.confirm('Lịch có cảnh báo (xem bên dưới). Vẫn lưu?');
-      if (!ok) return;
+  const executeSave = async (confirmed = false) => {
+    if (inFlightRef.current || isSaving || !currentInput || !checkOk || isSaveDisabled) return;
+    if (confirmed && warningInput !== JSON.stringify(currentInput)) {
+      setWarningInput(null);
+      return;
+    }
+    if (!confirmed && validationResult?.warnings.length) {
+      setWarningInput(JSON.stringify(currentInput));
+      return;
     }
 
     inFlightRef.current = true;
@@ -262,6 +278,7 @@ function ScheduleForm({ initialSchedule, scheduleId }: ScheduleFormProps) {
         await createSchedule(currentInput);
       }
       await queryClient.invalidateQueries({ queryKey: ['schedules'] });
+      setWarningInput(null);
       navigate('/schedules');
     } catch (err) {
       setPageError(errorMessage(err));
@@ -274,477 +291,217 @@ function ScheduleForm({ initialSchedule, scheduleId }: ScheduleFormProps) {
         }
         setSaveFieldErrors(fieldErrors);
       }
+      if (confirmed) throw err;
     } finally {
       setIsSaving(false);
       inFlightRef.current = false;
     }
   };
 
+  const fieldError = (field: string) => {
+    const local: Record<string, string | undefined> = localErrors;
+    return [local[field], ...(liveFieldErrors[field] ?? []), ...(saveFieldErrors[field] ?? [])]
+      .filter(Boolean).join(' ');
+  };
+  const describedBy = (id: string, field: string) => fieldDescribedBy(id, { error: fieldError(field) });
+
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
-      <div>
-        <Link to="/schedules" className="text-sm text-blue-600 hover:underline">
-          ← Danh sách lịch
-        </Link>
-        <h1 className="text-xl font-bold text-gray-900 mt-2">
-          {isEdit ? 'Sửa lịch' : 'Thêm lịch mới'}
-        </h1>
-      </div>
-
-      {pageError && (
-        <div className="p-4 bg-red-50 text-red-700 rounded border border-red-200 text-sm">
-          {pageError}
-        </div>
-      )}
-
-      <form onSubmit={handleSave} className="bg-white p-6 rounded-lg shadow space-y-6">
-        {/* Name */}
-        <div>
-          <label htmlFor="schedule-name" className="block text-sm font-medium text-gray-700">
-            Tên *
-          </label>
+      <Link to="/schedules" className="text-sm text-accent hover:underline">← Danh sách lịch</Link>
+      <PageHeader title={isEdit ? 'Sửa lịch' : 'Thêm lịch mới'} />
+      {pageError && warningInput === null && <Notice tone="danger">{pageError}</Notice>}
+      <form
+        onSubmit={(e) => { e.preventDefault(); void executeSave(); }}
+        className="bg-surface border border-line p-6 rounded space-y-6"
+      >
+        <Field htmlFor="schedule-name" label="Tên *" error={fieldError('name')}>
           <input
             id="schedule-name"
-            type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Ví dụ: Ca sáng môn Mạng máy tính"
-            className="mt-1 w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            aria-describedby={describedBy('schedule-name', 'name')}
+            className={`w-full ${inputClass}`}
           />
-          {localErrors.name && (
-            <div className="text-xs text-red-600 mt-1">{localErrors.name}</div>
-          )}
-          {liveFieldErrors['name']?.map((msg, i) => (
-            <div key={i} className="text-xs text-red-600 mt-1">
-              {msg}
-            </div>
-          ))}
-          {saveFieldErrors['name']?.map((msg, i) => (
-            <div key={i} className="text-xs text-red-600 mt-1">
-              {msg}
-            </div>
-          ))}
-        </div>
-
-        {/* Ai (Subject) */}
-        <div className="space-y-2">
-          <label className="block text-sm font-medium text-gray-700">Ai *</label>
-          <div className="flex items-center space-x-4">
-            <label className="inline-flex items-center space-x-2 text-sm cursor-pointer">
-              <input
-                type="radio"
-                name="subjectType"
-                value="group"
-                checked={subjectType === 'group'}
-                onChange={() => {
-                  setSubjectType('group');
-                  setSubjectId('');
-                  setSubjectName('');
-                  setSubjectExternalId('');
-                }}
-                className="text-blue-600 focus:ring-blue-500"
-              />
-              <span>Nhóm</span>
-            </label>
-            <label className="inline-flex items-center space-x-2 text-sm cursor-pointer">
-              <input
-                type="radio"
-                name="subjectType"
-                value="user"
-                checked={subjectType === 'user'}
-                onChange={() => {
-                  setSubjectType('user');
-                  setSubjectId('');
-                  setSubjectName('');
-                  setSubjectExternalId('');
-                }}
-                className="text-blue-600 focus:ring-blue-500"
-              />
-              <span>Người dùng</span>
-            </label>
+        </Field>
+        <fieldset className="space-y-2" aria-describedby={describedBy('schedule-subject', 'subject')}>
+          <legend className="text-sm font-medium text-ink">Ai *</legend>
+          <div className="flex items-center gap-4">
+            {(['group', 'user'] as const).map((type) => (
+              <label key={type} className="inline-flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="subjectType"
+                  value={type}
+                  checked={subjectType === type}
+                  onChange={() => { setSubjectType(type); setSubjectId(''); setSubjectName(''); setSubjectExternalId(''); }}
+                  className="h-4 w-4 rounded border-control accent-accent focus:ring-accent"
+                />
+                {type === 'group' ? 'Nhóm' : 'Người dùng'}
+              </label>
+            ))}
           </div>
-
-          {subjectType === 'group' && (
-            <div>
+          <Field
+            htmlFor="schedule-subject"
+            label={subjectType === 'group' ? 'Chọn nhóm' : 'Chọn người dùng'}
+            error={fieldError('subject')}
+          >
+            {subjectType === 'group' ? (
               <select
-                aria-label="Chọn nhóm"
+                id="schedule-subject"
                 value={subjectId}
                 onChange={(e) => {
-                  const gId = e.target.value;
-                  setSubjectId(gId);
-                  const found = groups?.find((g) => g.id === gId);
-                  setSubjectName(found?.name ?? '');
+                  setSubjectId(e.target.value); setSubjectName(groups?.find((g) => g.id === e.target.value)?.name ?? '');
                 }}
-                className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                aria-describedby={describedBy('schedule-subject', 'subject')}
+                className={`w-full ${selectClass}`}
               >
                 <option value="">-- Chọn nhóm --</option>
-                {groups?.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.name}
-                  </option>
-                ))}
+                {groups?.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
               </select>
-            </div>
-          )}
-
-          {subjectType === 'user' && (
-            <div>
-              {subjectId ? (
-                <div className="flex items-center space-x-2 border border-gray-300 rounded px-3 py-1.5 bg-gray-50">
-                  <span className="text-sm text-gray-900 font-medium">
-                    {subjectExternalId ? `${subjectExternalId} — ` : ''}
-                    {subjectName}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSubjectId('');
-                      setSubjectName('');
-                      setSubjectExternalId('');
-                    }}
-                    className="text-xs text-blue-600 hover:underline font-medium"
-                  >
-                    Đổi
-                  </button>
-                </div>
-              ) : (
-                <UserPicker
-                  onPick={(u) => {
-                    setSubjectId(u.id);
-                    setSubjectName(u.full_name);
-                    setSubjectExternalId(u.external_id);
-                  }}
-                  placeholder="Tìm người dùng..."
+            ) : subjectId ? (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-ink">{subjectExternalId ? `${subjectExternalId} — ` : ''}{subjectName}</span>
+                <Button
+                  variant="quiet"
+                  onClick={() => { setSubjectId(''); setSubjectName(''); setSubjectExternalId(''); }}
+                >Đổi</Button>
+              </div>
+            ) : <div id="schedule-subject"><UserPicker
+              onPick={(u) => { setSubjectId(u.id); setSubjectName(u.full_name); setSubjectExternalId(u.external_id); }}
+              placeholder="Tìm người dùng..."
+            /></div>}
+          </Field>
+        </fieldset>
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-medium text-ink">Ở đâu *</legend>
+          <div className="flex items-center gap-4">
+            {(['zone', 'workstation'] as const).map((type) => (
+              <label key={type} className="inline-flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="targetType"
+                  value={type}
+                  checked={targetType === type}
+                  onChange={() => { setTargetType(type); setTargetId(''); }}
+                  className="h-4 w-4 rounded border-control accent-accent focus:ring-accent"
                 />
-              )}
-            </div>
-          )}
-          {localErrors.subject && (
-            <div className="text-xs text-red-600 mt-1">{localErrors.subject}</div>
-          )}
-          {liveFieldErrors['subject']?.map((msg, i) => (
-            <div key={i} className="text-xs text-red-600 mt-1">
-              {msg}
-            </div>
-          ))}
-          {saveFieldErrors['subject']?.map((msg, i) => (
-            <div key={i} className="text-xs text-red-600 mt-1">
-              {msg}
-            </div>
-          ))}
-        </div>
-
-        {/* Ở đâu (Target) */}
-        <div className="space-y-2">
-          <label className="block text-sm font-medium text-gray-700">Ở đâu *</label>
-          <div className="flex items-center space-x-4">
-            <label className="inline-flex items-center space-x-2 text-sm cursor-pointer">
-              <input
-                type="radio"
-                name="targetType"
-                value="zone"
-                checked={targetType === 'zone'}
-                onChange={() => {
-                  setTargetType('zone');
-                  setTargetId('');
-                }}
-                className="text-blue-600 focus:ring-blue-500"
-              />
-              <span>Zone</span>
-            </label>
-            <label className="inline-flex items-center space-x-2 text-sm cursor-pointer">
-              <input
-                type="radio"
-                name="targetType"
-                value="workstation"
-                checked={targetType === 'workstation'}
-                onChange={() => {
-                  setTargetType('workstation');
-                  setTargetId('');
-                }}
-                className="text-blue-600 focus:ring-blue-500"
-              />
-              <span>Máy</span>
-            </label>
+                {type === 'zone' ? 'Zone' : 'Máy'}
+              </label>
+            ))}
           </div>
-
-          {targetType === 'zone' && (
-            <div>
-              <select
-                aria-label="Chọn zone"
-                value={targetId}
-                onChange={(e) => setTargetId(e.target.value)}
-                className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">-- Chọn zone --</option>
-                {zones?.map((z) => (
-                  <option key={z.id} value={z.id}>
-                    {z.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {targetType === 'workstation' && (
-            <div>
-              <select
-                aria-label="Chọn máy"
-                value={targetId}
-                onChange={(e) => setTargetId(e.target.value)}
-                className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">-- Chọn máy --</option>
-                {workstations?.map((ws) => (
-                  <option key={ws.id} value={ws.id}>
-                    {ws.mqtt_identity} ({ws.hostname})
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          {localErrors.target && (
-            <div className="text-xs text-red-600 mt-1">{localErrors.target}</div>
-          )}
-          {liveFieldErrors['target']?.map((msg, i) => (
-            <div key={i} className="text-xs text-red-600 mt-1">
-              {msg}
-            </div>
-          ))}
-          {saveFieldErrors['target']?.map((msg, i) => (
-            <div key={i} className="text-xs text-red-600 mt-1">
-              {msg}
-            </div>
-          ))}
-        </div>
-
-        {/* Ngày */}
-        <div className="space-y-2">
-          <label className="block text-sm font-medium text-gray-700">Ngày *</label>
+          <Field
+            htmlFor="schedule-target"
+            label={targetType === 'zone' ? 'Chọn zone' : 'Chọn máy'}
+            error={fieldError('target')}
+          >
+            <select
+              id="schedule-target"
+              value={targetId}
+              onChange={(e) => setTargetId(e.target.value)}
+              aria-describedby={describedBy('schedule-target', 'target')}
+              className={`w-full ${selectClass}`}
+            >
+              <option value="">{targetType === 'zone' ? '-- Chọn zone --' : '-- Chọn máy --'}</option>
+              {targetType === 'zone' ? zones?.map((z) => <option key={z.id} value={z.id}>{z.name}</option>)
+                : workstations?.map((ws) => <option key={ws.id} value={ws.id}>{ws.mqtt_identity} ({ws.hostname})</option>)}
+            </select>
+          </Field>
+        </fieldset>
+        <fieldset
+          className="space-y-2"
+          aria-describedby={fieldDescribedBy('schedule-days', { error: fieldError('days_of_week') })}
+        >
+          <legend className="text-sm font-medium text-ink">Ngày *</legend>
           <div className="flex flex-wrap gap-3 items-center">
-            {DAYS.map(({ day, label }) => {
-              const checked = daysOfWeek.includes(day);
-              return (
-                <label key={day} className="inline-flex items-center space-x-1.5 text-sm cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setDaysOfWeek((prev) => [...prev, day]);
-                      } else {
-                        setDaysOfWeek((prev) => prev.filter((d) => d !== day));
-                      }
-                    }}
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <span>{label}</span>
-                </label>
-              );
-            })}
-            <div className="flex items-center space-x-2 ml-2">
-              <button
-                type="button"
-                onClick={() =>
-                  setDaysOfWeek(['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'])
-                }
-                className="text-xs px-2.5 py-1 bg-gray-100 text-gray-700 hover:bg-gray-200 rounded border border-gray-300 font-medium"
-              >
-                T2–T6
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  setDaysOfWeek([
-                    'MONDAY',
-                    'TUESDAY',
-                    'WEDNESDAY',
-                    'THURSDAY',
-                    'FRIDAY',
-                    'SATURDAY',
-                    'SUNDAY',
-                  ])
-                }
-                className="text-xs px-2.5 py-1 bg-gray-100 text-gray-700 hover:bg-gray-200 rounded border border-gray-300 font-medium"
-              >
-                Hằng ngày
-              </button>
-            </div>
+            {DAYS.map(({ day, label }) => <label key={day} className="inline-flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={daysOfWeek.includes(day)}
+                onChange={(e) => setDaysOfWeek((prev) => e.target.checked ? [...prev, day] : prev.filter((d) => d !== day))}
+                className="h-4 w-4 rounded border-control accent-accent focus:ring-accent"
+              />{label}
+            </label>)}
+            <Button onClick={() => setDaysOfWeek(['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'])}>T2–T6</Button>
+            <Button onClick={() => setDaysOfWeek(['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'])}>Hằng ngày</Button>
           </div>
-          {localErrors.days_of_week && (
-            <div className="text-xs text-red-600 mt-1">{localErrors.days_of_week}</div>
-          )}
-          {liveFieldErrors['days_of_week']?.map((msg, i) => (
-            <div key={i} className="text-xs text-red-600 mt-1">
-              {msg}
-            </div>
-          ))}
-          {saveFieldErrors['days_of_week']?.map((msg, i) => (
-            <div key={i} className="text-xs text-red-600 mt-1">
-              {msg}
-            </div>
-          ))}
-        </div>
-
-        {/* Giờ bắt đầu / kết thúc */}
+          {fieldError('days_of_week') && <p id="schedule-days-error" role="alert" className="text-xs text-danger">{fieldError('days_of_week')}</p>}
+        </fieldset>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="schedule-start-time" className="block text-sm font-medium text-gray-700">
-              Giờ bắt đầu *
-            </label>
+          <Field htmlFor="schedule-start-time" label="Giờ bắt đầu *" error={fieldError('start_time')}>
             <input
               id="schedule-start-time"
               type="text"
-              placeholder="07:30"
               value={startTime}
               onChange={(e) => setStartTime(e.target.value)}
-              className="mt-1 w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="07:30"
+              aria-describedby={describedBy('schedule-start-time', 'start_time')}
+              className={`w-full ${inputClass}`}
             />
-            {localErrors.start_time && (
-              <div className="text-xs text-red-600 mt-1">{localErrors.start_time}</div>
-            )}
-            {liveFieldErrors['start_time']?.map((msg, i) => (
-              <div key={i} className="text-xs text-red-600 mt-1">
-                {msg}
-              </div>
-            ))}
-            {saveFieldErrors['start_time']?.map((msg, i) => (
-              <div key={i} className="text-xs text-red-600 mt-1">
-                {msg}
-              </div>
-            ))}
-          </div>
-          <div>
-            <label htmlFor="schedule-end-time" className="block text-sm font-medium text-gray-700">
-              Giờ kết thúc *
-            </label>
+          </Field>
+          <Field htmlFor="schedule-end-time" label="Giờ kết thúc *" error={fieldError('end_time')}>
             <input
               id="schedule-end-time"
               type="text"
-              placeholder="07:30"
               value={endTime}
               onChange={(e) => setEndTime(e.target.value)}
-              className="mt-1 w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="07:30"
+              aria-describedby={describedBy('schedule-end-time', 'end_time')}
+              className={`w-full ${inputClass}`}
             />
-            {localErrors.end_time && (
-              <div className="text-xs text-red-600 mt-1">{localErrors.end_time}</div>
-            )}
-            {liveFieldErrors['end_time']?.map((msg, i) => (
-              <div key={i} className="text-xs text-red-600 mt-1">
-                {msg}
-              </div>
-            ))}
-            {saveFieldErrors['end_time']?.map((msg, i) => (
-              <div key={i} className="text-xs text-red-600 mt-1">
-                {msg}
-              </div>
-            ))}
-          </div>
+          </Field>
         </div>
-
-        {/* Hiệu lực từ / đến */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="schedule-valid-from" className="block text-sm font-medium text-gray-700">
-              Hiệu lực từ *
-            </label>
+          <Field htmlFor="schedule-valid-from" label="Hiệu lực từ *" error={fieldError('valid_from')}>
             <input
               id="schedule-valid-from"
               type="date"
               value={validFrom}
               onChange={(e) => setValidFrom(e.target.value)}
-              className="mt-1 w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder=""
+              aria-describedby={describedBy('schedule-valid-from', 'valid_from')}
+              className={`w-full ${inputClass}`}
             />
-            {liveFieldErrors['valid_from']?.map((msg, i) => (
-              <div key={i} className="text-xs text-red-600 mt-1">
-                {msg}
-              </div>
-            ))}
-            {saveFieldErrors['valid_from']?.map((msg, i) => (
-              <div key={i} className="text-xs text-red-600 mt-1">
-                {msg}
-              </div>
-            ))}
-          </div>
-          <div>
-            <div className="flex items-center justify-between">
-              <label htmlFor="schedule-valid-to" className="block text-sm font-medium text-gray-700">
-                Hiệu lực đến
-              </label>
-              <button
-                type="button"
-                onClick={() => setValidTo('')}
-                className="text-xs text-blue-600 hover:underline"
-              >
-                Không giới hạn
-              </button>
-            </div>
+          </Field>
+          <Field htmlFor="schedule-valid-to" label="Hiệu lực đến" error={fieldError('valid_to')}>
             <input
               id="schedule-valid-to"
               type="date"
               value={validTo}
               onChange={(e) => setValidTo(e.target.value)}
-              className="mt-1 w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder=""
+              aria-describedby={describedBy('schedule-valid-to', 'valid_to')}
+              className={`w-full ${inputClass}`}
             />
-            {localErrors.valid_to && (
-              <div className="text-xs text-red-600 mt-1">{localErrors.valid_to}</div>
-            )}
-            {liveFieldErrors['valid_to']?.map((msg, i) => (
-              <div key={i} className="text-xs text-red-600 mt-1">
-                {msg}
-              </div>
-            ))}
-            {saveFieldErrors['valid_to']?.map((msg, i) => (
-              <div key={i} className="text-xs text-red-600 mt-1">
-                {msg}
-              </div>
-            ))}
-          </div>
+            <Button variant="quiet" onClick={() => setValidTo('')}>Không giới hạn</Button>
+          </Field>
         </div>
-
-        {/* Profile */}
-        <div>
-          <label htmlFor="schedule-profile" className="block text-sm font-medium text-gray-700">
-            Profile
-          </label>
+        <Field htmlFor="schedule-profile" label="Profile" error={fieldError('target_os_username')}>
           <input
             id="schedule-profile"
             type="text"
-            placeholder="để trống = profile mặc định của máy"
             value={targetOsUsername}
             onChange={(e) => setTargetOsUsername(e.target.value)}
-            className="mt-1 w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="để trống = profile mặc định của máy"
+            aria-describedby={describedBy('schedule-profile', 'target_os_username')}
+            className={`w-full ${inputClass}`}
           />
-          {localErrors.target_os_username && (
-            <div className="text-xs text-red-600 mt-1">{localErrors.target_os_username}</div>
-          )}
-          {liveFieldErrors['target_os_username']?.map((msg, i) => (
-            <div key={i} className="text-xs text-red-600 mt-1">
-              {msg}
-            </div>
-          ))}
-          {saveFieldErrors['target_os_username']?.map((msg, i) => (
-            <div key={i} className="text-xs text-red-600 mt-1">
-              {msg}
-            </div>
-          ))}
-        </div>
-
+        </Field>
         {/* Warnings Section */}
         {checkFailed && !checkPending && (
-          <div className="mb-4 p-3 rounded border border-red-200 bg-red-50 text-sm text-red-700 flex items-center justify-between">
+          <Notice tone="danger">
             <span>Không kiểm tra được lịch: {errorMessage(checkError)}. Chưa thể lưu.</span>
-            <button
+            <Button
+              variant="quiet"
               type="button"
               onClick={() => void retryCheck()}
-              className="ml-3 px-2 py-1 text-xs border border-red-300 rounded hover:bg-red-100"
             >
               Thử lại
-            </button>
-          </div>
+            </Button>
+          </Notice>
         )}
         {validationResult?.warnings && validationResult.warnings.length > 0 && (
-          <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-900 space-y-2">
+          <Notice tone="warn">
             <div className="font-semibold text-sm">Cảnh báo:</div>
             {validationResult.warnings.map((w, index) => {
               if (w.code === 'ambiguous_profile') {
@@ -757,7 +514,7 @@ function ScheduleForm({ initialSchedule, scheduleId }: ScheduleFormProps) {
                         {i > 0 && ', '}
                         <Link
                           to={`/workstations/${ws.id}`}
-                          className="font-medium underline hover:text-blue-800"
+                          className="font-mono font-medium text-accent underline"
                         >
                           {ws.mqtt_identity}
                         </Link>
@@ -777,7 +534,7 @@ function ScheduleForm({ initialSchedule, scheduleId }: ScheduleFormProps) {
                         {i > 0 && ', '}
                         <Link
                           to={`/workstations/${ws.id}`}
-                          className="font-medium underline hover:text-blue-800"
+                          className="font-mono font-medium text-accent underline"
                         >
                           {ws.mqtt_identity}
                         </Link>
@@ -795,27 +552,35 @@ function ScheduleForm({ initialSchedule, scheduleId }: ScheduleFormProps) {
                 </div>
               );
             })}
-          </div>
+          </Notice>
         )}
 
         {/* Bottom Actions */}
-        <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
-          <button
+        <div className="flex justify-end space-x-3 pt-4 border-t border-line">
+          <Button
+            variant="secondary"
             type="button"
             onClick={() => navigate('/schedules')}
-            className="px-4 py-2 border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-100"
           >
             Hủy
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="primary"
             type="submit"
             disabled={isSaveDisabled}
-            className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSaving ? 'Đang lưu…' : 'Lưu'}
-          </button>
+          </Button>
         </div>
       </form>
+      <ConfirmDialog
+        open={warningInput !== null}
+        title={`Lưu lịch ${name.trim()}?`}
+        message="Lịch có cảnh báo (xem bên dưới). Vẫn lưu?"
+        confirmLabel="Lưu"
+        onCancel={() => setWarningInput(null)}
+        onConfirm={() => executeSave(true)}
+      />
     </div>
   );
 }
@@ -836,18 +601,16 @@ export function ScheduleFormPage() {
   });
 
   if (isEdit && isLoading) {
-    return <div className="p-8 text-center text-gray-500">Đang tải…</div>;
+    return <Notice tone="info">Đang tải…</Notice>;
   }
 
   if (isEdit && isError) {
     return (
       <div className="space-y-4">
-        <Link to="/schedules" className="text-sm text-blue-600 hover:underline">
+        <Link to="/schedules" className="text-sm text-accent hover:underline">
           ← Danh sách lịch
         </Link>
-        <div className="p-4 bg-red-50 text-red-700 rounded border border-red-200">
-          {errorMessage(error)}
-        </div>
+        <Notice tone="danger">{errorMessage(error)}</Notice>
       </div>
     );
   }

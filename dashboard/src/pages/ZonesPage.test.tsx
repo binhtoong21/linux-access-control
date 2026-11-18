@@ -219,8 +219,6 @@ describe('ZonesPage', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const confirmSpy = vi.spyOn(window, 'confirm');
-
     renderZonesPage();
 
     await screen.findByText('Phòng Lab 02');
@@ -228,18 +226,18 @@ describe('ZonesPage', () => {
     const deleteBtn = within(row2).getByRole('button', { name: 'Xóa' });
 
     // 1. Cancel confirm
-    confirmSpy.mockReturnValueOnce(false);
     await user.click(deleteBtn);
-    expect(confirmSpy).toHaveBeenCalledWith(
-      'Xóa zone này? Các máy trong zone vẫn giữ nguyên, chỉ không còn thuộc zone.',
-    );
+    expect(within(screen.getByRole('dialog')).getByText(
+      'Xóa zone này? Các máy trong zone vẫn giữ nguyên, chỉ không còn thuộc zone.')).toBeInTheDocument();
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Hủy' }));
     expect(deleteCallUrl).toBeNull();
 
     // 2. Accept confirm
-    confirmSpy.mockReturnValueOnce(true);
     await user.click(deleteBtn);
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Xóa' }));
     await waitFor(() => {
       expect(deleteCallUrl).toBe('/api/v1/zones/z-2');
+      expect(fetchMock.mock.calls.filter(([url, init]) => url === '/api/v1/zones/z-2' && init?.method === 'DELETE')).toHaveLength(1);
     });
   });
 
@@ -271,8 +269,6 @@ describe('ZonesPage', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
-
     renderZonesPage();
 
     await screen.findByText('Phòng Lab 01');
@@ -280,9 +276,10 @@ describe('ZonesPage', () => {
     const deleteBtn = within(row1).getByRole('button', { name: 'Xóa' });
 
     await user.click(deleteBtn);
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Xóa' }));
 
     expect(
-      await screen.findByText('Đang được lịch sử dụng, không xóa được. Sửa hoặc xóa lịch trước.'),
+      await within(screen.getByRole('dialog')).findByText('Đang được lịch sử dụng, không xóa được. Sửa hoặc xóa lịch trước.'),
     ).toBeInTheDocument();
   });
 });

@@ -199,7 +199,6 @@ describe('IssuesPage', () => {
 
   it('resolve cancelled sends nothing', async () => {
     const user = userEvent.setup();
-    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue(null);
 
     const fetchMock = vi.fn().mockImplementation((url: string) => {
       if (url === '/api/v1/workstations') {
@@ -232,7 +231,10 @@ describe('IssuesPage', () => {
     const markBtn = await screen.findByRole('button', { name: 'Đánh dấu đã xem' });
     await user.click(markBtn);
 
-    expect(promptSpy).toHaveBeenCalledWith('Ghi chú (không bắt buộc):');
+    const dialog = screen.getByRole('dialog', { name: 'Đánh dấu đã xem bản ghi entry-1?' });
+    expect(within(dialog).getByLabelText('Ghi chú (không bắt buộc):')).toHaveValue('');
+    await user.click(within(dialog).getByRole('button', { name: 'Hủy' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 
     const resolveCalls = fetchMock.mock.calls.filter(([u]) =>
       u.includes('/resolve'),
@@ -242,7 +244,6 @@ describe('IssuesPage', () => {
 
   it('resolve with a note sends {"note":"…"} once even on double click', async () => {
     const user = userEvent.setup();
-    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('Cần cấu hình lại Agent');
     let resolveCallCount = 0;
     let resolveBody: unknown = null;
 
@@ -290,25 +291,29 @@ describe('IssuesPage', () => {
 
     const markBtn = await screen.findByRole('button', { name: 'Đánh dấu đã xem' });
 
-    // Double click
-    await user.dblClick(markBtn);
+    await user.click(markBtn);
+    const dialog = screen.getByRole('dialog');
+    await user.type(within(dialog).getByLabelText('Ghi chú (không bắt buộc):'), '  Cần cấu hình lại Agent  ');
+    await user.dblClick(within(dialog).getByRole('button', { name: 'Đánh dấu đã xem' }));
 
     await waitFor(() => {
       expect(resolveCallCount).toBe(1);
       expect(resolveBody).toEqual({ note: 'Cần cấu hình lại Agent' });
     });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 
-  it('a failed resolve shows the error on the row and can be retried', async () => {
+  it('a failed resolve keeps the error in the dialog and can be retried with no note', async () => {
     const user = userEvent.setup();
-    vi.spyOn(window, 'prompt').mockReturnValue('');
     let attempts = 0;
+    const resolveBodies: unknown[] = [];
     const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
       const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, text: async () => JSON.stringify(body) });
       if (url === '/api/v1/workstations') return ok(mockWorkstations);
       if (url.startsWith('/api/v1/ingest-rejects') && !url.includes('/resolve')) return ok({ items: [mockUnresolvedReject], next_cursor: null });
       if (url === '/api/v1/ingest-rejects/rej-1/resolve' && init?.method === 'POST') {
         attempts++;
+        resolveBodies.push(JSON.parse(init.body as string));
         if (attempts === 1) return Promise.resolve({ ok: false, status: 500, text: async () => '' });
         return ok({ ...mockUnresolvedReject, resolved_at: '2026-11-18T10:00:00Z', note: null });
       }
@@ -319,10 +324,17 @@ describe('IssuesPage', () => {
 
     renderIssuesPage();
     await user.click(await screen.findByRole('button', { name: 'Đánh dấu đã xem' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Không đánh dấu được');
+    const dialog = screen.getByRole('dialog');
+    const confirmButton = within(dialog).getByRole('button', { name: 'Đánh dấu đã xem' });
+    await user.click(confirmButton);
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Không kết nối được máy chủ');
+    expect(attempts).toBe(1);
+    expect(resolveBodies).toEqual([{}]);
 
-    await user.click(screen.getByRole('button', { name: 'Đánh dấu đã xem' }));
+    await user.click(confirmButton);
     await waitFor(() => expect(attempts).toBe(2));
+    expect(resolveBodies).toEqual([{}, {}]);
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
   });
 
