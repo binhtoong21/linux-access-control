@@ -1,6 +1,7 @@
 import { api } from './client';
 import type {
   Admin,
+  AdminAction,
   ApproveEnrollmentBatchInput,
   ApproveEnrollmentNewInput,
   AuditLog,
@@ -17,6 +18,8 @@ import type {
   Page,
   Profile,
   ProfileStatus,
+  Session,
+  SessionStatus,
   UpdateZoneChanges,
   User,
   UserDetail,
@@ -248,6 +251,10 @@ export interface ListAuditLogsFilter {
   outcome?: string;
   user_id?: string;
   workstation_id?: string;
+  zone_id?: string;
+  card_uid?: string;
+  from?: string;
+  to?: string;
   cursor?: string;
   limit?: number;
 }
@@ -258,6 +265,10 @@ export function listAuditLogs(f?: ListAuditLogsFilter): Promise<Page<AuditLog>> 
   if (f?.outcome) params.set('outcome', f.outcome);
   if (f?.user_id) params.set('user_id', f.user_id);
   if (f?.workstation_id) params.set('workstation_id', f.workstation_id);
+  if (f?.zone_id) params.set('zone_id', f.zone_id);
+  if (f?.card_uid) params.set('card_uid', f.card_uid);
+  if (f?.from) params.set('from', f.from);
+  if (f?.to) params.set('to', f.to);
   if (f?.cursor) params.set('cursor', f.cursor);
   if (f?.limit !== undefined && f?.limit !== null) params.set('limit', String(f.limit));
   const qs = params.toString();
@@ -266,6 +277,52 @@ export function listAuditLogs(f?: ListAuditLogsFilter): Promise<Page<AuditLog>> 
 
 export function getAuditLog(id: string): Promise<AuditLogDetail> {
   return api<AuditLogDetail>('GET', `/audit-logs/${encodeURIComponent(id)}`);
+}
+
+export interface ListSessionsFilter {
+  workstation_id?: string;
+  user_id?: string;
+  status?: SessionStatus;
+  from?: string;
+  to?: string;
+  cursor?: string;
+  limit?: number;
+}
+
+export function listSessions(f?: ListSessionsFilter): Promise<Page<Session>> {
+  const params = new URLSearchParams();
+  if (f?.workstation_id) params.set('workstation_id', f.workstation_id);
+  if (f?.user_id) params.set('user_id', f.user_id);
+  if (f?.status) params.set('status', f.status);
+  if (f?.from) params.set('from', f.from);
+  if (f?.to) params.set('to', f.to);
+  if (f?.cursor) params.set('cursor', f.cursor);
+  if (f?.limit !== undefined && f?.limit !== null) params.set('limit', String(f.limit));
+  const qs = params.toString();
+  return api<Page<Session>>('GET', `/sessions${qs ? `?${qs}` : ''}`);
+}
+
+export interface ListAdminActionsFilter {
+  admin_id?: string;
+  entity_type?: string;
+  entity_id?: string;
+  from?: string;
+  to?: string;
+  cursor?: string;
+  limit?: number;
+}
+
+export function listAdminActions(f?: ListAdminActionsFilter): Promise<Page<AdminAction>> {
+  const params = new URLSearchParams();
+  if (f?.admin_id) params.set('admin_id', f.admin_id);
+  if (f?.entity_type) params.set('entity_type', f.entity_type);
+  if (f?.entity_id) params.set('entity_id', f.entity_id);
+  if (f?.from) params.set('from', f.from);
+  if (f?.to) params.set('to', f.to);
+  if (f?.cursor) params.set('cursor', f.cursor);
+  if (f?.limit !== undefined && f?.limit !== null) params.set('limit', String(f.limit));
+  const qs = params.toString();
+  return api<Page<AdminAction>>('GET', `/admin-audit-logs${qs ? `?${qs}` : ''}`);
 }
 
 export function importRoster(csv: string, apply: boolean): Promise<ImportResult> {
