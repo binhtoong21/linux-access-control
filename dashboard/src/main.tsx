@@ -7,6 +7,7 @@ import { RequireAuth } from './auth/RequireAuth';
 import { Layout } from './components/Layout';
 import { LoginPage } from './pages/LoginPage';
 import { WorkstationsPage } from './pages/WorkstationsPage';
+import { WorkstationDetailPage } from './pages/WorkstationDetailPage';
 import { UsersPage } from './pages/UsersPage';
 import { UserDetailPage } from './pages/UserDetailPage';
 import { GroupsPage } from './pages/GroupsPage';
@@ -39,6 +40,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
               }
             >
               <Route path="/workstations" element={<WorkstationsPage />} />
+              <Route path="/workstations/:id" element={<WorkstationDetailPage />} />
               <Route path="/users" element={<UsersPage />} />
               <Route path="/users/:id" element={<UserDetailPage />} />
               <Route path="/groups" element={<GroupsPage />} />

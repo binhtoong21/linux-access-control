@@ -9,10 +9,14 @@ import type {
   Group,
   ImportResult,
   Page,
+  Profile,
+  ProfileStatus,
   User,
   UserDetail,
   UserStatus,
+  WorkstationDetail,
   WorkstationSummary,
+  Zone,
 } from './types';
 
 export interface WorkstationFilter {
@@ -37,6 +41,44 @@ export function listWorkstations(filter?: WorkstationFilter): Promise<Workstatio
     path += `?connectivity=${encodeURIComponent(filter.connectivity)}`;
   }
   return api<WorkstationSummary[]>('GET', path);
+}
+
+export function getWorkstation(id: string): Promise<WorkstationDetail> {
+  return api<WorkstationDetail>('GET', `/workstations/${encodeURIComponent(id)}`);
+}
+
+export function updateWorkstationZone(
+  id: string,
+  zone_id: string | null,
+): Promise<WorkstationDetail> {
+  return api<WorkstationDetail>('PATCH', `/workstations/${encodeURIComponent(id)}`, { zone_id });
+}
+
+export interface UpdateProfileChanges {
+  status?: ProfileStatus;
+  is_default?: boolean;
+}
+
+export function updateProfile(
+  id: string,
+  os_username: string,
+  changes: UpdateProfileChanges,
+): Promise<Profile> {
+  return api<Profile>(
+    'PATCH',
+    `/workstations/${encodeURIComponent(id)}/profiles/${encodeURIComponent(os_username)}`,
+    changes,
+  );
+}
+
+export function disableWorkstation(id: string): Promise<WorkstationDetail> {
+  return api<WorkstationDetail>('POST', `/workstations/${encodeURIComponent(id)}/disable`, {
+    confirm: true,
+  });
+}
+
+export function listZones(): Promise<Zone[]> {
+  return api<Zone[]>('GET', '/zones');
 }
 
 export interface ListUsersFilter {
