@@ -2,6 +2,14 @@ import React, { useState } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { ApiError } from '../api/client';
+import {
+  Button,
+  Field,
+  fieldDescribedBy,
+  inputClass,
+  Notice,
+  PageHeader,
+} from '../components/ui';
 
 export function LoginPage() {
   const { admin, login } = useAuth();
@@ -52,50 +60,47 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white rounded-lg shadow p-8">
-        <h1 className="text-2xl font-bold text-center text-gray-900 mb-6">NFC Lab — Quản trị</h1>
+    <div className="min-h-screen bg-canvas flex items-center justify-center p-4">
+      <div className="max-w-[360px] w-full bg-surface border border-line rounded p-6 space-y-6">
+        <PageHeader title="NFC Lab" description="Đăng nhập quản trị" />
         {errorMsg && (
-          <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded border border-red-200">
+          <Notice tone="danger">
             {errorMsg}
-          </div>
+          </Notice>
         )}
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
-              Tên đăng nhập
-            </label>
+          <Field label="Tên đăng nhập" htmlFor="username">
             <input
               id="username"
+              aria-describedby={fieldDescribedBy('username', {})}
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
               disabled={submitting}
-              className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`w-full ${inputClass}`}
             />
-          </div>
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-              Mật khẩu
-            </label>
+          </Field>
+          <Field label="Mật khẩu" htmlFor="password">
             <input
               id="password"
+              aria-describedby={fieldDescribedBy('password', {})}
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
               disabled={submitting}
-              className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`w-full ${inputClass}`}
             />
-          </div>
-          <button
+          </Field>
+          <Button
             type="submit"
-            disabled={submitting}
-            className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium rounded transition"
+            variant="primary"
+            loading={submitting}
+            className="w-full"
           >
             Đăng nhập
-          </button>
+          </Button>
         </form>
       </div>
     </div>

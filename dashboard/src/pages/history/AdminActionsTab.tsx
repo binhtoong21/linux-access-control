@@ -5,6 +5,21 @@ import type { AdminAction } from '../../api/types';
 import { formatDateTime } from '../../lib/time';
 import { errorMessage } from '../../lib/errors';
 import { getVnDateString, toVnIso } from './AuditTab';
+import {
+  Button,
+  EmptyRow,
+  Field,
+  fieldDescribedBy,
+  inputClass,
+  Notice,
+  selectClass,
+  StatusPill,
+  Table,
+  TD,
+  TH,
+  THead,
+  TR,
+} from '../../components/ui';
 
 const ENTITY_TYPE_OPTIONS = [
   { value: '', label: 'Tất cả đối tượng' },
@@ -83,19 +98,17 @@ export function AdminActionsTab() {
   return (
     <div className="space-y-4">
       {/* Filters Section */}
-      <div className="bg-white p-4 rounded-lg shadow border border-gray-200 space-y-4">
+      <div className="bg-surface p-4 rounded border border-line space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {/* Loại đối tượng */}
-          <div>
-            <label htmlFor="admin-filter-entity-type" className="block text-xs font-semibold text-gray-700 mb-1">
-              Loại đối tượng
-            </label>
+          <Field label="Loại đối tượng" htmlFor="admin-filter-entity-type">
             <select
               id="admin-filter-entity-type"
+              aria-describedby={fieldDescribedBy('admin-filter-entity-type', {})}
               aria-label="Chọn loại đối tượng"
               value={entityType}
               onChange={(e) => setEntityType(e.target.value)}
-              className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`w-full ${selectClass}`}
             >
               {ENTITY_TYPE_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -103,58 +116,53 @@ export function AdminActionsTab() {
                 </option>
               ))}
             </select>
-          </div>
+          </Field>
         </div>
 
         {/* Time filters */}
-        <div className="pt-2 border-t border-gray-100 flex flex-wrap items-center gap-3 text-sm">
-          <div className="flex items-center space-x-2">
-            <label htmlFor="admin-filter-from" className="text-xs font-semibold text-gray-700 whitespace-nowrap">
-              Từ:
-            </label>
+        <div className="pt-2 border-t border-line flex flex-wrap items-center gap-3 text-sm">
+          <Field label="Từ:" htmlFor="admin-filter-from">
             <input
               id="admin-filter-from"
+              aria-describedby={fieldDescribedBy('admin-filter-from', {})}
               type="datetime-local"
               value={fromTime}
               onChange={(e) => setFromTime(e.target.value)}
-              className="border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`w-full ${inputClass}`}
             />
-          </div>
-          <div className="flex items-center space-x-2">
-            <label htmlFor="admin-filter-to" className="text-xs font-semibold text-gray-700 whitespace-nowrap">
-              Đến:
-            </label>
+          </Field>
+          <Field label="Đến:" htmlFor="admin-filter-to">
             <input
               id="admin-filter-to"
+              aria-describedby={fieldDescribedBy('admin-filter-to', {})}
               type="datetime-local"
               value={toTime}
               onChange={(e) => setToTime(e.target.value)}
-              className="border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`w-full ${inputClass}`}
             />
-          </div>
+          </Field>
           <div className="flex items-center space-x-2">
-            <button
+            <Button
               type="button"
               onClick={handleToday}
-              className="px-2.5 py-1 text-xs border border-gray-300 rounded text-gray-700 hover:bg-gray-100"
             >
               Hôm nay
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               onClick={handleSevenDays}
-              className="px-2.5 py-1 text-xs border border-gray-300 rounded text-gray-700 hover:bg-gray-100"
             >
               7 ngày
-            </button>
+            </Button>
             {(fromTime || toTime) && (
-              <button
+              <Button
+                variant="quiet"
+                size="sm"
                 type="button"
                 onClick={handleClearTime}
-                className="px-2.5 py-1 text-xs text-blue-600 hover:underline"
               >
                 Xóa giờ
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -162,128 +170,121 @@ export function AdminActionsTab() {
 
       {/* Error display */}
       {isError && (
-        <div className="p-4 bg-red-50 text-red-700 rounded border border-red-200 text-sm">
+        <Notice tone="danger">
           {errorMessage(error)}
-        </div>
+        </Notice>
       )}
 
       {/* Loading state */}
       {isLoading && (
-        <div className="p-8 text-center text-gray-500">Đang tải thao tác quản trị…</div>
+        <Notice tone="info">Đang tải thao tác quản trị…</Notice>
       )}
 
       {/* Main Table */}
       {!isLoading && !isError && (
-        <div className="bg-white rounded-lg shadow overflow-hidden border border-gray-200">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-gray-50 text-gray-600 font-medium">
-                <tr>
-                  <th className="px-4 py-3 text-left">Lúc</th>
-                  <th className="px-4 py-3 text-left">Admin</th>
-                  <th className="px-4 py-3 text-left">Hành động</th>
-                  <th className="px-4 py-3 text-left">Đối tượng</th>
-                  <th className="px-4 py-3 text-right">Chi tiết</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {actions.length > 0 ? (
-                  actions.map((act) => {
-                    const isExpanded = !!expandedIds[act.id];
-                    const entityLabel = `${act.entity_type}${
-                      act.entity_id ? ` ${act.entity_id.slice(0, 8)}` : ''
+        <div className="space-y-4">
+          <Table>
+            <THead>
+              <TR>
+                <TH className="text-left">Lúc</TH>
+                <TH className="text-left">Admin</TH>
+                <TH className="text-left">Hành động</TH>
+                <TH className="text-left">Đối tượng</TH>
+                <TH className="text-right">Chi tiết</TH>
+              </TR>
+            </THead>
+            <tbody>
+              {actions.length > 0 ? (
+                actions.map((act) => {
+                  const isExpanded = !!expandedIds[act.id];
+                  const entityLabel = `${act.entity_type}${act.entity_id ? ` ${act.entity_id.slice(0, 8)}` : ''
                     }`;
 
-                    return (
-                      <React.Fragment key={act.id}>
-                        <tr className="hover:bg-gray-50">
-                          {/* Lúc */}
-                          <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
-                            {formatDateTime(act.occurred_at)}
-                          </td>
+                  return (
+                    <React.Fragment key={act.id}>
+                      <TR interactive>
+                        {/* Lúc */}
+                        <TD className="text-ink whitespace-nowrap">
+                          {formatDateTime(act.occurred_at)}
+                        </TD>
 
-                          {/* Admin */}
-                          <td className="px-4 py-3 text-gray-900 font-medium whitespace-nowrap">
-                            {act.admin?.display_name || act.admin?.username || '—'}
-                          </td>
+                        {/* Admin */}
+                        <TD className="text-ink font-medium whitespace-nowrap">
+                          {act.admin?.display_name || act.admin?.username || '—'}
+                        </TD>
 
-                          {/* Hành động */}
-                          <td className="px-4 py-3">
-                            <span className="font-mono text-xs bg-gray-100 text-gray-800 px-2 py-0.5 rounded border border-gray-200">
-                              {act.action}
-                            </span>
-                          </td>
+                        {/* Hành động */}
+                        <TD>
+                          <StatusPill tone="neutral">
+                            {act.action}
+                          </StatusPill>
+                        </TD>
 
-                          {/* Đối tượng */}
-                          <td className="px-4 py-3 text-gray-700 font-mono text-xs whitespace-nowrap">
-                            {entityLabel}
-                          </td>
+                        {/* Đối tượng */}
+                        <TD className="text-ink font-mono text-xs whitespace-nowrap">
+                          {entityLabel}
+                        </TD>
 
-                          {/* Chi tiết button */}
-                          <td className="px-4 py-3 text-right whitespace-nowrap">
-                            <button
-                              type="button"
-                              onClick={() => toggleDetails(act.id)}
-                              className="text-xs text-blue-600 hover:underline font-medium"
-                            >
-                              {isExpanded ? 'Ẩn chi tiết' : 'Chi tiết'}
-                            </button>
-                          </td>
-                        </tr>
+                        {/* Chi tiết button */}
+                        <TD className="text-right whitespace-nowrap">
+                          <Button
+                            variant="quiet"
+                            size="sm"
+                            type="button"
+                            onClick={() => toggleDetails(act.id)}
+                          >
+                            {isExpanded ? 'Ẩn chi tiết' : 'Chi tiết'}
+                          </Button>
+                        </TD>
+                      </TR>
 
-                        {isExpanded && (
-                          <tr key={`${act.id}-expanded`}>
-                            <td colSpan={5} className="bg-gray-50 px-6 py-4">
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
-                                <div>
-                                  <span className="font-sans font-semibold text-gray-700 block mb-1">
-                                    Trước (before):
-                                  </span>
-                                  <pre className="bg-white p-3 rounded border border-gray-200 overflow-x-auto max-h-60 whitespace-pre-wrap break-words">
-                                    {act.before !== undefined && act.before !== null
-                                      ? JSON.stringify(act.before, null, 2)
-                                      : 'null'}
-                                  </pre>
-                                </div>
-                                <div>
-                                  <span className="font-sans font-semibold text-gray-700 block mb-1">
-                                    Sau (after):
-                                  </span>
-                                  <pre className="bg-white p-3 rounded border border-gray-200 overflow-x-auto max-h-60 whitespace-pre-wrap break-words">
-                                    {act.after !== undefined && act.after !== null
-                                      ? JSON.stringify(act.after, null, 2)
-                                      : 'null'}
-                                  </pre>
-                                </div>
+                      {isExpanded && (
+                        <TR key={`${act.id}-expanded`}>
+                          <TD colSpan={5} className="bg-canvas px-6 py-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
+                              <div>
+                                <span className="font-sans font-semibold text-ink block mb-1">
+                                  Trước (before):
+                                </span>
+                                <pre className="bg-surface p-3 rounded border border-line overflow-x-auto max-h-60 whitespace-pre-wrap break-words">
+                                  {act.before !== undefined && act.before !== null
+                                    ? JSON.stringify(act.before, null, 2)
+                                    : 'null'}
+                                </pre>
                               </div>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
-                      Không tìm thấy thao tác quản trị nào
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                              <div>
+                                <span className="font-sans font-semibold text-ink block mb-1">
+                                  Sau (after):
+                                </span>
+                                <pre className="bg-surface p-3 rounded border border-line overflow-x-auto max-h-60 whitespace-pre-wrap break-words">
+                                  {act.after !== undefined && act.after !== null
+                                    ? JSON.stringify(act.after, null, 2)
+                                    : 'null'}
+                                </pre>
+                              </div>
+                            </div>
+                          </TD>
+                        </TR>
+                      )}
+                    </React.Fragment>
+                  );
+                })
+              ) : (
+                <EmptyRow colSpan={5}>Không tìm thấy thao tác quản trị nào</EmptyRow>
+              )}
+            </tbody>
+          </Table>
 
           {/* Tải thêm button */}
           {hasNextPage && (
-            <div className="p-4 text-center border-t border-gray-200">
-              <button
+            <div className="p-4 text-center border-t border-line">
+              <Button
                 type="button"
                 onClick={() => fetchNextPage()}
                 disabled={isFetchingNextPage}
-                className="px-4 py-2 border border-gray-300 rounded text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
               >
                 {isFetchingNextPage ? 'Đang tải…' : 'Tải thêm'}
-              </button>
+              </Button>
             </div>
           )}
         </div>

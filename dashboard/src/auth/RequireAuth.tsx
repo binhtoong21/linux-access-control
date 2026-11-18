@@ -7,7 +7,7 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
   const location = useLocation();
 
   if (loading) {
-    return <div className="p-8 text-center text-gray-500">Đang tải…</div>;
+    return <div className="p-8 text-center text-ink-muted">Đang tải…</div>;
   }
 
   if (!admin) {

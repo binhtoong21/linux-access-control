@@ -13,6 +13,21 @@ import { outcomeLabel, reasonLabel } from '../../lib/labels';
 import { formatDateTime } from '../../lib/time';
 import { errorMessage } from '../../lib/errors';
 import { UserPicker } from '../../components/UserPicker';
+import {
+  Button,
+  EmptyRow,
+  Field,
+  fieldDescribedBy,
+  inputClass,
+  Notice,
+  selectClass,
+  StatusPill,
+  Table,
+  TD,
+  TH,
+  THead,
+  TR,
+} from '../../components/ui';
 
 export function toVnIso(datetimeLocal: string): string | undefined {
   if (!datetimeLocal) return undefined;
@@ -182,28 +197,29 @@ export function AuditTab({
     switch (out) {
       case 'granted':
         return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+          <StatusPill tone="ok">
             {outcomeLabel(out)}
-          </span>
+          </StatusPill>
         );
       case 'denied':
         return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+          <StatusPill tone="danger">
             {outcomeLabel(out)}
-          </span>
+          </StatusPill>
         );
       case 'noop':
         return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+          <StatusPill tone="info">
             {outcomeLabel(out)}
-          </span>
+          </StatusPill>
         );
       case 'error':
+        return <StatusPill tone="danger">{outcomeLabel(out)}</StatusPill>;
       default:
         return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+          <StatusPill tone="neutral">
             {outcomeLabel(out)}
-          </span>
+          </StatusPill>
         );
     }
   };
@@ -211,19 +227,17 @@ export function AuditTab({
   return (
     <div className="space-y-4">
       {/* Filters Section */}
-      <div className="bg-white p-4 rounded-lg shadow border border-gray-200 space-y-4">
+      <div className="bg-surface p-4 rounded border border-line space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {/* Máy */}
-          <div>
-            <label htmlFor="audit-filter-workstation" className="block text-xs font-semibold text-gray-700 mb-1">
-              Máy
-            </label>
+          <Field label="Máy" htmlFor="audit-filter-workstation">
             <select
               id="audit-filter-workstation"
+              aria-describedby={fieldDescribedBy('audit-filter-workstation', {})}
               aria-label="Chọn máy"
               value={workstationId}
               onChange={(e) => setWorkstationId(e.target.value)}
-              className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`w-full ${selectClass}`}
             >
               <option value="">-- Tất cả máy --</option>
               {workstations?.map((ws) => (
@@ -232,19 +246,17 @@ export function AuditTab({
                 </option>
               ))}
             </select>
-          </div>
+          </Field>
 
           {/* Zone */}
-          <div>
-            <label htmlFor="audit-filter-zone" className="block text-xs font-semibold text-gray-700 mb-1">
-              Zone
-            </label>
+          <Field label="Zone" htmlFor="audit-filter-zone">
             <select
               id="audit-filter-zone"
+              aria-describedby={fieldDescribedBy('audit-filter-zone', {})}
               aria-label="Chọn zone"
               value={zoneId}
               onChange={(e) => setZoneId(e.target.value)}
-              className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`w-full ${selectClass}`}
             >
               <option value="">-- Tất cả zone --</option>
               {zones?.map((z) => (
@@ -253,43 +265,41 @@ export function AuditTab({
                 </option>
               ))}
             </select>
-          </div>
+          </Field>
 
           {/* Người dùng */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1">
-              Người dùng
-            </label>
-            {selectedUser ? (
-              <div className="flex items-center space-x-2 border border-gray-300 rounded px-3 py-1.5 bg-gray-50">
-                <span className="text-sm text-gray-900 flex-1 truncate">
-                  {selectedUser.external_id} — {selectedUser.full_name}
-                </span>
-                <button
-                  type="button"
-                  onClick={handleClearUser}
-                  className="text-xs text-red-600 hover:text-red-800 font-bold"
-                  aria-label="Xóa chọn người dùng"
-                >
-                  ✕
-                </button>
-              </div>
-            ) : (
-              <UserPicker onPick={handleSelectUser} placeholder="Tìm người dùng..." />
-            )}
-          </div>
+          <Field label="Người dùng" htmlFor="audit-filter-user">
+            <div id="audit-filter-user">
+              {selectedUser ? (
+                <div className="flex items-center space-x-2 border border-control rounded px-3 py-1.5 bg-canvas">
+                  <span className="text-sm text-ink flex-1 truncate">
+                    {selectedUser.external_id} — {selectedUser.full_name}
+                  </span>
+                  <Button
+                    variant="quiet"
+                    size="sm"
+                    type="button"
+                    onClick={handleClearUser}
+                    aria-label="Xóa chọn người dùng"
+                  >
+                    ✕
+                  </Button>
+                </div>
+              ) : (
+                <UserPicker onPick={handleSelectUser} placeholder="Tìm người dùng..." />
+              )}
+            </div>
+          </Field>
 
           {/* Kết quả */}
-          <div>
-            <label htmlFor="audit-filter-outcome" className="block text-xs font-semibold text-gray-700 mb-1">
-              Kết quả
-            </label>
+          <Field label="Kết quả" htmlFor="audit-filter-outcome">
             <select
               id="audit-filter-outcome"
+              aria-describedby={fieldDescribedBy('audit-filter-outcome', {})}
               aria-label="Chọn kết quả"
               value={outcome}
               onChange={(e) => setOutcome(e.target.value)}
-              className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`w-full ${selectClass}`}
             >
               <option value="">Tất cả</option>
               <option value="granted">Cho vào (granted)</option>
@@ -297,19 +307,17 @@ export function AuditTab({
               <option value="noop">Đã trong phiên (noop)</option>
               <option value="error">Lỗi (error)</option>
             </select>
-          </div>
+          </Field>
 
           {/* Lý do */}
-          <div>
-            <label htmlFor="audit-filter-reason" className="block text-xs font-semibold text-gray-700 mb-1">
-              Lý do
-            </label>
+          <Field label="Lý do" htmlFor="audit-filter-reason">
             <select
               id="audit-filter-reason"
+              aria-describedby={fieldDescribedBy('audit-filter-reason', {})}
               aria-label="Chọn lý do"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`w-full ${selectClass}`}
             >
               {REASON_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -317,231 +325,218 @@ export function AuditTab({
                 </option>
               ))}
             </select>
-          </div>
+          </Field>
 
           {/* UID thẻ */}
-          <div>
-            <label htmlFor="audit-filter-card-uid" className="block text-xs font-semibold text-gray-700 mb-1">
-              UID thẻ
-            </label>
+          <Field label="UID thẻ" htmlFor="audit-filter-card-uid">
             <input
               id="audit-filter-card-uid"
+              aria-describedby={fieldDescribedBy('audit-filter-card-uid', {})}
               type="text"
               value={cardUid}
               onChange={(e) => setCardUid(e.target.value)}
               placeholder="UID thẻ (VD: 04 A3 2B 1C)"
-              className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`w-full ${inputClass} uppercase font-mono`}
             />
-          </div>
+          </Field>
         </div>
 
         {/* Time filters */}
-        <div className="pt-2 border-t border-gray-100 flex flex-wrap items-center gap-3 text-sm">
-          <div className="flex items-center space-x-2">
-            <label htmlFor="audit-filter-from" className="text-xs font-semibold text-gray-700 whitespace-nowrap">
-              Từ:
-            </label>
+        <div className="pt-2 border-t border-line flex flex-wrap items-center gap-3 text-sm">
+          <Field label="Từ:" htmlFor="audit-filter-from">
             <input
               id="audit-filter-from"
+              aria-describedby={fieldDescribedBy('audit-filter-from', {})}
               type="datetime-local"
               value={fromTime}
               onChange={(e) => setFromTime(e.target.value)}
-              className="border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`w-full ${inputClass}`}
             />
-          </div>
-          <div className="flex items-center space-x-2">
-            <label htmlFor="audit-filter-to" className="text-xs font-semibold text-gray-700 whitespace-nowrap">
-              Đến:
-            </label>
+          </Field>
+          <Field label="Đến:" htmlFor="audit-filter-to">
             <input
               id="audit-filter-to"
+              aria-describedby={fieldDescribedBy('audit-filter-to', {})}
               type="datetime-local"
               value={toTime}
               onChange={(e) => setToTime(e.target.value)}
-              className="border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`w-full ${inputClass}`}
             />
-          </div>
+          </Field>
           <div className="flex items-center space-x-2">
-            <button
+            <Button
               type="button"
               onClick={handleToday}
-              className="px-2.5 py-1 text-xs border border-gray-300 rounded text-gray-700 hover:bg-gray-100"
             >
               Hôm nay
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               onClick={handleSevenDays}
-              className="px-2.5 py-1 text-xs border border-gray-300 rounded text-gray-700 hover:bg-gray-100"
             >
               7 ngày
-            </button>
+            </Button>
             {(fromTime || toTime) && (
-              <button
+              <Button
+                variant="quiet"
+                size="sm"
                 type="button"
                 onClick={handleClearTime}
-                className="px-2.5 py-1 text-xs text-blue-600 hover:underline"
               >
                 Xóa giờ
-              </button>
+              </Button>
             )}
           </div>
         </div>
       </div>
 
       {/* Note above the table */}
-      <p className="text-xs text-gray-500 italic">
+      <p className="text-xs text-ink-muted italic">
         Thời điểm theo đồng hồ của máy trạm.
       </p>
 
       {/* Error display */}
       {isError && (
-        <div className="p-4 bg-red-50 text-red-700 rounded border border-red-200 text-sm">
+        <Notice tone="danger">
           {errorMessage(error)}
-        </div>
+        </Notice>
       )}
 
       {/* Loading state */}
       {isLoading && (
-        <div className="p-8 text-center text-gray-500">Đang tải nhật ký quẹt thẻ…</div>
+        <Notice tone="info">Đang tải nhật ký quẹt thẻ…</Notice>
       )}
 
       {/* Main Table */}
       {!isLoading && !isError && (
-        <div className="bg-white rounded-lg shadow overflow-hidden border border-gray-200">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-gray-50 text-gray-600 font-medium">
-                <tr>
-                  <th className="px-4 py-3 text-left">Thời điểm</th>
-                  <th className="px-4 py-3 text-left">Máy</th>
-                  <th className="px-4 py-3 text-left">Người</th>
-                  <th className="px-4 py-3 text-left">Kết quả</th>
-                  <th className="px-4 py-3 text-left">Lý do</th>
-                  <th className="px-4 py-3 text-left">Profile</th>
-                  <th className="px-4 py-3 text-right">Thao tác</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {logs.length > 0 ? (
-                  logs.map((log) => {
-                    const occMs = new Date(log.occurred_at).getTime();
-                    const recMs = new Date(log.received_at).getTime();
-                    const isLate =
-                      !isNaN(occMs) && !isNaN(recMs) && Math.abs(recMs - occMs) > 5 * 60 * 1000;
+        <div className="space-y-4">
+          <Table>
+            <THead>
+              <TR>
+                <TH className="text-left">Thời điểm</TH>
+                <TH className="text-left">Máy</TH>
+                <TH className="text-left">Người</TH>
+                <TH className="text-left">Kết quả</TH>
+                <TH className="text-left">Lý do</TH>
+                <TH className="text-left">Profile</TH>
+                <TH className="text-right">Thao tác</TH>
+              </TR>
+            </THead>
+            <tbody>
+              {logs.length > 0 ? (
+                logs.map((log) => {
+                  const occMs = new Date(log.occurred_at).getTime();
+                  const recMs = new Date(log.received_at).getTime();
+                  const isLate =
+                    !isNaN(occMs) && !isNaN(recMs) && Math.abs(recMs - occMs) > 5 * 60 * 1000;
 
-                    return (
-                      <tr key={log.id} className="hover:bg-gray-50">
-                        {/* Thời điểm */}
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <div className="text-gray-900">{formatDateTime(log.occurred_at)}</div>
-                          {isLate && (
-                            <div className="text-xs text-gray-400">
-                              nhận lúc {formatDateTime(log.received_at)}
-                            </div>
-                          )}
-                        </td>
+                  return (
+                    <TR key={log.id} interactive>
+                      {/* Thời điểm */}
+                      <TD className="whitespace-nowrap">
+                        <div className="text-ink">{formatDateTime(log.occurred_at)}</div>
+                        {isLate && (
+                          <div className="text-xs text-ink-muted">
+                            nhận lúc {formatDateTime(log.received_at)}
+                          </div>
+                        )}
+                      </TD>
 
-                        {/* Máy */}
-                        <td className="px-4 py-3 text-gray-900 font-mono text-xs whitespace-nowrap">
-                          {log.workstation ? (
-                            <Link
-                              to={`/workstations/${log.workstation.id}`}
-                              className="text-blue-600 hover:underline"
-                            >
-                              {log.workstation.mqtt_identity}
-                            </Link>
-                          ) : (
-                            '—'
-                          )}
-                        </td>
+                      {/* Máy */}
+                      <TD className="text-ink font-mono text-xs whitespace-nowrap">
+                        {log.workstation ? (
+                          <Link
+                            to={`/workstations/${log.workstation.id}`}
+                            className="text-accent hover:underline"
+                          >
+                            {log.workstation.mqtt_identity}
+                          </Link>
+                        ) : (
+                          '—'
+                        )}
+                      </TD>
 
-                        {/* Người */}
-                        <td className="px-4 py-3 text-gray-900">
-                          {log.user ? (
-                            <Link
-                              to={`/users/${log.user.id}`}
-                              className="text-blue-600 hover:underline"
-                            >
-                              {log.user.external_id} — {log.user.full_name}
-                            </Link>
-                          ) : (
-                            '—'
-                          )}
-                        </td>
+                      {/* Người */}
+                      <TD className="text-ink">
+                        {log.user ? (
+                          <Link
+                            to={`/users/${log.user.id}`}
+                            className="text-accent hover:underline"
+                          >
+                            {log.user.external_id} — {log.user.full_name}
+                          </Link>
+                        ) : (
+                          '—'
+                        )}
+                      </TD>
 
-                        {/* Kết quả */}
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          {getOutcomeBadge(log.outcome)}
-                        </td>
+                      {/* Kết quả */}
+                      <TD className="whitespace-nowrap">
+                        {getOutcomeBadge(log.outcome)}
+                      </TD>
 
-                        {/* Lý do */}
-                        <td className="px-4 py-3 text-gray-700">
-                          {reasonLabel(log.reason, log.detail)}
-                        </td>
+                      {/* Lý do */}
+                      <TD className="text-ink">
+                        {reasonLabel(log.reason, log.detail)}
+                      </TD>
 
-                        {/* Profile */}
-                        <td className="px-4 py-3 text-gray-700 font-mono text-xs">
-                          {log.target_os_username || '—'}
-                        </td>
+                      {/* Profile */}
+                      <TD className="text-ink font-mono text-xs">
+                        {log.target_os_username || '—'}
+                      </TD>
 
-                        {/* Thao tác */}
-                        <td className="px-4 py-3 text-right space-x-2 whitespace-nowrap">
-                          {log.has_card_uid && (
-                            <>
-                              {uids[log.id] ? (
-                                <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded border border-gray-300">
-                                  {uids[log.id]}
-                                </span>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => handleFetchUid(log.id)}
-                                  disabled={loadingUids[log.id]}
-                                  className="text-xs text-blue-600 hover:underline disabled:opacity-50"
-                                >
-                                  {loadingUids[log.id] ? 'Đang đọc…' : 'Xem UID'}
-                                </button>
-                              )}
-                            </>
-                          )}
-                          {log.reason === 'unknown_card' && (
-                            <Link
-                              to="/cards"
-                              className="text-xs text-blue-600 hover:underline font-medium"
-                            >
-                              Đăng ký thẻ này
-                            </Link>
-                          )}
-                          {!log.has_card_uid && log.reason !== 'unknown_card' && (
-                            <span className="text-gray-400">—</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
-                      Không tìm thấy bản ghi quẹt thẻ nào
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                      {/* Thao tác */}
+                      <TD className="text-right space-x-2 whitespace-nowrap">
+                        {log.has_card_uid && (
+                          <>
+                            {uids[log.id] ? (
+                              <span className="font-mono text-xs bg-canvas px-2 py-1 rounded border border-control">
+                                {uids[log.id].replace(/\s/g, '').toUpperCase().match(/.{1,2}/g)?.join(' ')}
+                              </span>
+                            ) : (
+                              <Button
+                                variant="quiet"
+                                size="sm"
+                                type="button"
+                                onClick={() => handleFetchUid(log.id)}
+                                disabled={loadingUids[log.id]}
+                              >
+                                {loadingUids[log.id] ? 'Đang đọc…' : 'Xem UID'}
+                              </Button>
+                            )}
+                          </>
+                        )}
+                        {log.reason === 'unknown_card' && (
+                          <Link
+                            to="/cards"
+                            className="text-xs text-accent hover:underline font-medium"
+                          >
+                            Đăng ký thẻ này
+                          </Link>
+                        )}
+                        {!log.has_card_uid && log.reason !== 'unknown_card' && (
+                          <span className="text-ink-muted">—</span>
+                        )}
+                      </TD>
+                    </TR>
+                  );
+                })
+              ) : (
+                <EmptyRow colSpan={7}>Không tìm thấy bản ghi quẹt thẻ nào</EmptyRow>
+              )}
+            </tbody>
+          </Table>
 
           {/* Tải thêm button */}
           {hasNextPage && (
-            <div className="p-4 text-center border-t border-gray-200">
-              <button
+            <div className="p-4 text-center border-t border-line">
+              <Button
                 type="button"
                 onClick={() => fetchNextPage()}
                 disabled={isFetchingNextPage}
-                className="px-4 py-2 border border-gray-300 rounded text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
               >
                 {isFetchingNextPage ? 'Đang tải…' : 'Tải thêm'}
-              </button>
+              </Button>
             </div>
           )}
         </div>

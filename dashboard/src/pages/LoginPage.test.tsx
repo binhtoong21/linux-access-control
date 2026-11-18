@@ -51,6 +51,9 @@ describe('LoginPage', () => {
 
     renderLoginPage();
 
+    expect(screen.getByRole('heading', { name: 'NFC Lab' })).toBeInTheDocument();
+    expect(screen.getByText('Đăng nhập quản trị')).toBeInTheDocument();
+    expect(screen.getAllByRole('button')).toHaveLength(1);
     const usernameInput = screen.getByLabelText('Tên đăng nhập');
     const passwordInput = screen.getByLabelText('Mật khẩu');
     const submitBtn = screen.getByRole('button', { name: 'Đăng nhập' });
