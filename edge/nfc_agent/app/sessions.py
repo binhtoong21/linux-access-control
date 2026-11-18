@@ -17,6 +17,7 @@ from ..infra.store import SessionExtension, SessionRow, Store
 
 PENDING_TIMEOUT = 60.0  # pending session never shown up on seat0 -> discarded
 CREATED_AFTER_TOLERANCE = 0.5  # monotonic->UTC conversion slack when comparing with decided_at
+BUSY_NOTICE_EVERY = 15.0  # seconds (CLOCK_BOOTTIME) between two "machine in use" notices on the same desktop
 
 
 class OsPort(Protocol):
@@ -41,6 +42,7 @@ class SessionManager:
         self._store, self._os, self._wall, self._boot, self._push = store, os_port, wall, boottime, push
         self._warning_before = warning_before_sec
         self._warned: set[str] = set()
+        self._last_busy_notice: float | None = None
         self._orphans: dict[
             str, str
         ] = {}  # profile -> logind session id of a desktop nobody accounts for (teardown failed)
@@ -158,6 +160,27 @@ class SessionManager:
     def extended(self, extension: SessionExtension) -> None:
         """Warn again before the new deadline."""
         self._warned.discard(extension.session_id)
+
+    def notify_busy(self) -> None:
+        """FR-013 / D-033.3: someone else swiped while this desktop is in use.
+
+        The login screen is hidden behind the desktop, so the refusal is shown here.
+
+        Rate-limited so a card held on the reader does not flood the person working.
+        """
+        s = self._store.active_session()
+        if s is None:
+            return
+        now = self._boot()
+        if self._last_busy_notice is not None and now - self._last_busy_notice < BUSY_NOTICE_EVERY:
+            return
+        self._last_busy_notice = now
+        self._os.notify(
+            s.os_username,
+            "Máy đang có người dùng",
+            "Một thẻ khác vừa được quẹt nhưng bị từ chối vì máy đang được dùng. "
+            "Đăng xuất khi xong để người khác vào được.",
+        )
 
     def remind_remaining(self, decision: Decision, extended: bool = False) -> None:
         """noop(already_active): tell the user the current deadline (BR-008a, D-033)."""

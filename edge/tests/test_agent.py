@@ -73,6 +73,23 @@ def test_unknown_card_is_denied_and_audited(agent):
     assert a.gate.pending_entry is None
 
 
+def test_busy_swipe_notifies_the_open_desktop_rate_limited(agent):
+    """FR-013 / D-033.3: the person swiping sees no greeter, so the desktop in use shows the refusal."""
+    a, os_, clock, _ = agent
+    a.handle_swipe(UID)
+    os_.sessions["student"] = OsSession("c12", "student", clock.wall + 1)
+    clock.advance(2)
+    a.sessions.tick()
+
+    assert a.handle_swipe(OTHER_UID).reason == "workstation_busy"
+    assert os_.notes[-1] == ("student", "Máy đang có người dùng")
+    a.handle_swipe(OTHER_UID)
+    assert [n for n in os_.notes if n[1] == "Máy đang có người dùng"] == [("student", "Máy đang có người dùng")]
+    clock.advance(16)
+    a.handle_swipe(OTHER_UID)
+    assert len([n for n in os_.notes if n[1] == "Máy đang có người dùng"]) == 2
+
+
 def test_same_user_again_is_noop_with_reminder(agent):
     a, os_, clock, _ = agent
     a.handle_swipe(UID)
