@@ -9,6 +9,20 @@
 ![Python 3.10](https://img.shields.io/badge/python-3.10-3776AB)
 ![Node 20](https://img.shields.io/badge/node-20-339933)
 
+<p align="center">
+  <img src="docs/media/dashboard-history.png" alt="Dashboard: lịch sử quẹt thẻ" width="860">
+</p>
+<table>
+  <tr>
+    <td><img src="docs/media/dashboard-workstations.png" alt="Dashboard: trạng thái máy trạm"></td>
+    <td><img src="docs/media/dashboard-schedules.png" alt="Dashboard: lịch sử dụng máy"></td>
+  </tr>
+  <tr>
+    <td align="center">Trạng thái máy trạm</td>
+    <td align="center">Lịch sử dụng máy</td>
+  </tr>
+</table>
+
 ## Tổng quan
 
 Hệ thống thay việc gõ mật khẩu chung ở các phòng máy dùng chung bằng một lần quẹt thẻ. Server lưu người dùng, thẻ, lịch sử dụng và chính sách; Agent trên từng máy nhận bản snapshot của riêng máy đó, tự đánh giá mỗi lần quẹt và ghi nhật ký kiểm toán.
