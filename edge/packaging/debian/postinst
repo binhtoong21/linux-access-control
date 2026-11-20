@@ -1,0 +1,38 @@
+#!/bin/sh
+set -eu
+
+remove_legacy_greeter_config() {
+    legacy=/etc/lightdm/lightdm.conf.d/99-lab-greeter.conf
+    if [ -f "$legacy" ] &&
+        [ "$(sed 's/[[:space:]]*$//' "$legacy")" = "$(printf '[Seat:*]\ngreeter-session=lab-greeter')" ]; then
+        rm -f "$legacy"
+    fi
+}
+
+if [ "$1" = configure ]; then
+    new=/opt/nfc-agent/venv.new
+    rm -rf "$new"
+    python3 -m venv --system-site-packages "$new"
+    "$new/bin/pip" install --no-index --find-links /opt/nfc-agent/wheels nfc-agent paho-mqtt
+    "$new/bin/python" -c 'import nfc_agent.cli, paho.mqtt.client, smartcard, cryptography'
+    # Runtime entry points use python -m; generated scripts retain the staging path.
+    rm -rf /opt/nfc-agent/venv.old
+    [ -d /opt/nfc-agent/venv ] && mv /opt/nfc-agent/venv /opt/nfc-agent/venv.old
+    mv "$new" /opt/nfc-agent/venv
+    rm -rf /opt/nfc-agent/venv.old
+    remove_legacy_greeter_config
+    mkdir -p /etc/nfc-agent
+    chmod 0755 /etc/nfc-agent
+    chown root:root /etc/nfc-agent
+    /usr/lib/nfc-agent/nfc-pam-config add /etc/pam.d/lightdm
+    if [ -d /run/systemd/system ]; then
+        systemctl daemon-reload
+        systemctl enable nfc-agent.service
+        if [ -n "${2:-}" ]; then
+            systemctl try-restart nfc-agent.service
+        else
+            systemctl start nfc-agent.service
+        fi
+    fi
+    echo "nfc-agent: reboot to activate the Lab Greeter; LightDM was not restarted."
+fi

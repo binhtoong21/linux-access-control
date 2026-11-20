@@ -1,0 +1,5 @@
+[Desktop Entry]
+Name=Lab Greeter
+Comment=NFC lab login greeter
+Exec=/usr/lib/nfc-agent/lab-greeter-wrapper.sh
+Type=Application

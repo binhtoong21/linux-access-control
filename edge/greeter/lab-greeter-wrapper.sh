@@ -15,7 +15,7 @@ fi
 
 # Chạy nền để bắt exit code. LightDM gửi SIGTERM cho chính wrapper (PID nó khởi chạy),
 # nên wrapper phải chuyển tiếp tín hiệu cho greeter, nếu không greeter thành tiến trình mồ côi.
-python3 /usr/local/bin/lab_greeter.py &
+python3 /usr/lib/nfc-agent/lab_greeter.py &
 CHILD=$!
 trap 'kill -TERM "$CHILD" 2>/dev/null' TERM INT
 wait "$CHILD"; EXIT_CODE=$?

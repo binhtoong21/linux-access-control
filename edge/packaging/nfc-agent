@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /opt/nfc-agent/venv/bin/python -m nfc_agent.cli "$@"

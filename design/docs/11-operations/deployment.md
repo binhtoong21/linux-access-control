@@ -52,11 +52,11 @@ Gom từ D-006, D-009, D-010, D-014, ADR-004, ADR-005, ADR-006, S7b, S10, S11.
 
 | # | Mục | Nội dung |
 |---|---|---|
-| 1 | Display manager | `lightdm` là mặc định; `99-lab-greeter.conf`: `greeter-session=lab-greeter`; `/usr/share/xgreeters/lab-greeter.desktop`: `Exec=/usr/local/bin/lab-greeter-wrapper.sh` (bản ghi tệp đếm crash ở `/var/lib/lightdm`) |
-| 2 | PAM | `pam_nfc.so` trong chuỗi `lightdm`, trước `pam_unix` |
-| 3 | Agent | Gói cài `nfc-agent` (systemd service với hardening của ADR-006, có `CAP_CHOWN`); `pcscd`, `libccid` bật |
-| 3b | Đầu đọc | Chặn driver kernel `pn533_usb`, `pn533`, `nfc` (`/etc/modprobe.d/blacklist-nfc-pn533.conf`); nếu không, kernel chiếm ACR122U và `pcscd` không thấy đầu đọc (S1) |
-| 4 | Neo tin cậy | `/etc/nfc-agent/ca.pem` + địa chỉ server trong `/etc/nfc-agent/agent.conf` |
+| 1 | Display manager | Gói `nfc-agent` cài `/usr/share/lightdm/lightdm.conf.d/99-lab-greeter.conf`: `greeter-session=lab-greeter` và `/usr/share/xgreeters/lab-greeter.desktop`: `Exec=/usr/lib/nfc-agent/lab-greeter-wrapper.sh`; chọn `lightdm` làm mặc định (bản ghi crash ở `/var/lib/lightdm`) |
+| 2 | PAM | Gói cài `/lib/x86_64-linux-gnu/security/pam_nfc.so`, thêm `auth sufficient pam_nfc.so` ngay trước `@include common-auth` trong `/etc/pam.d/lightdm`; giữ đăng nhập mật khẩu dự phòng |
+| 3 | Agent | Cài gói `.deb` `nfc-agent` bên dưới: venv `/opt/nfc-agent/venv`, lệnh `/usr/bin/nfc-agent`, unit `/lib/systemd/system/nfc-agent.service` với hardening ADR-006 (`CAP_CHOWN`); kiểm tra `pcscd`, `libccid` bật |
+| 3b | Đầu đọc | Gói cài cấu hình chặn driver kernel `pn533_usb`, `pn533`, `nfc` (`/etc/modprobe.d/blacklist-nfc-pn533.conf`); nếu không, kernel chiếm ACR122U và `pcscd` không thấy đầu đọc (S1) |
+| 4 | Neo tin cậy | Kỹ thuật viên đặt `/etc/nfc-agent/ca.pem` và địa chỉ server trong `/etc/nfc-agent/agent.conf` theo site; mẫu từ gói ở `/usr/share/doc/nfc-agent/agent.conf.example` (gói không chứa CA hay cấu hình site) |
 | 5 | Profile dùng chung | Tạo `student` (và profile khác nếu cần) thuộc nhóm `labstudent`, `passwd -l`, không sudo |
 | 6 | Chặn đường vòng | `sshd`: `DenyGroups labstudent`; tắt linger cho `labstudent` |
 | 7 | GNOME | dconf khóa cưỡng bức: `lock-enabled=false`, `disable-lock-screen=true`, `disable-user-switching=true`; `dconf update` |
@@ -65,6 +65,18 @@ Gom từ D-006, D-009, D-010, D-014, ADR-004, ADR-005, ADR-006, S7b, S10, S11.
 | 10 | Đồng hồ | NTP bật, `Asia/Ho_Chi_Minh` |
 | 11 | Phần cứng (khuyến nghị) | Mật khẩu BIOS, khóa thứ tự boot (`threat-model.md`) |
 | 12 | **Làm sạch trước khi clone** | Xóa `/etc/machine-id` (để trống), xóa `/var/lib/nfc-agent/` (gồm `identity/` và `edge.db`); **giữ** `ca.pem` |
+
+### Đóng gói Agent
+
+Build trên Ubuntu 22.04 amd64 có `build-essential libpam0g-dev python3-venv python3-pip dpkg-dev`:
+
+```bash
+bash edge/packaging/build-deb.sh
+# Optional Debian revision: DEB_REVISION=2 bash edge/packaging/build-deb.sh
+sudo apt install ./edge/dist/nfc-agent_0.1.0-1_amd64.deb
+```
+
+Phiên bản lấy từ `edge/pyproject.toml`, revision mặc định `1`; giữ bản `.deb` cũ để rollback. Gói chứa wheel Agent và runtime đã ghim, không tải pip khi cài (cần có sẵn các phụ thuộc Ubuntu để cài hoàn toàn offline). `postinst` dựng lại venv dùng system packages, tạo `/etc/nfc-agent`, chuẩn hóa dòng PAM và bật/khởi động Agent (upgrade dùng `try-restart`). Không restart LightDM; reboot để kích hoạt greeter và blacklist đầu đọc. Gỡ gói xóa dòng PAM trước khi gỡ module; cả `remove` và `purge` đều giữ `/var/lib/nfc-agent` và `/etc/nfc-agent` (D-033.7); làm sạch image chỉ theo mục 12.
 
 ## Quy Trình Triển Khai Phòng Máy (đầu học kỳ)
 

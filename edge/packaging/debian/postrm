@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+
+case "$1" in
+    remove|purge)
+        # On normal removal prerm already cleaned PAM before this helper was removed.
+        if [ -x /usr/lib/nfc-agent/nfc-pam-config ]; then
+            /usr/lib/nfc-agent/nfc-pam-config remove /etc/pam.d/lightdm
+        fi
+        rm -rf /opt/nfc-agent/venv /opt/nfc-agent/venv.new /opt/nfc-agent/venv.old
+        if [ -d /run/systemd/system ]; then
+            systemctl daemon-reload
+        fi
+        ;;
+esac

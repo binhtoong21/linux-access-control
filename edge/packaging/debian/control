@@ -1,0 +1,9 @@
+Package: nfc-agent
+Version: @VERSION@
+Architecture: amd64
+Maintainer: NFC Lab Login <root@localhost>
+Section: admin
+Priority: optional
+Depends: python3 (>= 3.10), python3-venv, python3-cryptography, python3-pyscard, python3-gi, gir1.2-gtk-3.0, gir1.2-lightdm-1, lightdm, lightdm-gtk-greeter, pcscd, libccid, libpam0g, libnotify-bin, systemd
+Description: NFC login for shared Linux workstations
+ Edge authentication agent, PAM module and LightDM greeter.
