@@ -73,12 +73,65 @@ Chạy `nfc_agent.infra.reader` (PcscBackend + SwipeDetector) với đầu đọ
 - **Lần 2 (sau khi sửa, 235 s):** đầu đọc vắng mặt từ đầu → `ReaderUnavailable` 1 lần; ~167 s sau gắn lại thì Agent tự nhận và đọc 3/3 quẹt `1F0820CF` mà không khởi động lại; CPU của tiến trình cả lượt chỉ **0,12 s**.
 - **Chưa đo lại sau khi sửa:** chạm vội và để thẻ nằm yên (đã có test đơn vị `tests/test_reader.py`).
 
+## Lần Đo Bổ Sung (2026-11-20): Thẻ NTAG215 7 byte, Agent Đóng Gói Dưới Hardening, 100 Lần Quẹt
+
+- **Môi trường:** vm2 (Ubuntu 22.04, VirtualBox, USB passthrough), ACR122U `072f:2200`, `pcscd` 1.9.5 + `libccid` 1.5.0. Agent cài từ gói `nfc-agent_0.1.0-2` (M5.1), unit có đủ hardening ADR-006/S11, đọc PC/SC thật (bỏ `--reader sim`), nối server dev qua MQTT.
+- **Thẻ:** 10 thẻ NTAG215 đánh số 1–10.
+- **Công cụ:** script đọc UID/ATR bằng `SCardGetStatusChange` + `FF CA 00 00 00` (`s1_capture.py`); bộ theo dõi thụ động chỉ ghi chuyển trạng thái của `pcscd` (`s1_monitor.py`, không kết nối thẻ); chạy chính `SwipeDetector` + `PcscBackend` của Agent có ghi vết từng lệnh gọi (`s1_trace.py`).
+
+### Đọc UID 10 thẻ
+| # | UID | # | UID |
+|---|---|---|---|
+| 1 | `046E1296E82A81` | 6 | `046B1A9EE82A81` |
+| 2 | `04556795E82A81` | 7 | `04255B9CE82A81` |
+| 3 | `0432C89DE82A81` | 8 | `041B659AE82A81` |
+| 4 | `04E49396E82A81` | 9 | `04FA729EE82A81` |
+| 5 | `04AF6398E82A81` | 10 | `04A1679DE82A81` |
+
+- 10/10 UID **7 byte**, byte đầu `04` (NXP), đọc được ở lần kết nối đầu, 10 UID khác nhau; thẻ đọc lại ở lần chạy sau cho cùng UID.
+- ATR chung `3B8F8001804F0CA0000003060300030000000068` (PC/SC Part 3, tên thẻ `0003` = họ Mifare Ultralight/NTAG).
+- 10 thẻ được gán cho 10 user bằng nhập CSV (`POST /imports/roster`, D-033.2): chạy thử rồi áp dụng, 10 user + 10 thẻ, 0 lỗi; Agent nhận snapshot mới qua MQTT.
+
+### Đăng nhập thật
+Thẻ số 1 trên greeter → `granted`, phiên `student` GNOME trên `seat0`; server nhận bản ghi audit trong < 1 s. Đây là lần đầu Agent đọc đầu đọc thật dưới hardening systemd (khoảng trống ghi ở S11): đạt, không cần thêm quyền.
+
+### Các đợt quẹt có kiểm soát (thẻ số 1, phiên đang mở)
+Người quẹt mô tả đầu đọc: đèn đỏ, khi phát hiện thẻ thì chuyển xanh và bíp một tiếng. "Quẹt bình thường" = thấy xanh + bíp là nhấc ra.
+
+| Đợt | Cách quẹt | Lần quẹt | `pcscd` thấy | Agent đọc được | Ghi chú |
+|---|---|---|---|---|---|
+| A (Agent thật) | bíp là nhấc | 10 | 6 | 1 | 2 lần thẻ `MUTE` → `error(reader_error)`; 3 lần thẻ nằm 0,25 s, đọc hỏng rồi thẻ đã rời đi (không tính là quẹt) |
+| A2 (ghi vết) | bíp là nhấc | — | 6 | 2 | 2 lần `MUTE`: `SCardConnect` trả `Card is unpowered` cả 3 lần thử; 1 lần `GET UID` trả `63 00` khi thẻ đang rời |
+| A3 (ghi vết, thử lại tới 4 s) | giữ ~2 s sau bíp | 10 | 10 | 10 | không có `MUTE` |
+| B (ghi vết, thử lại tới 4 s) | tự nhiên | 20 | 17 | 16 | 1 lần thẻ không phản hồi suốt ~1,1 s (11 lần thử) rồi bị nhấc |
+| C (ghi vết) | để yên 10–15 s | 3 | 3 | 3 | đúng 1 sự kiện mỗi lần (BR-007c) |
+
+### Đo chính thức 100 lần (Agent thật, người quẹt tự đếm)
+90 lần quẹt bình thường + 10 lần để thẻ nằm yên vài giây, trong ~3 phút 45 giây.
+
+| Chỉ số | Kết quả |
+|---|---|
+| Lần quẹt | 100 |
+| `pcscd` thấy thẻ đặt lên | 84 (bộ đếm sự kiện `186 → 354`, đúng 2 sự kiện mỗi lần đặt/nhấc) |
+| Agent ghi nhận | 82 = 77 `noop(already_active)` + 5 `error(reader_error)` (3 lần thẻ `MUTE`) |
+| Thẻ rời đi trước khi đọc xong (không tính, BR-007c) | 2 |
+| Sự kiện trùng khi để thẻ nằm yên | 0 (11 lần thẻ nằm ≥ 2 s, mỗi lần đúng 1 bản ghi) |
+| UID đọc được | 77/77 đúng `046E1296E82A81` |
+| Server | 77 `noop` + 5 `error`, khớp đúng với `edge.db`, không có `granted` hay phiên thứ hai |
+
+### Phát hiện
+1. **Tiếng bíp của đầu đọc không phải xác nhận của hệ thống.** Đèn xanh và tiếng bíp do firmware ACR122U tự phát khi phát hiện thẻ, trước khi máy tính kịp đọc. `libccid` hỏi trạng thái đầu đọc theo chu kỳ (thời gian thẻ nằm đo được dồn quanh 0,43 s), nên những cú chạm ngắn hơn chu kỳ đó không bao giờ tới `pcscd`: 16/100 lần quẹt ở lượt đo chính thức, 4/10 ở đợt A, 3/20 ở đợt B. Khi thẻ tới được Agent, UID đọc xong trong khoảng 10 ms.
+2. **Thẻ `MUTE` lúc đặt vào.** Thỉnh thoảng `pcscd` báo thẻ có mặt nhưng không cấp nguồn được (`SCARD_STATE_MUTE`, `Card is unpowered`): 3 trên 84 lần ở lượt chính thức, 2/6 ở đợt A và đợt A2, 0/10 ở đợt A3. Thử kết nối lại trong lúc thẻ còn nằm trên đầu đọc không cứu được: ở đợt B, một lần thẻ không phản hồi vẫn hỏng sau 11 lần thử. Agent ghi `error(reader_error)`. Greeter hiện "Không đọc được thẻ, vui lòng quẹt lại!", nhưng khi đã có phiên thì desktop không báo gì, nên người quẹt thấy "để thẻ yên mà không có thông báo".
+3. **Thông báo "tắt rồi vẫn hiện lại".** Mỗi lần quẹt lại khi đang có phiên gửi một thông báo `critical`; GNOME xếp hàng các thông báo này, tắt cái đang hiện thì cái sau hiện ra. Không phải sự kiện quẹt trùng (bộ đếm `pcscd` và nhật ký khớp nhau).
+
+Quyết định theo các phát hiện này: D-034 (giữ thẻ tới khi màn hình phản hồi, không điều khiển đầu đọc, không sửa Agent).
+
 ## Giới hạn của Bằng chứng (Limitations of Evidence)
-- **Quy mô mẫu thử:** Thực nghiệm tập trung phân tích bản chất cơ chế trên 2 mẫu thẻ đại diện (1 thẻ contactless ngân hàng và 1 thẻ CCCD gắn chip), chưa chạy bài đo kiểm 100 lần quẹt liên tục với phôi thẻ sinh viên trường.
-- **Cơ chế đọc:** Lần đo đầu dùng polling; lần đo bổ sung 2026-11-11 đã dùng `SCardGetStatusChange` (đạt). Rút/cắm nóng đã đạt với Agent (2026-11-11). Còn thiếu: 100 lần quẹt liên tục, thẻ 7 byte.
-- **Môi trường:** Thiết bị được chuyển tiếp qua USB Passthrough vào máy ảo KVM, chưa thử nghiệm trên môi trường bare-metal phần cứng máy trạm.
+- **Loại thẻ và đầu đọc:** Thẻ thật đã thử: 1 thẻ static UID 4 byte, 1 thẻ CCCD (random UID), 10 thẻ NTAG215 (7 byte). Chưa thử Mifare Classic 1K, thẻ 10 byte, và chỉ có một dòng đầu đọc (ACR122U) nên chưa so được thứ tự byte giữa các dòng (ADR-007).
+- **Tỉ lệ ghi nhận** đo ở một người quẹt, một đầu đọc, máy ảo qua USB passthrough; chưa đo trên máy trạm thật (bare-metal), nơi chu kỳ hỏi của `libccid` có thể khác.
+- **Cơ chế đọc:** `SCardGetStatusChange` (đạt), rút/cắm nóng (đạt, 2026-11-11), đọc dưới hardening systemd (đạt, 2026-11-20).
 
 ## Kết luận
-**ĐẠT MỘT PHẦN (PARTIAL PASS) — CẦN CHẠY BỔ SUNG VỚI THẺ SINH VIÊN MIFARE THẬT.**
-- **Đã đạt:** Phần cứng đầu đọc ACR122U USB hoạt động ổn định trên Ubuntu 22.04 LTS qua giao thức PC/SC; cơ chế Debounce chống quẹt lặp (BR-007c) vận hành chuẩn xác; chứng minh bằng thực nghiệm sự khác biệt giữa Static UID và Random UID làm cơ sở lựa chọn loại thẻ cho phòng lab.
-- **Còn thiếu & Kế hoạch bổ sung:** Để tuân thủ nghiêm ngặt nguyên tắc thực chứng không che giấu giả định, S1 cần bổ sung bài đo kiểm 100 lần quẹt liên tục với phôi thẻ sinh viên trường (MIFARE Classic / Ultralight 4-byte/7-byte), chuyển đổi cơ chế đọc từ polling sang ngắt sự kiện trạng thái `SCardGetStatusChange` và đo khả năng tự phục hồi khi rút/cắm nóng (hotplug) đầu đọc USB.
+**ĐẠT CÓ ĐIỀU KIỆN.**
+- **Đã đạt:** UID ổn định cho thẻ 4 byte và 7 byte; 0 sự kiện trùng khi thẻ nằm yên (BR-007c); không có quyết định sai (mọi lần đọc được đều đúng UID, không tạo phiên thứ hai); phục hồi khi rút/cắm đầu đọc; Agent đóng gói đọc được đầu đọc dưới hardening; phân biệt được Static UID với Random UID.
+- **Điều kiện:** Tiêu chí ban đầu "100 lần quẹt, 0 lần lỡ" chỉ đạt khi người dùng giữ thẻ tới lúc màn hình phản hồi (đợt A3: 10/10). Với thói quen "bíp là nhấc", đo được 82/100 lần quẹt tới được Agent và 77/100 đọc được UID; lần lỡ do chu kỳ hỏi của driver và thẻ `MUTE`, không do logic của Agent. Người dùng quẹt lại khi màn hình không phản hồi (D-034).

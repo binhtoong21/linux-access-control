@@ -147,6 +147,18 @@ Admin được tắt profile đang là mặc định, hoặc để máy không c
 Yêu cầu cho Dashboard (M4): profile mặc định là nút chọn một (không bỏ chọn được); tắt profile đang là mặc định phải qua hộp xác nhận nêu rõ hệ quả.
 **Nguồn:** [08-api/api.md](08-api/api.md) "Zone và Máy trạm", FR-007, D-009, D-019.
 
+### D-034: Màn hình là xác nhận duy nhất của một lần quẹt; không điều khiển đầu đọc (S1, 2026-11-20)
+Lần đo S1 với thẻ NTAG215 và ACR122U cho thấy đèn xanh và tiếng bíp do firmware đầu đọc tự phát khi phát hiện thẻ, trước khi máy tính đọc được UID. Các lần lỡ có hai nguồn:
+- cú chạm ngắn hơn chu kỳ hỏi của `libccid` (~0,43 s) không tới được `pcscd`: 16/100 lần quẹt kiểu "bíp là nhấc";
+- thỉnh thoảng thẻ ở trạng thái `MUTE` lúc đặt vào và không đọc được: 3/84 lần.
+
+Khi thẻ được giữ tới lúc màn hình phản hồi thì đạt 10/10. Không có quyết định sai và không có sự kiện trùng.
+1. **Phản hồi trên màn hình là xác nhận duy nhất.** Đó là thông báo của Greeter, hoặc thông báo D-Bus trên Desktop. Kịch bản vận hành pilot (M5) ghi: giữ thẻ tới khi màn hình phản hồi; không thấy gì thì quẹt lại. Người dùng tự quẹt lại là đủ, hệ thống không cần khắt khe hơn.
+2. **Giữ D-033.9:** không tắt hay điều khiển đèn và còi của đầu đọc. Lệnh điều khiển là lệnh riêng của từng dòng đầu đọc, và tỉ lệ lỡ đo được không làm hệ thống quyết định sai hay tự khóa.
+3. **Không sửa Agent vì lý do này.** Giữ 3 lần thử kết nối lại, vì thử lâu hơn không cứu được thẻ `MUTE`. `reader_error` khi đang có phiên vẫn không có thông báo trên Desktop. Hàng đợi thông báo `critical` của các lần quẹt lại là hành vi của GNOME, chấp nhận.
+
+**Nguồn:** [spike-results/s1-reader-pcsc.md](../../spike-results/s1-reader-pcsc.md) "Lần Đo Bổ Sung (2026-11-20)", journal 8.25.
+
 ### D-033: Rà soát tính thực tế trước M4: gia hạn phiên bằng quẹt lại, nhập danh sách hàng loạt, phạm vi còn lại của M4
 Rà soát toàn dự án ở tầng nghiệp vụ (2026-11-18): đi qua một học kỳ vận hành của bối cảnh pilot để tìm chỗ thiết kế không khớp cách vận hành thật, cùng kiểu với lần bỏ mô hình tài khoản Linux riêng cho từng người (D-006). Nguyên tắc chung: **mã nguồn chỉ mang khái niệm trung lập** (user, nhóm, zone, lịch, máy dùng chung); điều đặc thù của trường học (lớp, buổi thi, ngày lễ, thẻ sinh viên) chỉ nằm trong kịch bản vận hành pilot, không thành tính năng.
 

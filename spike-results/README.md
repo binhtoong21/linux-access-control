@@ -12,7 +12,7 @@
 | Spike | Câu hỏi | Timebox | Rủi ro |
 |---|---|---|---|
 | S0 | Môi trường | 0,5 ngày | Thấp |
-| S1 | Đầu đọc và PC/SC (Đạt một phần) | 2 ngày | Trung bình (phần cứng) |
+| S1 | Đầu đọc và PC/SC (Đạt có điều kiện) | 2 ngày | Trung bình (phần cứng) |
 | S2 | PAM và Agent | 3 ngày | Cao |
 | S3 | Greeter và màn hình khóa | 4 ngày | **Cao nhất** |
 | S4 | Ánh xạ tài khoản OS và kết thúc phiên | 3 ngày | Cao |
@@ -44,7 +44,19 @@ Cần thử:
 
 **Đạt khi:** 100 lần quẹt, 0 lần lỡ, 0 sự kiện trùng khi để thẻ nằm yên; phục hồi sau rút/cắm trong vài giây; UID cùng một thẻ giống nhau giữa các lần.
 
-**Kết quả bổ sung (2026-11-11):** Thẻ static UID 4 byte đọc ổn định (`1F0820CF` 5/5), `SCardGetStatusChange` phát hiện đúng 8/8 lần đặt và nhấc thẻ, nhưng 3/8 lần kết nối thất bại khi thẻ vừa chạm → Agent phải thử kết nối lại trước khi ghi `reader_error`. Rút/cắm nóng: Agent báo mất đầu đọc 1 lần và tự nhận lại khi gắn lại (CPU 0,12 s/235 s). Còn mở: 100 lần quẹt, thẻ 7 byte. Xem [s1-reader-pcsc.md](s1-reader-pcsc.md).
+**Kết quả bổ sung (2026-11-11):** Thẻ static UID 4 byte đọc ổn định (`1F0820CF` 5/5), `SCardGetStatusChange` phát hiện đúng 8/8 lần đặt và nhấc thẻ, nhưng 3/8 lần kết nối thất bại khi thẻ vừa chạm → Agent phải thử kết nối lại trước khi ghi `reader_error`. Rút/cắm nóng: Agent báo mất đầu đọc 1 lần và tự nhận lại khi gắn lại (CPU 0,12 s/235 s). 
+
+**Kết quả bổ sung (2026-11-20):**
+- 10 thẻ NTAG215 đều có UID 7 byte (`04…`), đọc ổn định.
+- Agent cài từ gói đọc được đầu đọc thật dưới hardening và đăng nhập được vào GNOME.
+- Lượt 100 lần quẹt kiểu "bíp là nhấc":
+  - 84 lần tới được `pcscd`;
+  - 82 lần Agent ghi nhận, gồm 77 lần đọc đúng UID và 5 lần `reader_error` do thẻ `MUTE`;
+  - 0 sự kiện trùng khi để thẻ nằm yên.
+- Tiếng bíp do đầu đọc tự phát, không phải xác nhận của hệ thống. Lần lỡ đến từ chu kỳ hỏi của `libccid` (~0,43 s) và thẻ `MUTE`. Giữ thẻ tới khi màn hình phản hồi thì đạt 10/10 (D-034).
+- Còn mở: Mifare Classic 1K, đầu đọc dòng khác, máy bare-metal.
+
+Xem [s1-reader-pcsc.md](s1-reader-pcsc.md).
 
 **Ảnh hưởng:** FR-001, EF-2 trong swipe-login, ADR-007 (VR-007).
 

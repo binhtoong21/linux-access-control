@@ -998,3 +998,35 @@ Trạng thái service ngầm:
 - **Lần 1:** 3/3 quẹt đúng; rút đầu đọc báo `ReaderUnavailable` 1 lần. Lộ 2 lỗi: chạm vội ra `reader_error` do kiểm tra thẻ còn hiện diện bằng trạng thái cache; vòng lặp quay liên tục khi không có đầu đọc (`pcscd` trả lỗi ngay). Sửa và thêm 2 test hồi quy.
 - **Lần 2:** đầu đọc vắng ~167 s → báo 1 lần, gắn lại thì tự nhận và đọc 3/3 quẹt; CPU tiến trình 0,12 s cho 235 s.
 - **Hệ quả:** S1 đạt thêm phần rút/cắm nóng; còn 100 lần quẹt và thẻ 7 byte.
+
+---
+
+### 8.25. S1 Bổ sung: Thẻ NTAG215 7 Byte, Agent Đóng Gói Dưới Hardening, 100 Lần Quẹt (2026-11-20)
+- **Mục tiêu:** Đóng các khoảng trống còn lại của S1 khi đã có 10 thẻ NTAG215: thẻ 7 byte, 100 lần quẹt liên tục, đọc PC/SC dưới hardening systemd (khoảng trống của S11).
+- **Thiết lập:**
+  - Máy và đầu đọc: vm2 (Ubuntu 22.04, VirtualBox), ACR122U qua USB passthrough.
+  - Agent cài từ gói `nfc-agent_0.1.0-2` (M5.1). Gỡ drop-in `--reader sim` để Agent đọc `pcscd` thật dưới đúng unit hardening.
+  - Server dev: Postgres + Mosquitto chạy bằng Docker, kèm proxy HTTPS.
+  - 10 thẻ gán cho 10 user bằng `POST /imports/roster` (chạy thử rồi áp dụng, 0 lỗi).
+- **Sự cố khi chạy:**
+  - Lần đọc 10 thẻ đầu tiên chỉ có 9 UID khác nhau, vì người quẹt lẫn thứ tự các thẻ chưa đánh số. Đánh số lên thẻ rồi chạy lại thì đủ 10.
+  - Lượt 100 lần đầu tiên không có số đếm của người quẹt, nên bỏ. Agent chỉ ghi 25 lần `noop`, trong khi server có thêm các bản ghi `reader_error` không hiện trong journal. Từ đó mới dựng bộ theo dõi thụ động `s1_monitor.py` và bản chạy `SwipeDetector` có ghi vết `s1_trace.py` để tách lần lỡ ở driver khỏi lần lỡ ở Agent.
+- **Kết quả đo:**
+  - 10/10 UID 7 byte, byte đầu `04`, ATR `3B8F8001804F0CA0000003060300030000000068` (NTAG).
+  - Thẻ số 1 đăng nhập được vào GNOME qua Agent đóng gói; server nhận audit trong < 1 s.
+  - Lượt 100 lần chính thức (90 lần "bíp là nhấc", 10 lần để yên):
+    - `pcscd` thấy 84 lần đặt thẻ;
+    - Agent ghi nhận 82 lần: 77 `noop` với UID đúng, 5 `reader_error`, trong đó 3 lần thẻ `MUTE`;
+    - 2 lần thẻ rời đi trước khi đọc xong;
+    - 0 sự kiện trùng;
+    - server khớp `edge.db`.
+  - Đợt giữ thẻ khoảng 2 s sau tiếng bíp đạt 10/10; để thẻ nằm yên 10–15 s cho đúng 1 sự kiện mỗi lần.
+- **Phát hiện:**
+  - Tiếng bíp và đèn xanh do firmware đầu đọc tự phát. `libccid` hỏi trạng thái theo chu kỳ khoảng 0,43 s, nên cú chạm ngắn hơn không tới được `pcscd`.
+  - Thẻ `MUTE` lúc đặt vào không cứu được bằng thử lại lâu hơn (một lần thử 11 lần vẫn hỏng).
+  - Thông báo `critical` của các lần quẹt lại bị GNOME xếp hàng đợi, nên trông như "tắt rồi vẫn hiện lại".
+- **Hệ quả:**
+  - S1 đổi trạng thái thành "đạt có điều kiện".
+  - D-034: phản hồi trên màn hình là xác nhận duy nhất. Không điều khiển đầu đọc, không sửa Agent. Kịch bản pilot ghi "giữ thẻ tới khi màn hình phản hồi, không thấy gì thì quẹt lại".
+  - Còn mở: Mifare Classic 1K, đầu đọc dòng khác, máy bare-metal.
+  - Chi tiết: [s1-reader-pcsc.md](s1-reader-pcsc.md).
