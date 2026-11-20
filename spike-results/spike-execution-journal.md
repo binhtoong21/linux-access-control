@@ -1030,3 +1030,20 @@ Trạng thái service ngầm:
   - D-034: phản hồi trên màn hình là xác nhận duy nhất. Không điều khiển đầu đọc, không sửa Agent. Kịch bản pilot ghi "giữ thẻ tới khi màn hình phản hồi, không thấy gì thì quẹt lại".
   - Còn mở: Mifare Classic 1K, đầu đọc dòng khác, máy bare-metal.
   - Chi tiết: [s1-reader-pcsc.md](s1-reader-pcsc.md).
+
+---
+
+### 8.26. S1 Bổ sung: Agent Không Hồi Phục Khi `pcscd` Khởi Động Lại (2026-11-20)
+- **Bối cảnh:** Lúc chạy E2E M5.2–M5.3, đầu đọc bị ngắt USB passthrough. Sau khi gắn lại, thiết bị treo: `pcscd` báo `LIBUSB_ERROR_TIMEOUT` và không khởi tạo được đầu đọc. Đã gỡ bằng `usbreset 072f:2200` và `systemctl restart pcscd`.
+- **Phát hiện:**
+  - `pcscd` thấy lại đầu đọc, nhưng Agent đang chạy không đọc được thẻ nào và không ghi log. Khởi động lại Agent thì quẹt vào được ngay.
+  - Script dò trên vm2 cho thấy context cũ trả `0x8010001D` (`SCARD_E_NO_SERVICE`) cho cả `SCardListReaders` lẫn `SCardGetStatusChange`, còn context mới hoạt động bình thường.
+- **Sửa (Agent):**
+  - Tạo context khi cần, tạo lại khi gặp lỗi mất dịch vụ hoặc handle hỏng.
+  - Ghi log `card reader available` khi đầu đọc quay lại.
+  - Giữ trạng thái "thẻ đang nằm" qua lần mất context để không phát quẹt lặp (BR-007c).
+- **Kiểm chứng (gói `0.1.0-4`, thẻ thật):**
+  - Hồi phục sau 1 s.
+  - Quẹt sau hồi phục ra `noop`.
+  - Khởi động lại `pcscd` lúc thẻ đang nằm: không có quẹt lặp. Nhấc ra và đặt lại: đúng một lần.
+- **Hệ quả:** Bài thử hotplug phải gồm cả trường hợp `pcscd` khởi động lại, không chỉ rút và cắm đầu đọc.

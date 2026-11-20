@@ -34,7 +34,12 @@ class ReaderUnavailable:
     detail: str
 
 
-ReaderEvent = CardSwiped | SwipeError | ReaderUnavailable
+@dataclass(frozen=True)
+class ReaderAvailable:
+    pass
+
+
+ReaderEvent = CardSwiped | SwipeError | ReaderUnavailable | ReaderAvailable
 
 
 class CardUnresponsive(Exception):
@@ -53,7 +58,7 @@ class Backend(Protocol):
     def present(self) -> bool: ...
 
     def read_uid(self) -> bytes:
-        """GET UID APDU (FF CA 00 00 00). Raise CardUnresponsive on failure."""
+        """GET UID APDU (FF CA 00 00 00). Raise CardUnresponsive or ReaderMissing on failure."""
 
 
 class SwipeDetector:
@@ -62,25 +67,37 @@ class SwipeDetector:
         self._sleep = sleep
         self._present = False
         self._reader_ok = True
+        self._pending_state: bool | None = None
 
     def poll(self, timeout_s: float = 1.0) -> ReaderEvent | None:
         """One step: returns at most one event. A card resting on the reader produces exactly one event."""
         try:
-            state = self._b.wait_change(timeout_s)
+            if self._pending_state is not None:
+                state, self._pending_state = self._pending_state, None
+            else:
+                state = self._b.wait_change(timeout_s)
+            if not self._reader_ok:
+                self._reader_ok = True
+                # Report recovery first without losing a card already in the field.
+                self._pending_state = state
+                return ReaderAvailable()
+            if state is None or state == self._present:
+                return None
+            self._present = state
+            if not state:
+                return None  # card removed
+            try:
+                return self._read_new_card()
+            except ReaderMissing:
+                # This placement produced no event; read it again after recovery.
+                self._present = False
+                raise
         except ReaderMissing as exc:
-            self._present = False
             if self._reader_ok:
                 self._reader_ok = False
                 return ReaderUnavailable(str(exc))
             self._sleep(timeout_s)  # without a device pcscd returns at once: do not spin (live test on vm2)
             return None
-        self._reader_ok = True
-        if state is None or state == self._present:
-            return None
-        self._present = state
-        if not state:
-            return None  # card removed
-        return self._read_new_card()
 
     def _read_new_card(self) -> ReaderEvent | None:
         last_error: Exception | None = None
@@ -143,15 +160,40 @@ class PcscBackend:
         from smartcard import scard  # imported lazily: only available on the workstation
 
         self._scard = scard
-        hr, self._ctx = scard.SCardEstablishContext(scard.SCARD_SCOPE_USER)
-        if hr != scard.SCARD_S_SUCCESS:
-            raise ReaderMissing(scard.SCardGetErrorMessage(hr))
+        self._ctx: int | None = None
         self._reader: str | None = None
         self._state = scard.SCARD_STATE_UNAWARE
 
+    def _ensure_context(self) -> None:
+        if self._ctx is None:
+            s = self._scard
+            hr, ctx = s.SCardEstablishContext(s.SCARD_SCOPE_USER)
+            if hr != s.SCARD_S_SUCCESS:
+                raise ReaderMissing(s.SCardGetErrorMessage(hr))
+            self._ctx = ctx
+
+    def _check_context_error(self, hr: int) -> None:
+        s = self._scard
+        errors = (
+            getattr(s, name, None)
+            for name in ("SCARD_E_NO_SERVICE", "SCARD_E_SERVICE_STOPPED", "SCARD_E_INVALID_HANDLE")
+        )
+        if any(error is not None and hr == error for error in errors):
+            ctx, self._ctx = self._ctx, None
+            self._reader = None
+            self._state = s.SCARD_STATE_UNAWARE
+            if ctx is not None:
+                try:
+                    s.SCardReleaseContext(ctx)
+                except Exception:
+                    pass  # pcscd may already have discarded this context
+            raise ReaderMissing(s.SCardGetErrorMessage(hr))
+
     def _ensure_reader(self) -> str:
+        self._ensure_context()
         if self._reader is None:
             hr, readers = self._scard.SCardListReaders(self._ctx, [])
+            self._check_context_error(hr)
             if hr != self._scard.SCARD_S_SUCCESS or not readers:
                 raise ReaderMissing("no PC/SC reader")
             self._reader, self._state = readers[0], self._scard.SCARD_STATE_UNAWARE
@@ -161,6 +203,7 @@ class PcscBackend:
         s = self._scard
         reader = self._ensure_reader()
         hr, states = s.SCardGetStatusChange(self._ctx, int(timeout_s * 1000), [(reader, self._state)])
+        self._check_context_error(hr)
         if hr == s.SCARD_E_TIMEOUT:
             return None
         if hr != s.SCARD_S_SUCCESS:
@@ -176,7 +219,9 @@ class PcscBackend:
     def present(self) -> bool:
         """Ask the reader now (zero timeout); the cached state is stale while retrying a connect (live test)."""
         s = self._scard
-        hr, states = s.SCardGetStatusChange(self._ctx, 0, [(self._ensure_reader(), s.SCARD_STATE_UNAWARE)])
+        reader = self._ensure_reader()
+        hr, states = s.SCardGetStatusChange(self._ctx, 0, [(reader, s.SCARD_STATE_UNAWARE)])
+        self._check_context_error(hr)
         if hr != s.SCARD_S_SUCCESS:
             return False
         _, event_state, _ = states[0]
@@ -185,9 +230,11 @@ class PcscBackend:
 
     def read_uid(self) -> bytes:
         s = self._scard
+        reader = self._ensure_reader()
         hr, card, protocol = s.SCardConnect(
-            self._ctx, self._ensure_reader(), s.SCARD_SHARE_SHARED, s.SCARD_PROTOCOL_T0 | s.SCARD_PROTOCOL_T1
+            self._ctx, reader, s.SCARD_SHARE_SHARED, s.SCARD_PROTOCOL_T0 | s.SCARD_PROTOCOL_T1
         )
+        self._check_context_error(hr)
         if hr != s.SCARD_S_SUCCESS:
             raise CardUnresponsive(s.SCardGetErrorMessage(hr))
         try:

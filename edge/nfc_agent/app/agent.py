@@ -25,7 +25,7 @@ from ..domain.model import Decision, Outcome
 from ..infra import crypto
 from ..infra.identity import Identity
 from ..infra.ipc import AuthGate, GreeterHub, PamServer, _bind_unix, peer_uid
-from ..infra.reader import CardSwiped, ReaderUnavailable, SwipeDetector, SwipeError
+from ..infra.reader import CardSwiped, ReaderAvailable, ReaderUnavailable, SwipeDetector, SwipeError
 from ..infra.store import OutboxFull, PendingSession, Store
 from .sessions import SessionManager
 from .sync import SyncClient
@@ -205,6 +205,8 @@ class Agent:
                     self.events.put(("error", ev))
                 elif isinstance(ev, ReaderUnavailable):
                     log.warning("card reader unavailable: %s", ev.detail)
+                elif isinstance(ev, ReaderAvailable):
+                    log.info("card reader available")
 
         threading.Thread(target=loop, daemon=True, name="reader").start()
 
