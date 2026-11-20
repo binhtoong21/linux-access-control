@@ -4,6 +4,34 @@ source "$(dirname "$0")/common.sh"
 require_root
 [[ $# == 1 && -f $1 ]] || { echo 'Usage: SERVER_NAME=<DNS name> [SERVER_IP=<IP>] install-server.sh <bundle.tar.gz>' >&2; exit 2; }
 BUNDLE=$(realpath "$1")
+# Use the bundle's deployment steps even when invoked through an older release.
+INSTALLER_WORK=$(mktemp -d)
+if ! tar -tzf "$BUNDLE" > "$INSTALLER_WORK/members"; then
+    rm -rf -- "$INSTALLER_WORK"
+    exit 1
+fi
+if grep -Eq '(^/|(^|/)\.\.(/|$))' "$INSTALLER_WORK/members"; then
+    echo 'Invalid bundle paths.' >&2
+    rm -rf -- "$INSTALLER_WORK"
+    exit 1
+fi
+if ! tar -xzf "$BUNDLE" -C "$INSTALLER_WORK" --no-same-owner --wildcards 'nfc-server-*/deploy/*'; then
+    rm -rf -- "$INSTALLER_WORK"
+    exit 1
+fi
+installer_roots=("$INSTALLER_WORK"/nfc-server-*)
+if [[ ${#installer_roots[@]} != 1 || ! -f ${installer_roots[0]}/deploy/install-server.sh ]]; then
+    echo 'Invalid bundle layout.' >&2
+    rm -rf -- "$INSTALLER_WORK"
+    exit 1
+fi
+if [[ ! ${NFC_INSTALLER_REEXEC+x} ]] && ! cmp -s "$(realpath "$0")" "${installer_roots[0]}/deploy/install-server.sh"; then
+    echo "running the installer from bundle ${installer_roots[0]##*/nfc-server-}"
+    exec env NFC_INSTALLER_REEXEC=1 NFC_INSTALLER_TMP="$INSTALLER_WORK" \
+        bash "${installer_roots[0]}/deploy/install-server.sh" "$BUNDLE"
+fi
+rm -rf -- "$INSTALLER_WORK"
+
 if [[ -f /etc/nfc-server/server.env ]]; then
     load_server_env
 else
@@ -56,6 +84,9 @@ cleanup() {
         fi
     fi
     rm -rf "$WORK"
+    if [[ -n ${NFC_INSTALLER_TMP:-} ]]; then
+        rm -rf -- "$NFC_INSTALLER_TMP"
+    fi
     exit "$status"
 }
 trap cleanup EXIT
@@ -74,6 +105,17 @@ systemctl enable --now postgresql
 
 if ! id nfcsrv > /dev/null 2>&1; then
     useradd --system --user-group --home-dir /var/lib/nfc-server --create-home --shell /usr/sbin/nologin nfcsrv
+fi
+# Restored files may retain a different host's numeric owner.
+if [[ -f /etc/nfc-server/server.env ]]; then
+    chown nfcsrv:nfcsrv /etc/nfc-server/server.env
+    chmod 0600 /etc/nfc-server/server.env
+fi
+if [[ -d /etc/nfc-server/keys ]]; then
+    chown -R nfcsrv:nfcsrv /etc/nfc-server/keys
+    chmod 0700 /etc/nfc-server/keys
+    find /etc/nfc-server/keys -type f ! -name ca.crt -exec chmod 0600 {} +
+    find /etc/nfc-server/keys -type f -name ca.crt -exec chmod 0644 {} +
 fi
 install -d -o nfcsrv -g nfcsrv -m 0750 /var/lib/nfc-server
 install -d -o root -g root -m 0755 /opt/nfc-server /opt/nfc-server/releases /etc/nfc-server
@@ -178,6 +220,11 @@ if ! run_release "$RELEASE" dist/infra/database/migrate-cli.js up; then
     exit 1
 fi
 ln -sfn "$RELEASE" /opt/nfc-server/current
+install -o root -g root -m 0755 "$TEMPLATES/backup/nfc-backup.sh" /usr/local/sbin/nfc-backup
+install -o root -g root -m 0644 "$TEMPLATES/backup/nfc-backup.service" /etc/systemd/system/nfc-backup.service
+install -o root -g root -m 0644 "$TEMPLATES/backup/nfc-backup.timer" /etc/systemd/system/nfc-backup.timer
+systemctl daemon-reload
+systemctl enable --now nfc-backup.timer
 
 sed "s/__SERVER_NAME__/$SERVER_NAME/g" "$TEMPLATES/nginx/nfc-server.conf" > "$WORK/nginx.conf"
 install -o root -g root -m 0644 "$WORK/nginx.conf" /etc/nginx/sites-available/nfc-server

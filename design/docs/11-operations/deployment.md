@@ -103,6 +103,7 @@ sudo SERVER_NAME=lab-server.local SERVER_IP=192.168.1.10 \
 |---|---|
 | `/opt/nfc-server/releases/<version>/` | Bundle tự chứa, root sở hữu; giữ 3 release mới nhất sau khi health thành công |
 | `/opt/nfc-server/current` | Symlink release đang chạy, chỉ đổi sau migration thành công |
+| `/usr/local/sbin/nfc-backup` | Script sao lưu ban đêm, `0755 root`; hoạt động độc lập với release hiện tại |
 | `/etc/nfc-server/server.env` | Bí mật JWT, mật khẩu CSDL và cấu hình site; `0600 nfcsrv`, chỉ tạo lần đầu |
 | `/etc/nfc-server/keys/` | CA, client MQTT, khóa UID/master; thư mục `0700 nfcsrv`, khóa `0600` |
 | `/etc/nfc-server/ca-public/ca.crt` | Chỉ chứng chỉ CA công khai, `0644`; Mosquitto và master image dùng bản này |
@@ -115,6 +116,10 @@ sudo SERVER_NAME=lab-server.local SERVER_IP=192.168.1.10 \
 | `/var/backups/nfc-server/pre-<version>-<timestamp>.dump` | `pg_dump -Fc` trước migration nếu CSDL có bảng; chỉ root đọc |
 
 Installer dừng Server, sao lưu CSDL rồi chạy migration từ thư mục `server/` của release mới. Migration thất bại giữ `current` cũ, chạy lại release cũ và in đường dẫn dump; không tự khôi phục CSDL. Server khởi động trước, chờ tối đa 30 giây để sinh CRL rồi restart Mosquitto, kiểm Nginx và chờ health tối đa 60 giây (CSDL/MQTT phải `ok`, CRL không gần hết hạn). Lỗi sau khi dừng service cũng thử chạy lại release cũ; kiểm log nếu cấu hình hoặc migration mới không tương thích. Sao lưu khóa riêng và CSDL ra ngoài máy chủ theo mục Sao Lưu.
+
+Installer bật `nfc-backup.timer` để sao lưu CSDL hằng đêm lúc 02:30 theo múi giờ máy chủ, với độ trễ ngẫu nhiên tối đa 10 phút; lần bị lỡ được chạy bù khi timer hoạt động lại. Kiểm tra lịch bằng `systemctl list-timers nfc-backup.timer`.
+
+Installer luôn chuyển sang bản nằm trong bundle đang cài, nên có thể dùng `install-server.sh` của bất kỳ release đã cài nào để nâng cấp.
 
 Nâng cấp bằng cùng lệnh với bundle mới, không cần truyền lại `SERVER_NAME`. Dùng version/revision khác cho mỗi nội dung phát hành; release cùng version được tái sử dụng. Rollback về release còn giữ:
 
@@ -157,8 +162,8 @@ Cài lại một máy giữa kỳ: clone lại máy đó (hoặc `nfc-agent reen
 
 | Đối tượng | Cách | Tần suất | Giữ |
 |---|---|---|---|
-| PostgreSQL | `pg_dump` nén, ra đĩa/máy khác | Hằng đêm + trước mỗi lần cập nhật | 14 bản |
-| Khóa (`master_key`, `K_index`, khóa AES, khóa CA) | Sao chép mã hóa, cất ngoài máy chủ | Một lần khi tạo, và khi đổi khóa AES | Vĩnh viễn |
+| PostgreSQL | `nfc-backup.timer` chạy `pg_dump -Fc` vào `/var/backups/nfc-server/nightly/`; installer tạo dump `pre-<version>-*.dump` ở thư mục cha trước cập nhật | Hằng đêm lúc 02:30 + trước mỗi lần cập nhật | 14 bản nightly mới nhất; dump trước cập nhật giữ riêng |
+| Khóa (`master_key`, `K_index`, khóa AES, khóa CA) | Chạy `sudo bash /opt/nfc-server/current/deploy/backup/export-keys.sh <output-file>` để mã hóa khóa và `server.env`; cất tệp và mật khẩu riêng biệt ngoài máy chủ | Một lần khi tạo, và khi đổi khóa AES | Vĩnh viễn |
 | Cấu hình Mosquitto, Nginx | Lưu trong repo cấu hình | Khi đổi | — |
 | Máy trạm | Không sao lưu; dựng lại từ Master Image + đăng ký lại | — | — |
 
