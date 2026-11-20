@@ -73,6 +73,18 @@ Chạy `nfc_agent.infra.reader` (PcscBackend + SwipeDetector) với đầu đọ
 - **Lần 2 (sau khi sửa, 235 s):** đầu đọc vắng mặt từ đầu → `ReaderUnavailable` 1 lần; ~167 s sau gắn lại thì Agent tự nhận và đọc 3/3 quẹt `1F0820CF` mà không khởi động lại; CPU của tiến trình cả lượt chỉ **0,12 s**.
 - **Chưa đo lại sau khi sửa:** chạm vội và để thẻ nằm yên (đã có test đơn vị `tests/test_reader.py`).
 
+### `pcscd` khởi động lại trong lúc Agent đang chạy (2026-11-20)
+- **Tình huống:** Đầu đọc bị ngắt USB passthrough rồi gắn lại. Thiết bị treo (`LIBUSB_ERROR_TIMEOUT`, `RFAddReader() … init failed`) nên phải `usbreset` và khởi động lại `pcscd`. Sau đó `pcscd` thấy đầu đọc, nhưng Agent không đọc thêm thẻ nào và không ghi log; quẹt thật không có phản hồi. `systemctl restart nfc-agent` thì quẹt được ngay.
+- **Nguyên nhân:** Agent tạo context PC/SC một lần lúc khởi động. Sau khi `pcscd` khởi động lại, mọi lệnh trên context cũ trả `0x8010001D` (`SCARD_E_NO_SERVICE`), còn context mới thì liệt kê lại được đầu đọc (đo trên vm2). Máy im lặng ngừng nhận thẻ cho tới khi khởi động lại. Trường hợp này có thể xảy ra ngoài đời: nâng cấp gói, `pcscd` crash. Bài thử hotplug ngày 2026-11-11 chỉ rút và cắm đầu đọc trong khi `pcscd` vẫn chạy, nên không phủ trường hợp này.
+- **Sửa:**
+  - Agent tạo context khi cần. Gặp `NO_SERVICE`, `SERVICE_STOPPED` hoặc `INVALID_HANDLE` thì bỏ context cũ và tạo lại.
+  - Ghi log `card reader available` khi đầu đọc quay lại.
+  - Thẻ đang nằm yên qua lần mất context không bị tính là lần quẹt mới (BR-007c).
+- **Kiểm chứng trên vm2 (gói `0.1.0-4`):**
+  - Khởi động lại `pcscd`: `card reader unavailable: RPC transport error.` rồi `card reader available` sau 1 s.
+  - Quẹt thẻ số 3 sau đó ra `noop` đúng UID.
+  - Khởi động lại `pcscd` lúc thẻ đang nằm: không có lần quẹt lặp. Nhấc thẻ ra và đặt lại: đúng một lần quẹt.
+
 ## Lần Đo Bổ Sung (2026-11-20): Thẻ NTAG215 7 byte, Agent Đóng Gói Dưới Hardening, 100 Lần Quẹt
 
 - **Môi trường:** vm2 (Ubuntu 22.04, VirtualBox, USB passthrough), ACR122U `072f:2200`, `pcscd` 1.9.5 + `libccid` 1.5.0. Agent cài từ gói `nfc-agent_0.1.0-2` (M5.1), unit có đủ hardening ADR-006/S11, đọc PC/SC thật (bỏ `--reader sim`), nối server dev qua MQTT.
@@ -129,7 +141,7 @@ Quyết định theo các phát hiện này: D-034 (giữ thẻ tới khi màn h
 ## Giới hạn của Bằng chứng (Limitations of Evidence)
 - **Loại thẻ và đầu đọc:** Thẻ thật đã thử: 1 thẻ static UID 4 byte, 1 thẻ CCCD (random UID), 10 thẻ NTAG215 (7 byte). Chưa thử Mifare Classic 1K, thẻ 10 byte, và chỉ có một dòng đầu đọc (ACR122U) nên chưa so được thứ tự byte giữa các dòng (ADR-007).
 - **Tỉ lệ ghi nhận** đo ở một người quẹt, một đầu đọc, máy ảo qua USB passthrough; chưa đo trên máy trạm thật (bare-metal), nơi chu kỳ hỏi của `libccid` có thể khác.
-- **Cơ chế đọc:** `SCardGetStatusChange` (đạt), rút/cắm nóng (đạt, 2026-11-11), đọc dưới hardening systemd (đạt, 2026-11-20).
+- **Cơ chế đọc:** `SCardGetStatusChange` (đạt), rút/cắm nóng (đạt, 2026-11-11), đọc dưới hardening systemd (đạt, 2026-11-20), `pcscd` khởi động lại (đạt sau khi sửa Agent, 2026-11-20).
 
 ## Kết luận
 **ĐẠT CÓ ĐIỀU KIỆN.**
