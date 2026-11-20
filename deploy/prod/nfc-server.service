@@ -1,0 +1,23 @@
+[Unit]
+Description=NFC Lab central server
+After=postgresql.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nfcsrv
+Group=nfcsrv
+EnvironmentFile=/etc/nfc-server/server.env
+WorkingDirectory=/opt/nfc-server/current/server
+ExecStart=/opt/nfc-server/current/node/bin/node dist/main.js
+Restart=on-failure
+RestartSec=3
+# NoNewPrivileges is deliberately off: sudo must restart Mosquitto after revocation.
+# Do not restrict CapabilityBoundingSet: sudo/systemctl need their normal root privileges.
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/nfc-server /var/lib/nfc-server-crl
+
+[Install]
+WantedBy=multi-user.target

@@ -5,3 +5,4 @@ contracts/** text eol=lf
 *.png binary
 edge/packaging/** text eol=lf
 edge/greeter/lab-greeter-wrapper.sh text eol=lf
+deploy/prod/** text eol=lf
