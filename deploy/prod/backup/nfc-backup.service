@@ -1,0 +1,9 @@
+[Unit]
+Description=Nightly NFC server database backup
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/sbin/nfc-backup
+Nice=10
+IOSchedulingClass=idle

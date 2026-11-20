@@ -138,3 +138,120 @@ def test_release_copy_is_published_only_when_complete():
         < copy.index('mv -- "$PARTIAL" "$RELEASE"')
     )
     assert "-type d ! -name '.*'" in script
+
+
+def test_installer_reexec_precedes_system_changes():
+    script = (PROD / "install-server.sh").read_text(encoding="utf-8")
+    reexec = script.index("exec env NFC_INSTALLER_REEXEC=1")
+    assert reexec < script.index("trap cleanup EXIT") < script.index("apt-get")
+    bootstrap = script[: script.index("if [[ -f /etc/nfc-server/server.env ]]")]
+    assert 'INSTALLER_WORK=$(mktemp -d)' in bootstrap
+    assert "(^/|(^|/)\\.\\.(/|$))" in bootstrap
+    assert "--wildcards 'nfc-server-*/deploy/*'" in bootstrap
+    assert '[[ ! ${NFC_INSTALLER_REEXEC+x} ]]' in bootstrap
+    assert 'cmp -s "$(realpath "$0")"' in bootstrap
+    assert 'NFC_INSTALLER_TMP="$INSTALLER_WORK"' in bootstrap
+    assert 'bash "${installer_roots[0]}/deploy/install-server.sh" "$BUNDLE"' in bootstrap
+    assert 'rm -rf -- "$INSTALLER_WORK"' in bootstrap[reexec:]
+    cleanup = re.search(r"cleanup\(\) \{(.*?)\n\}", script, re.DOTALL).group(1)
+    assert 'rm -rf -- "$NFC_INSTALLER_TMP"' in cleanup
+
+
+def test_backup_timer_and_service():
+    timer = (PROD / "backup/nfc-backup.timer").read_text(encoding="utf-8")
+    assert "OnCalendar=*-*-* 02:30:00" in timer.splitlines()
+    assert "Persistent=true" in timer.splitlines()
+    assert "RandomizedDelaySec=10min" in timer.splitlines()
+    assert "Timezone=" not in timer
+    unit = (PROD / "backup/nfc-backup.service").read_text(encoding="utf-8")
+    for directive in (
+        "Type=oneshot",
+        "User=root",
+        "ExecStart=/usr/local/sbin/nfc-backup",
+        "Nice=10",
+        "IOSchedulingClass=idle",
+    ):
+        assert directive in unit.splitlines()
+
+
+def test_key_export_keeps_passphrase_off_command_line():
+    script = (PROD / "backup/export-keys.sh").read_text(encoding="utf-8")
+    assert "-pass pass:" not in script
+    assert "-k " not in script
+    assert script.count("< /dev/tty") == 2
+    assert script.count("read -r -s -p") == 2
+    assert "-pass fd:3" in script
+    assert "enc -aes-256-cbc -pbkdf2 -iter 200000 -salt" in script
+    assert "tar -cz -C / etc/nfc-server/keys etc/nfc-server/server.env |" in script
+    assert '[[ ! -e $OUTPUT && ! -L $OUTPUT ]]' in script
+    assert '(set -o noclobber; : > "$OUTPUT")' in script
+    assert 'chmod 0600 "$OUTPUT"' in script
+
+
+def test_nightly_dump_validation_and_retention_are_scoped():
+    script = (PROD / "backup/nfc-backup.sh").read_text(encoding="utf-8")
+    assert not re.search(r"(?:^|[;\n])\s*(?:source|\.)\s", script)
+    assert "[[ $EUID == 0 ]] || { echo 'Run as root.' >&2; exit 1; }" in script
+    assert "NIGHTLY=/var/backups/nfc-server/nightly\n" in script
+    assert script.index("cd /\n") < script.index(
+        "runuser -u postgres -- /usr/lib/postgresql/15/bin/pg_dump -Fc nfclab"
+    )
+    assert (
+        script.index('pg_dump -Fc nfclab > "$PARTIAL"')
+        < script.index('pg_restore --list "$PARTIAL" > /dev/null')
+        < script.index('mv -- "$PARTIAL" "$DUMP"')
+        < script.index('dumps=("$NIGHTLY"/nfclab-*.dump)')
+    )
+    assert "export LC_ALL=C" in script
+    assert "${#dumps[@]} > 14" in script
+    # The only deletion commands clean the partial and trim the scoped glob.
+    assert re.findall(r"rm -[^\n]+", script) == [
+        'rm -f -- "$PARTIAL"\' EXIT',
+        'rm -f -- "${dumps[@]:0:${#dumps[@]}-14}"',
+    ]
+    assert 'PARTIAL="$DUMP.partial"' in script
+    assert 'DUMP="$NIGHTLY/nfclab-$(date -u +%Y%m%dT%H%M%SZ).dump"' in script
+    assert 'install -d -o root -g root -m 0700 /var/backups/nfc-server "$NIGHTLY"' in script
+    assert 'chmod 0600 "$PARTIAL"' in script
+
+
+def test_backup_timer_is_installed_and_enabled_after_current_switch():
+    script = (PROD / "install-server.sh").read_text(encoding="utf-8")
+    switch = script.index('ln -sfn "$RELEASE" /opt/nfc-server/current')
+    backup = script.index(
+        'install -o root -g root -m 0755 "$TEMPLATES/backup/nfc-backup.sh" '
+        '/usr/local/sbin/nfc-backup'
+    )
+    service = script.index(
+        'install -o root -g root -m 0644 "$TEMPLATES/backup/nfc-backup.service" '
+        '/etc/systemd/system/nfc-backup.service'
+    )
+    timer = script.index(
+        'install -o root -g root -m 0644 "$TEMPLATES/backup/nfc-backup.timer" '
+        '/etc/systemd/system/nfc-backup.timer'
+    )
+    reload_units = script.index("systemctl daemon-reload", timer)
+    enable = script.index("systemctl enable --now nfc-backup.timer")
+    assert switch < backup < service < timer < reload_units < enable
+
+
+def test_restored_key_ownership_is_normalized_before_release_commands():
+    script = (PROD / "install-server.sh").read_text(encoding="utf-8")
+    user_created = script.index("    useradd ")
+    env = script.index("    chown nfcsrv:nfcsrv /etc/nfc-server/server.env")
+    keys = script.index("    chown -R nfcsrv:nfcsrv /etc/nfc-server/keys")
+    assert user_created < env < keys < script.index("run_release ")
+    normalization = script[user_created:script.index("install -d -o nfcsrv")]
+    assert "if [[ -f /etc/nfc-server/server.env ]]; then" in normalization
+    assert "chmod 0600 /etc/nfc-server/server.env" in normalization
+    assert "if [[ -d /etc/nfc-server/keys ]]; then" in normalization
+    assert "chmod 0700 /etc/nfc-server/keys" in normalization
+    assert (
+        "find /etc/nfc-server/keys -type f ! -name ca.crt -exec chmod 0600 {} +"
+        in normalization
+    )
+    assert (
+        "find /etc/nfc-server/keys -type f -name ca.crt -exec chmod 0644 {} +"
+        in normalization
+    )
+    assert keys < script.index("load_server_env", keys) < script.index("run_release ")
