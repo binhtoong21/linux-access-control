@@ -1,103 +1,228 @@
-# 🎓 Hệ Thống Xác Thực Đăng Nhập Phòng Máy Bằng Thẻ NFC (NFC Edge Authentication System)
+# NFC Workstation Access Control
 
-> **Đồ Án Tốt Nghiệp Đại Học (ĐATN)**  
-> **Sinh viên thực hiện:** Đào Thanh Bình  
-> **Nền tảng:** Linux (Ubuntu 22.04 LTS), PAM, LightDM, Python/C (Edge), NestJS/TypeScript (Server), React (Dashboard), SQLite WAL, PostgreSQL, Mosquitto MQTT.
+Đăng nhập máy trạm Linux bằng thẻ NFC. Mỗi máy tự quyết định cho hay không cho đăng nhập dựa trên dữ liệu được ký do server đẩy xuống, nên vẫn hoạt động khi mất mạng.
 
----
+[![CI](https://github.com/binhtoong21/linux-access-control/actions/workflows/ci.yml/badge.svg)](https://github.com/binhtoong21/linux-access-control/actions/workflows/ci.yml)
+[![Tag](https://img.shields.io/github/v/tag/binhtoong21/linux-access-control?sort=date&label=release)](https://github.com/binhtoong21/linux-access-control/tags)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Ubuntu 22.04](https://img.shields.io/badge/edge-Ubuntu%2022.04-E95420)
+![Python 3.10](https://img.shields.io/badge/python-3.10-3776AB)
+![Node 20](https://img.shields.io/badge/node-20-339933)
 
-## 📌 Giới Thiệu Dự Án
+<p align="center">
+  <img src="docs/media/dashboard-history.png" alt="Dashboard: lịch sử quẹt thẻ" width="860">
+</p>
+<table>
+  <tr>
+    <td><img src="docs/media/dashboard-workstations.png" alt="Dashboard: trạng thái máy trạm"></td>
+    <td><img src="docs/media/dashboard-schedules.png" alt="Dashboard: lịch sử dụng máy"></td>
+  </tr>
+  <tr>
+    <td align="center">Trạng thái máy trạm</td>
+    <td align="center">Lịch sử dụng máy</td>
+  </tr>
+</table>
 
-Hệ thống quản lý và kiểm soát truy cập phòng máy thực hành thông qua thẻ sinh viên NFC (MIFARE 13.56MHz) theo mô hình **Edge Authentication & Least Privilege**:
-- **Xác thực tại Biên (Edge Decision):** Máy trạm tự động ra quyết định đăng nhập cục bộ dựa trên bản snapshot cá nhân hóa mang khóa so khớp per-machine (HMAC) và thời hạn tin cậy (lease) được cấp phát an toàn từ máy chủ trung tâm qua mTLS. Hệ thống duy trì khả năng phục vụ liên tục ngay cả khi mất kết nối mạng hoặc máy chủ gặp sự cố (High Availability & Zero Latency).
-- **Mô hình Profile OS Dùng Chung (Workstation Profile):** Tách bạch giữa danh tính xác thực (User/Card UID ghi nhận vào Audit Log) và môi trường hệ điều hành (`student`, `labuser`). Bảo toàn các thiết lập công cụ, phần mềm và bài tập thực hành do giảng viên/kỹ thuật viên chuẩn bị; dọn sạch toàn bộ tiến trình phiên làm việc sau mỗi ca học mà không xóa dữ liệu cục bộ.
-- **Zero-Touch Provisioning:** Hỗ trợ quy trình nhân bản đĩa hàng loạt (Master Image via Clonezilla/PXE). Máy trạm tự động sinh cặp khóa riêng biệt khi khởi động lần đầu, đăng ký trạng thái chờ duyệt (`pending`) và nhận cấu hình tập trung từ Web Dashboard của Quản trị viên.
+## Tổng quan
 
----
+Hệ thống thay việc gõ mật khẩu chung ở các phòng máy dùng chung bằng một lần quẹt thẻ. Server lưu người dùng, thẻ, lịch sử dụng và chính sách; Agent trên từng máy nhận bản snapshot của riêng máy đó, tự đánh giá mỗi lần quẹt và ghi nhật ký kiểm toán.
 
-## 📂 Cấu Trúc Repository
+Hệ thống trung lập về miền ứng dụng: phòng máy thực hành chỉ là kịch bản thử nghiệm đầu tiên. Thẻ dùng để thử là loại UID tĩnh (NTAG215, Mifare Classic 1K).
+
+**Điểm chính**
+
+- **Quyết định tại máy trạm.** Agent đánh giá cục bộ từ snapshot, không hỏi server lúc quẹt. Snapshot có lease: hết hạn tin cậy thì từ chối thay vì đoán, nhưng mất kết nối không khóa máy ([ADR-001](design/docs/06-architecture/decisions/ADR-001-xac-thuc-o-edge-va-lease.md)).
+- **Snapshot ký, UID băm theo máy.** Mỗi máy nhận snapshot đầy đủ có chữ ký, UID thẻ đã HMAC bằng khóa riêng của máy. Server lưu UID mã hóa AES-256-GCM kèm blind index ([ADR-003](design/docs/06-architecture/decisions/ADR-003-luu-tru-cuc-bo-va-xac-thuc-snapshot.md), [ADR-007](design/docs/06-architecture/decisions/ADR-007-khoa-so-khop-uid.md)).
+- **Profile OS dùng chung.** Không tạo tài khoản Linux theo từng người; danh tính người dùng nằm trong nhật ký, phiên chạy dưới profile như `student`. Hết giờ hoặc đăng xuất, phiên được dọn theo nhiều pha ([ADR-004](design/docs/06-architecture/decisions/ADR-004-mo-hinh-profile-os-dung-chung.md), [ADR-008](design/docs/06-architecture/decisions/ADR-008-vong-doi-phien-va-teardown-da-pha.md)).
+- **Đăng ký máy không cần chạm tay.** Máy nhân bản từ master image tự sinh khóa, gửi yêu cầu, chờ admin duyệt trên dashboard; thu hồi bằng CRL của Mosquitto ([ADR-002](design/docs/06-architecture/decisions/ADR-002-giao-thuc-mqtt-va-dinh-danh-may-tram.md)).
+- **Nhật ký ghi bền trước khi quyết định.** Không ghi được nhật ký thì không cho đăng nhập. Nhật ký đi về server qua outbox có ký, không bao giờ kẹt vì một bản ghi lỗi.
+- **Có đường dự phòng.** Kỹ thuật viên và admin vẫn đăng nhập bằng mật khẩu từ cùng màn hình greeter ([ADR-005](design/docs/06-architecture/decisions/ADR-005-pam-greeter-va-display-manager.md)).
+
+## Kiến trúc
+
+```mermaid
+flowchart LR
+    Card(["Thẻ NFC"]) --> Reader["Đầu đọc PC/SC"]
+
+    subgraph WS["Máy trạm Ubuntu 22.04"]
+        Reader --> Agent["NFC Agent<br/>Python, systemd"]
+        Agent <--> DB[("edge.db<br/>SQLite WAL")]
+        Greeter["Lab Greeter<br/>GTK"] <--> Agent
+        PAM["pam_nfc.so<br/>C"] <--> Agent
+        Greeter --> LightDM["LightDM"] --> PAM
+        LightDM --> Desktop["Phiên desktop<br/>profile dùng chung"]
+    end
+
+    subgraph SRV["Máy chủ"]
+        Broker["Mosquitto<br/>MQTT 5 + mTLS"]
+        Server["Server<br/>NestJS"]
+        PG[("PostgreSQL")]
+        Dash["Dashboard<br/>React"]
+        Server <--> Broker
+        Server <--> PG
+        Dash -->|"HTTPS REST"| Server
+    end
+
+    Agent <-->|"snapshot, lease, heartbeat, audit"| Broker
+    Admin(["Admin"]) --> Dash
+```
+
+Sơ đồ C4 đầy đủ: [context](design/docs/06-architecture/context.md), [containers](design/docs/06-architecture/containers.md), [components](design/docs/06-architecture/components.md).
+
+### Một lần quẹt thẻ
+
+1. Agent nhận UID từ đầu đọc qua PC/SC và chuẩn hóa.
+2. Agent tính HMAC của UID bằng khóa của máy rồi tra trong snapshot, kiểm lease và mốc thời gian sàn.
+3. Luật đánh giá CR-001 kiểm thẻ, người dùng, lịch và chọn đúng một profile OS. Máy đang có người khác dùng thì từ chối (`workstation_busy`), chính người đó quẹt lại thì gia hạn hoặc bỏ qua (`noop`).
+4. Kết quả (`granted` / `denied` / `error` / `noop`) được ghi bền vào `edge.db` trước khi trả lời.
+5. Greeter nhận tín hiệu, PAM mở phiên desktop dưới profile đã chọn. Bộ đếm phiên chạy theo `CLOCK_BOOTTIME`.
+
+Chi tiết: [swipe-login.md](design/docs/05-behavior/sequences/swipe-login.md), luật đánh giá ở [business-rules.md](design/docs/02-requirements/business-rules.md).
+
+## Công nghệ
+
+| Thành phần | Công nghệ | Thư mục |
+|---|---|---|
+| Agent | Python 3.10, SQLite WAL, pyscard, paho-mqtt 2 | [`edge/nfc_agent`](edge/nfc_agent) |
+| PAM module | C, libpam | [`edge/pam`](edge/pam) |
+| Greeter | Python, GTK 3, LightDM | [`edge/greeter`](edge/greeter) |
+| Gói cài máy trạm | `.deb` cài offline | [`edge/packaging`](edge/packaging) |
+| Server | NestJS 11, TypeScript, Kysely, PostgreSQL 15 | [`server`](server) |
+| Dashboard | React 18, Vite 6, Tailwind, TanStack Query | [`dashboard`](dashboard) |
+| Broker | Mosquitto 2 (MQTT 5, mTLS, ACL theo máy, CRL) | [`deploy`](deploy) |
+| Hợp đồng chung | JSON Schema, test vector mật mã | [`contracts`](contracts) |
+
+## Trạng thái
+
+| Mốc | Nội dung | |
+|---|---|---|
+| M0 | Nền: hợp đồng bản tin, CI | ✅ |
+| M1 | Agent offline, PAM, greeter, vòng đời phiên; E2E với GNOME thật | ✅ |
+| M2 | Server lõi: quản trị, người dùng/thẻ, máy trạm, lịch, dựng và ký snapshot | ✅ |
+| M3 | PKI và đăng ký máy, đồng bộ MQTT, thu nhật ký; E2E trên máy ảo | ✅ |
+| M4 | Dashboard quản trị | ✅ |
+| M5 | Gói `.deb` cho máy trạm, bộ cài server production, sao lưu, runbook vận hành | ✅ |
+
+**Giới hạn đã biết.** Thử đầu đọc thật với 10 thẻ NTAG215 (100 lần quẹt nhanh kiểu "bíp là nhấc"): 84 lần tới `pcscd`, Agent ghi nhận 82, nên người dùng cần nhìn màn hình để biết đã nhận thẻ. Chưa thử Mifare Classic 1K, đầu đọc dòng khác, máy thật (bare-metal) và tải nhiều máy kết nối lại cùng lúc. Bằng chứng từng phần ở [spike-results](spike-results/README.md).
+
+## Cấu trúc repository
 
 ```text
-├── contracts/              # Hợp đồng dùng chung Edge ⇄ Server: JSON Schema bản tin MQTT, test vector mật mã
-├── edge/                   # Edge Agent (Python ≥ 3.10): domain/ (CR-001, thuần), infra/ (SQLite, MQTT, PC/SC…)
-├── server/                 # Server NestJS/TypeScript: mỗi bounded context một module
-├── deploy/dev/             # Môi trường dev: PostgreSQL 15 + Mosquitto mTLS/ACL/CRL, script sinh CA dev
-├── .github/workflows/      # CI: contracts, edge (Python 3.10), server (Node 20)
-├── design/                 # Toàn bộ tài liệu phân tích và thiết kế hệ thống (mục lục: design/README.md)
-│   ├── README.md           # Mục lục, trạng thái từng phần, đường đọc gợi ý
-│   ├── _templates/         # Template ADR, use case
-│   ├── docs/
-│   │   ├── 01-problem/     # Hiện trạng, bài toán, mục tiêu và phạm vi
-│   │   ├── 02-requirements/# Business Rules (BR), Functional (FR), Non-Functional (NFR)
-│   │   ├── 03-domain/      # Domain model, Glossary, Invariants, Bounded Contexts
-│   │   ├── 04-use-cases/   # Đặc tả các ca sử dụng (Use Cases)
-│   │   ├── 05-behavior/    # Sequence diagrams từng luồng & state machines
-│   │   ├── 06-architecture/# Kiến trúc C4 & Quyết định Kiến trúc (ADR-001 đến ADR-008)
-│   │   ├── 07-data/        # Thiết kế CSDL (PostgreSQL & SQLite WAL)
-│   │   ├── 08-api/         # REST API & hợp đồng bản tin MQTT
-│   │   ├── 09-security/    # Threat model, ma trận quyền, quản lý khóa
-│   │   ├── 10-failure/     # Failure modes & quy trình khôi phục
-│   │   ├── 11-operations/  # Triển khai, Master Image, Bảng Tham Số, observability
-│   │   └── decisions.md    # Nhật ký quyết định đã chốt (D-001 đến D-020)
-├── spike-results/          # Kế hoạch & kết quả thực nghiệm (Empirical Spikes)
-│   ├── README.md           # Kế hoạch, phương pháp luận và tổng hợp kết quả S0–S11
-│   ├── s1-reader-pcsc.md   # Thử nghiệm đầu đọc NFC ACR122U & chuẩn PC/SC
-│   ├── s2-pam-agent.md     # Thử nghiệm tích hợp Linux PAM module và Unix Socket IPC
-│   ├── s3-greeter-lockscreen.md # Thử nghiệm Custom LightDM Greeter và màn hình khóa
-│   ├── s3b-custom-greeter.md # Thử nghiệm Custom Greeter GTK3 0-chạm
-│   ├── s4-account-session.md # Quản lý phiên OS, cgroup kill và dọn tiến trình
-│   ├── s5-mqtt-storage.md  # Thử nghiệm SQLite WAL và độ bền trước sự cố mất điện đột ngột
-│   ├── s6-walking-skeleton.md# Tích hợp toàn diện End-to-End và giải quyết Race Condition
-│   ├── s7-teardown-same-uid.md# Đo đạc Teardown trên cùng UID student & triệt tiêu Linger
-│   ├── s7b-teardown-gnome-e2e.md# Kiểm chứng E2E 20/20 GNOME thật qua LightDM/PAM & SIGKILL
-│   ├── s8-server-crypto-mtls-pg.md# Kiểm chứng Ed25519 CSR, MQTT 5 mTLS ACL & PostgreSQL TX (Node.js)
-│   ├── s9-mosquitto-crl.md        # Thu hồi chứng chỉ máy trạm bằng CRL của Mosquitto
-│   ├── s10-greeter-wrapper.md     # Smoke-test wrapper greeter trong vòng boot LightDM
-│   ├── s11-agent-systemd-hardening.md # Agent dưới systemd hardening
-│   └── spike-execution-journal.md # Nhật ký chi tiết toàn bộ chuỗi thực nghiệm S1-S11
-├── .gitignore              # Cấu hình bỏ qua các file tạm thời, cache và nhạy cảm
-└── README.md               # Tài liệu tổng quan dự án
+contracts/        JSON Schema bản tin MQTT, test vector mật mã (nguồn sự thật cho cả hai phía)
+edge/
+  nfc_agent/      Agent: domain/ (thuần, không I/O), infra/ (SQLite, PC/SC, MQTT), app/
+  pam/            pam_nfc.so
+  greeter/        Lab Greeter cho LightDM
+  packaging/      build-deb.sh, unit systemd, cấu hình LightDM
+server/           NestJS, mỗi bounded context một module (identity, device, scheduling, distribution, operations)
+dashboard/        Giao diện quản trị
+deploy/
+  dev/            PostgreSQL + Mosquitto bằng Docker, sinh CA dev
+  prod/           Bundle, cài đặt, PKI, rollback, sao lưu
+design/           Tài liệu phân tích và thiết kế 01–11, ADR, nhật ký quyết định
+spike-results/    Kế hoạch và kết quả thực nghiệm S0–S11
 ```
 
----
+## Bắt đầu nhanh (môi trường dev)
 
-## 🛠️ Phát Triển
+Cần Docker, Python ≥ 3.10, Node 20 và pnpm.
+
+**Hạ tầng** (PostgreSQL + Mosquitto mTLS):
 
 ```bash
-# Edge (Python ≥ 3.10)
-cd edge && python -m venv .venv && .venv/bin/pip install -e ".[dev]" && .venv/bin/pytest
-
-# Server (Node ≥ 20, pnpm)
-cd server && pnpm install && pnpm test && pnpm build
-# Test DB thật (migration, health; DB bị xóa sạch mỗi lần chạy, tạo một lần: docker compose exec postgres createdb -U nfclab nfclab_test):
-#   TEST_DATABASE_URL=postgres://nfclab:nfclab-dev@127.0.0.1:5432/nfclab_test pnpm test
-# Thêm test tích hợp với Mosquitto dev (docker compose up -d mosquitto): TEST_MQTT_URL=mqtts://localhost:8883 TEST_MQTT_CERTS=<đường dẫn tuyệt đối tới deploy/dev/certs>
-# Áp migration: DATABASE_URL=postgres://nfclab:nfclab-dev@127.0.0.1:5432/nfclab pnpm db:migrate
-# Admin đầu tiên (mật khẩu qua stdin): read -rs PW; printf "%s" "$PW" | DATABASE_URL=... pnpm admin:create --username root --display-name "Quản trị"
-# Khóa UID thẻ và khóa chủ km-master.key (không ghi đè khóa có sẵn; chạy lại khi có loại khóa mới): KEYS_DIR=../deploy/dev/keys pnpm keys:init
-# Chạy server dev: cp .env.example .env (điền JWT_SECRET; .env không vào git) rồi pnpm start:dev
-#   (mọi biến server đọc đều liệt kê trong server/.env.example; production dùng cùng định dạng làm EnvironmentFile)
-# Dashboard (cần server chạy ở 127.0.0.1:8000): cd dashboard && pnpm install && pnpm dev   # http://localhost:5173
-
-# E2E với máy trạm thật (vm2, VirtualBox NAT; host = 10.0.2.2): xem design/docs/decisions.md D-027.
-#   deploy/dev: bash gen-dev-certs.sh (SAN broker có 10.0.2.2) && docker compose up -d && node https-proxy.js  (HTTPS :8443 -> :8000)
-#   server: thêm MQTT_URL=mqtts://localhost:8883 MQTT_CA/MQTT_CERT/MQTT_KEY=deploy/dev/certs/{ca,nfc-server}.* BROKER_HOST=10.0.2.2 BROKER_RESTART_CMD="docker restart dev-mosquitto-1"
-#   vm2: /etc/nfc-agent/ca.pem + agent.conf ([server] url = https://10.0.2.2:8443), pip install edge vào /opt/nfc-agent/venv, nfc-agent reenroll
-
-# Hạ tầng dev (Docker): PostgreSQL + Mosquitto mTLS
-cd deploy/dev && bash gen-dev-certs.sh && docker compose up -d   # PG_PORT=15432 nếu máy đã có PostgreSQL ở 5432
+cd deploy/dev
+bash gen-dev-certs.sh
+docker compose up -d        # PG_PORT=15432 nếu máy đã có PostgreSQL ở 5432
 ```
 
-Mọi thay đổi định dạng bản tin hoặc mật mã bắt đầu từ `contracts/` (xem [contracts/README.md](contracts/README.md)); test của cả hai phía chạy trên cùng các tệp đó.
+**Edge:**
 
----
+```bash
+cd edge
+python -m venv .venv && .venv/bin/pip install -e ".[dev]"
+.venv/bin/pytest
+```
 
-## 🚀 Tài Liệu Tham Khảo Nhanh
+**Server:**
 
-- **Mục lục tài liệu thiết kế:** Xem [design/README.md](design/README.md)
-- **Kế hoạch & tổng hợp spike:** Xem [spike-results/README.md](spike-results/README.md)
-- **Nhật ký quyết định kiến trúc:** Xem [design/docs/decisions.md](design/docs/decisions.md)
-- **Mục lục ADR kiến trúc:** Xem [design/docs/06-architecture/decisions/README.md](design/docs/06-architecture/decisions/README.md)
-- **Nhật ký thực nghiệm chi tiết (S1-S11):** Xem [spike-results/spike-execution-journal.md](spike-results/spike-execution-journal.md)
-- **Quy tắc nghiệp vụ cốt lõi:** Xem [design/docs/02-requirements/business-rules.md](design/docs/02-requirements/business-rules.md)
-- **Kiến trúc hệ thống (C4):** Xem [design/docs/06-architecture/](design/docs/06-architecture/)
+```bash
+cd server
+pnpm install
+cp .env.example .env                                   # điền JWT_SECRET, DATABASE_URL
+KEYS_DIR=../deploy/dev/keys pnpm keys:init             # khóa UID và khóa chủ, không ghi đè khóa có sẵn
+pnpm db:migrate
+read -rs PW; printf "%s" "$PW" | pnpm admin:create --username admin --display-name "Quản trị"
+pnpm start:dev                                         # http://127.0.0.1:8000
+```
+
+Mọi biến môi trường đều liệt kê trong [`server/.env.example`](server/.env.example).
+
+**Dashboard** (cần server đang chạy):
+
+```bash
+cd dashboard
+pnpm install
+pnpm dev                    # http://localhost:5173, proxy /api tới 127.0.0.1:8000
+```
+
+<details>
+<summary>Chạy test tích hợp và E2E với máy trạm thật</summary>
+
+```bash
+# Test server với CSDL thật (CSDL test bị xóa sạch mỗi lần chạy)
+docker compose exec postgres createdb -U nfclab nfclab_test
+TEST_DATABASE_URL=postgres://nfclab:nfclab-dev@127.0.0.1:5432/nfclab_test pnpm test
+
+# Thêm test với Mosquitto dev
+TEST_MQTT_URL=mqtts://localhost:8883 TEST_MQTT_CERTS=<đường dẫn tuyệt đối tới deploy/dev/certs> pnpm test
+```
+
+E2E với máy ảo (VirtualBox NAT, host là `10.0.2.2`):
+
+1. `deploy/dev`: `bash gen-dev-certs.sh` (SAN broker có `10.0.2.2`), `docker compose up -d`, `node https-proxy.js` (HTTPS :8443 tới :8000).
+2. Server: thêm `MQTT_URL=mqtts://localhost:8883`, `MQTT_CA` / `MQTT_CERT` / `MQTT_KEY` trỏ `deploy/dev/certs`, `BROKER_HOST=10.0.2.2`, `BROKER_RESTART_CMD="docker restart dev-mosquitto-1"`.
+3. Máy trạm: cài gói `.deb`, đặt `/etc/nfc-agent/ca.pem` và `agent.conf` (`[server] url = https://10.0.2.2:8443`), chạy `nfc-agent reenroll`, rồi duyệt máy trên dashboard.
+
+Broker dev phải dùng image `eclipse-mosquitto:2.0.18-openssl` vì bản LibreSSL không nhận chứng chỉ client Ed25519.
+
+</details>
+
+## Triển khai
+
+Máy trạm và máy chủ đều chạy Ubuntu 22.04 amd64.
+
+```bash
+# Gói cho máy trạm
+bash edge/packaging/build-deb.sh
+sudo apt install ./edge/dist/nfc-agent_0.1.0-1_amd64.deb
+
+# Máy chủ: bundle tự chứa (Node runtime, Server, Dashboard, script triển khai)
+bash deploy/prod/build-bundle.sh
+sudo SERVER_NAME=lab-server.local bash deploy/prod/install-server.sh deploy/dist/nfc-server-0.1.0-1.tar.gz
+sudo bash /opt/nfc-server/current/deploy/create-admin.sh admin "Quản trị"
+```
+
+Installer cài PostgreSQL, Nginx, Mosquitto, dựng PKI, sao lưu CSDL trước migration và tự quay về bản cũ nếu migration lỗi. Rollback, sao lưu đêm, xuất khóa và quy trình vận hành: [deployment.md](design/docs/11-operations/deployment.md), [pilot-runbook.md](design/docs/11-operations/pilot-runbook.md).
+
+## Tài liệu
+
+| Chủ đề | Tài liệu |
+|---|---|
+| Mục lục thiết kế | [design/README.md](design/README.md) |
+| Nhật ký quyết định | [decisions.md](design/docs/decisions.md) |
+| ADR | [06-architecture/decisions](design/docs/06-architecture/decisions/README.md) |
+| Yêu cầu và luật nghiệp vụ | [functional](design/docs/02-requirements/functional.md), [non-functional](design/docs/02-requirements/non-functional.md), [business-rules](design/docs/02-requirements/business-rules.md) |
+| REST API và hợp đồng MQTT | [api.md](design/docs/08-api/api.md), [events.md](design/docs/08-api/events.md), [contracts](contracts/README.md) |
+| Bảo mật | [threat-model.md](design/docs/09-security/threat-model.md) |
+| Sự cố và khôi phục | [failure-model.md](design/docs/10-failure/failure-model.md) |
+| Tham số vận hành | [Bảng Tham Số](design/docs/11-operations/deployment.md#bảng-tham-số) |
+| Thực nghiệm | [spike-results](spike-results/README.md), [nhật ký](spike-results/spike-execution-journal.md) |
+
+## Đóng góp
+
+- `main` chỉ thay đổi qua pull request (squash merge), cần 4 job CI xanh: contracts, edge, server, dashboard.
+- Đổi định dạng bản tin hay bố cục mật mã thì sửa `contracts/` trước; test của Edge và Server cùng chạy trên các tệp đó.
+
+## Giấy phép
+
+[MIT](LICENSE)
