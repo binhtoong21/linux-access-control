@@ -1,0 +1,35 @@
+#!/bin/sh
+set -eu
+
+case "${1:-}" in
+    add|remove) action=$1 ;;
+    *) echo "Usage: $0 add|remove <file>" >&2; exit 2 ;;
+esac
+file=${2:?Missing PAM file}
+if [ ! -f "$file" ]; then
+    echo "nfc-agent: warning: PAM file $file is missing; left unchanged" >&2
+    exit 0
+fi
+if [ "$action" = add ] && ! grep -Eq '^[[:blank:]]*@include[[:blank:]]+common-auth([[:blank:]]|$)' "$file"; then
+    echo "nfc-agent: warning: no @include common-auth in $file; left unchanged" >&2
+    exit 0
+fi
+
+# Keep the temporary file on the same filesystem for an atomic replacement.
+tmp=$(mktemp "$(dirname -- "$file")/.nfc-pam-config.XXXXXX")
+trap 'rm -f -- "$tmp"' 0
+trap 'exit 1' HUP INT TERM
+cp -p -- "$file" "$tmp"
+awk -v action="$action" '
+    $0 == "# nfc-agent: card login (managed by package nfc-agent)" { next }
+    /^[[:blank:]]*auth[[:blank:]]+sufficient[[:blank:]]+([^[:blank:]]*\/)?pam_nfc\.so([[:blank:]]|$)/ { next }
+    action == "add" && !inserted && /^[[:blank:]]*@include[[:blank:]]+common-auth([[:blank:]]|$)/ {
+        print "# nfc-agent: card login (managed by package nfc-agent)"
+        print "auth    sufficient    pam_nfc.so"
+        inserted = 1
+    }
+    { print }
+' "$file" > "$tmp"
+if ! cmp -s -- "$file" "$tmp"; then
+    mv -f -- "$tmp" "$file"
+fi

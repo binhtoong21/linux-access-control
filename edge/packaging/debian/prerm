@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+
+if [ "$1" = remove ]; then
+    # Remove the PAM reference before dpkg removes the module and helper.
+    /usr/lib/nfc-agent/nfc-pam-config remove /etc/pam.d/lightdm
+    if [ -d /run/systemd/system ]; then
+        systemctl stop nfc-agent.service
+        systemctl disable nfc-agent.service
+    fi
+fi

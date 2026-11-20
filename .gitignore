@@ -55,6 +55,7 @@ __pycache__/
 .Python
 build/
 dist/
+edge/dist/
 *.egg-info/
 .pytest_cache/
 .coverage
