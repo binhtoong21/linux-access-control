@@ -106,13 +106,24 @@ sudo sh -c 'cd / && runuser -u postgres -- /usr/lib/postgresql/15/bin/pg_restore
   && sudo systemctl start nfc-server
 ```
 Lệnh khôi phục lỗi thì Server **giữ nguyên trạng thái dừng**: đọc lỗi, thử một bản sao lưu khác, chỉ khởi động lại khi khôi phục thành công (máy trạm vẫn cho quẹt theo lease trong lúc chờ).
-Dump phải đi cùng **đúng bộ khóa** đang dùng (UID mã hóa bằng khóa trong `/etc/nfc-server/keys`). Mất tối đa 24h nhật ký và thay đổi quản trị kể từ bản sao lưu (RPO đã chấp nhận, [Sao Lưu](deployment.md#sao-lưu)). Sau khi khôi phục, máy trạm tự đồng bộ lại snapshot/lease (D-016), không cần làm gì trên máy.
+Dump phải đi cùng **đúng bộ khóa** đang dùng (UID mã hóa bằng khóa trong `/etc/nfc-server/keys`). Mất tối đa 24h nhật ký và thay đổi quản trị kể từ bản sao lưu (RPO đã chấp nhận, [Sao Lưu](deployment.md#sao-lưu)).
+
+**Sau khi khôi phục (D-035):** máy trạm tự đồng bộ lại snapshot và lease (D-016) **trừ** các máy có thay đổi định danh sau thời điểm sao lưu. Kiểm tra trên Dashboard trong vài phút đầu:
+
+| Dấu hiệu | Máy nào | Làm gì |
+|---|---|---|
+| Cờ `apply_error`, chi tiết máy ghi `key_version_mismatch` | Máy được **cài lại** (duyệt cài lại) sau thời điểm sao lưu: máy giữ khóa thế hệ mới, CSDL chỉ biết thế hệ cũ, nên máy từ chối mọi snapshot và hết lease sau 24h | Trên máy: `sudo nfc-agent reenroll`; trên Dashboard: **Duyệt cài lại** yêu cầu có cờ trùng |
+| Máy `enrolled` nhưng không bao giờ kết nối được; log Server có dòng `revoked certificate(s) kept from the existing CRL` | Máy đã **vô hiệu hóa** sau thời điểm sao lưu: CSDL cũ coi là còn hoạt động, nhưng chứng chỉ của nó vẫn bị thu hồi vì Server giữ mọi serial của tệp CRL đang có | **Vô hiệu hóa lại** máy đó trên Dashboard để trạng thái khớp thực tế |
+| Thẻ, user, lịch vừa sửa trước sự cố quay về như cũ | Thay đổi quản trị sau thời điểm sao lưu | Làm lại các thay đổi đó |
+
+CRL không bao giờ thu hẹp: Server luôn giữ các serial đã có trong tệp CRL hiện tại (do chính CA ký), nên khôi phục CSDL cũ không làm sống lại chứng chỉ đã thu hồi.
 
 ### Dựng lại máy chủ hỏng hẳn
 1. Máy chủ mới cùng `SERVER_NAME` (máy trạm tìm Server theo tên và tin CA cũ).
 2. Giải mã bộ khóa **trước** khi cài: `openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in <tệp .enc> | sudo tar -xz --no-same-owner -C /` để có lại `/etc/nfc-server/keys` và `server.env`, rồi chạy `install-server.sh`. Installer giữ nguyên nội dung các tệp đã có và đặt lại chủ sở hữu `nfcsrv` cho chúng (user `nfcsrv` trên máy mới có thể khác UID máy cũ).
-3. Khôi phục CSDL như trên.
-4. Nếu không còn bộ khóa: cài mới, phát `ca.pem` mới vào master image và đăng ký lại mọi máy; thẻ phải đăng ký lại.
+3. Trước khi khởi động Server lần đầu, chép bản CRL đi kèm dump (`nightly/nfclab-<thời điểm>.crl.pem`, cùng thời điểm với tệp `.dump`) vào `/var/lib/nfc-server-crl/crl.pem` (`0644 nfcsrv:mosquitto`), để các thu hồi tới thời điểm đó được giữ. Thu hồi xảy ra sau bản sao lưu đó sẽ mất; xử lý như bảng "Sau khi khôi phục".
+4. Khôi phục CSDL như trên và làm theo bảng "Sau khi khôi phục".
+5. Nếu không còn bộ khóa: cài mới, phát `ca.pem` mới vào master image và đăng ký lại mọi máy; thẻ phải đăng ký lại.
 
 ### Admin quên mật khẩu
 Không có đặt lại mật khẩu qua Dashboard. Trên máy chủ: `sudo bash /opt/nfc-server/current/deploy/create-admin.sh <username mới> "<tên>"`, đăng nhập bằng admin mới, vô hiệu hóa admin cũ nếu cần.

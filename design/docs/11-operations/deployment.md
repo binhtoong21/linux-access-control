@@ -162,12 +162,12 @@ Cài lại một máy giữa kỳ: clone lại máy đó (hoặc `nfc-agent reen
 
 | Đối tượng | Cách | Tần suất | Giữ |
 |---|---|---|---|
-| PostgreSQL | `nfc-backup.timer` chạy `pg_dump -Fc` vào `/var/backups/nfc-server/nightly/`; installer tạo dump `pre-<version>-*.dump` ở thư mục cha trước cập nhật | Hằng đêm lúc 02:30 + trước mỗi lần cập nhật | 14 bản nightly mới nhất; dump trước cập nhật giữ riêng |
+| PostgreSQL | `nfc-backup.timer` chạy `pg_dump -Fc` vào `/var/backups/nfc-server/nightly/`, kèm bản sao tệp CRL cùng thời điểm (`nfclab-<thời điểm>.crl.pem`); installer tạo dump `pre-<version>-*.dump` ở thư mục cha trước cập nhật | Hằng đêm lúc 02:30 + trước mỗi lần cập nhật | 14 bản nightly mới nhất; dump trước cập nhật giữ riêng |
 | Khóa (`master_key`, `K_index`, khóa AES, khóa CA) | Chạy `sudo bash /opt/nfc-server/current/deploy/backup/export-keys.sh <output-file>` để mã hóa khóa và `server.env`; cất tệp và mật khẩu riêng biệt ngoài máy chủ | Một lần khi tạo, và khi đổi khóa AES | Vĩnh viễn |
 | Cấu hình Mosquitto, Nginx | Lưu trong repo cấu hình | Khi đổi | — |
 | Máy trạm | Không sao lưu; dựng lại từ Master Image + đăng ký lại | — | — |
 
-**RPO đã chấp nhận:** hỏng CSDL server thì mất tối đa 24h nhật ký và thay đổi quản trị kể từ bản sao lưu gần nhất, vì máy trạm đã xóa nhật ký sau khi server xác nhận. Đây là sự cố hiếm và hệ thống tự đồng bộ lại snapshot/lease sau khôi phục (D-016).
+**RPO đã chấp nhận:** hỏng CSDL server thì mất tối đa 24h nhật ký và thay đổi quản trị kể từ bản sao lưu gần nhất, vì máy trạm đã xóa nhật ký sau khi server xác nhận. Đây là sự cố hiếm. Sau khôi phục, máy trạm tự đồng bộ lại snapshot/lease (D-016), trừ máy được cài lại hoặc vô hiệu hóa sau thời điểm sao lưu: xử lý theo [pilot-runbook.md](pilot-runbook.md#khôi-phục-csdl-từ-bản-sao-lưu) (D-035). Tệp CRL không bao giờ thu hẹp nên thu hồi không bị lùi theo CSDL.
 
 ## Bảng Tham Số
 

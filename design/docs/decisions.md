@@ -147,6 +147,19 @@ Admin được tắt profile đang là mặc định, hoặc để máy không c
 Yêu cầu cho Dashboard (M4): profile mặc định là nút chọn một (không bỏ chọn được); tắt profile đang là mặc định phải qua hộp xác nhận nêu rõ hệ quả.
 **Nguồn:** [08-api/api.md](08-api/api.md) "Zone và Máy trạm", FR-007, D-009, D-019.
 
+### D-035: Khôi phục CSDL cũ không được làm lùi thu hồi chứng chỉ; máy đổi định danh sau bản sao lưu xử lý bằng thao tác (làm rõ D-016)
+Khôi phục CSDL Server từ bản sao lưu cũ (`pilot-runbook.md`) làm lùi cả những gì xảy ra sau thời điểm sao lưu. D-016 chỉ xử lý **version snapshot** bị lùi. Hai thứ khác cũng lùi theo nhưng chưa được tính:
+- **Thế hệ khóa**: máy được duyệt cài lại sau thời điểm sao lưu giữ `key_version` mới trong `identity/`, CSDL chỉ biết thế hệ cũ. Snapshot và lease ký bằng `K_m` cũ bị máy từ chối (`key_version_mismatch`, ADR-007), nên máy hết lease sau 24h.
+- **Thu hồi chứng chỉ**: chứng chỉ thu hồi sau thời điểm sao lưu (máy bị vô hiệu hóa, hoặc chứng chỉ cũ của máy được cài lại) biến khỏi `revoked_certificates`. CRL dựng lại từ CSDL làm chứng chỉ đó hợp lệ trở lại với broker. Đây là trường hợp hệ thống tự hoàn tác một quyết định an ninh.
+
+Quyết định:
+1. **CRL không bao giờ thu hẹp.** Khi khởi động, Server đọc tệp CRL đang có. Chỉ nhận tệp này nếu chữ ký của nó khớp CA của chính Server. Mỗi lần ghi CRL, Server ghi **hợp** của các serial trong CSDL và các serial trong tệp đó, rồi log số serial mà CSDL không biết (dấu hiệu vừa có khôi phục). Không đổi schema, không thêm API. Sao lưu đêm chép kèm tệp CRL cùng thời điểm với dump, để khi dựng lại máy chủ mới thì đặt lại tệp này trước lần khởi động đầu.
+2. **Máy đổi định danh sau bản sao lưu xử lý bằng thao tác, không tự động.** Máy lệch thế hệ khóa đã hiện cờ `apply_error` kèm `key_version_mismatch` trên Dashboard; cách xử lý là `nfc-agent reenroll` rồi duyệt cài lại. Máy bị vô hiệu hóa sau thời điểm sao lưu hiện là `enrolled` nhưng không kết nối được (chứng chỉ vẫn thu hồi theo mục 1); cách xử lý là vô hiệu hóa lại. Không để Server tự nhận `key_version` máy báo lên: Server không biết serial chứng chỉ mới của máy nên không thu hồi được nó về sau.
+3. Câu "sau khôi phục không cần làm gì trên máy" ở `pilot-runbook.md` và `deployment.md` sửa thành bảng xử lý sau khôi phục.
+
+Không làm: đồng bộ CRL ra ngoài máy chủ theo thời gian thực, lưu `key_version` ngoài CSDL. Với ~40 máy và sự cố hiếm, giữ CRL qua lần khôi phục cộng một bảng thao tác là đủ (D-033.8: đây là sửa một lỗi làm hệ thống tự hoàn tác thu hồi, không phải tính năng bảo mật mới).
+**Nguồn:** nhận xét review thiết kế 2026-11-21; `server/src/distribution/sync.service.ts` (Hello lệch `key_version` chỉ ghi log), `server/src/device/pki.service.ts` (`publishCrl` chỉ đọc CSDL); ADR-007 §3, §6; D-014.5, D-016.
+
 ### D-034: Màn hình là xác nhận duy nhất của một lần quẹt; không điều khiển đầu đọc (S1, 2026-11-20)
 Lần đo S1 với thẻ NTAG215 và ACR122U cho thấy đèn xanh và tiếng bíp do firmware đầu đọc tự phát khi phát hiện thẻ, trước khi máy tính đọc được UID. Các lần lỡ có hai nguồn:
 - cú chạm ngắn hơn chu kỳ hỏi của `libccid` (~0,43 s) không tới được `pcscd`: 16/100 lần quẹt kiểu "bíp là nhấc";
