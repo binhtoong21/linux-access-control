@@ -44,6 +44,11 @@ export interface SignedCrl {
   nextUpdate: Date;
 }
 
+/** Existing CRLs may use any standard reason code, or omit the reason extension. */
+export type CrlRevocation = Omit<RevokedCertificate, 'reason'> & {
+  reason?: RevokedCertificate['reason'] | x509.X509CrlReason;
+};
+
 /** Only an Ed25519 request whose signature proves possession of the key is accepted (api.md INVALID_CSR). */
 export async function parseCsr(csrPem: string): Promise<ParsedCsr> {
   let request: x509.Pkcs10CertificateRequest;
@@ -124,7 +129,7 @@ export class CertificateAuthority {
   }
 
   /** The full list of revoked serials, signed. An empty list is a valid CRL and must still be written (S9). */
-  async crl(revoked: RevokedCertificate[], now: Date = new Date()): Promise<SignedCrl> {
+  async crl(revoked: CrlRevocation[], now: Date = new Date()): Promise<SignedCrl> {
     const nextUpdate = new Date(now.getTime() + CRL_DAYS * DAY_MS);
     const crl = await x509.X509CrlGenerator.create({
       issuer: this.certificate.subject,
@@ -133,7 +138,11 @@ export class CertificateAuthority {
       entries: revoked.map((r) => ({
         serialNumber: r.serial,
         revocationDate: r.revokedAt,
-        reason: r.reason === 'reinstalled' ? x509.X509CrlReason.superseded : x509.X509CrlReason.cessationOfOperation,
+        reason: r.reason === 'reinstalled' ? x509.X509CrlReason.superseded
+          : r.reason === 'disabled' ? x509.X509CrlReason.cessationOfOperation : r.reason,
+        // The generator skips reason 0 (unspecified); preserve its explicit DER ENUMERATED extension.
+        extensions: r.reason === x509.X509CrlReason.unspecified
+          ? [new x509.Extension('2.5.29.21', false, new Uint8Array([0x0a, 0x01, 0x00]).buffer)] : undefined,
       })),
       signingAlgorithm: CA_SIGNING,
       signingKey: this.signingKey as never,

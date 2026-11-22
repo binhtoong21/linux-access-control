@@ -200,19 +200,43 @@ def test_nightly_dump_validation_and_retention_are_scoped():
         script.index('pg_dump -Fc nfclab > "$PARTIAL"')
         < script.index('pg_restore --list "$PARTIAL" > /dev/null')
         < script.index('mv -- "$PARTIAL" "$DUMP"')
-        < script.index('dumps=("$NIGHTLY"/nfclab-*.dump)')
+        < script.index('for dump in "$NIGHTLY"/nfclab-*.dump; do')
     )
     assert "export LC_ALL=C" in script
     assert "${#dumps[@]} > 14" in script
-    # The only deletion commands clean the partial and trim the scoped glob.
+    # Deletion is limited to the partial, timestamped dumps and orphan CRL copies.
     assert re.findall(r"rm -[^\n]+", script) == [
         'rm -f -- "$PARTIAL"\' EXIT',
         'rm -f -- "${dumps[@]:0:${#dumps[@]}-14}"',
+        'rm -f -- "$crl"',
     ]
+    assert '[[ ${dump##*/} =~ ^nfclab-[0-9]{8}T[0-9]{6}Z\\.dump$ ]] || continue' in script
+    assert 'dumps+=("$dump")' in script
+    assert 'for crl in "$NIGHTLY"/nfclab-*.crl.pem; do' in script
+    assert '[[ ${crl##*/} =~ ^nfclab-[0-9]{8}T[0-9]{6}Z\\.crl\\.pem$ ]] || continue' in script
+    assert 'if [[ ! -f ${crl%.crl.pem}.dump ]]; then\n        rm -f -- "$crl"' in script
     assert 'PARTIAL="$DUMP.partial"' in script
     assert 'DUMP="$NIGHTLY/nfclab-$(date -u +%Y%m%dT%H%M%SZ).dump"' in script
     assert 'install -d -o root -g root -m 0700 /var/backups/nfc-server "$NIGHTLY"' in script
     assert 'chmod 0600 "$PARTIAL"' in script
+
+
+def test_nightly_backup_copies_configured_crl_after_dump_publication():
+    script = (PROD / "backup/nfc-backup.sh").read_text(encoding="utf-8")
+    assert "CRL_FILE=/var/lib/nfc-server-crl/crl.pem\n" in script
+    assert "if [[ -f /etc/nfc-server/server.env ]]; then" in script
+    assert "if [[ $line == CRL_FILE=* ]]; then" in script
+    assert "CRL_FILE=${line#CRL_FILE=}" in script
+    assert "done < /etc/nfc-server/server.env" in script
+    assert "CRL_FILE=${CRL_FILE:-/var/lib/nfc-server-crl/crl.pem}" in script
+    copy = 'install -o root -g root -m 0600 -- "$CRL_FILE" "${DUMP%.dump}.crl.pem"'
+    assert (
+        script.index('mv -- "$PARTIAL" "$DUMP"')
+        < script.index('if [[ -f $CRL_FILE ]]; then')
+        < script.index(copy)
+        < script.index('for dump in "$NIGHTLY"/nfclab-*.dump; do')
+    )
+    assert "Warning: CRL file is absent: %s; backup has no CRL copy." in script
 
 
 def test_backup_timer_is_installed_and_enabled_after_current_switch():
