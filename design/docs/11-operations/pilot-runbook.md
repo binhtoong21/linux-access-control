@@ -104,6 +104,11 @@ sudo systemctl stop nfc-server
 # --single-transaction: lỗi giữa chừng thì CSDL giữ nguyên như trước khi khôi phục.
 sudo sh -c 'cd / && runuser -u postgres -- /usr/lib/postgresql/15/bin/pg_restore --clean --if-exists --single-transaction -d nfclab < "$1"' sh /var/backups/nfc-server/nightly/<tệp>.dump \
   && sudo systemctl start nfc-server
+# Chờ tới khi /api/v1/system/health có db = ok và crl_next_update khác null (Server đã ghi CRL);
+# đừng chờ status = ok: khi broker đang dừng, health luôn báo degraded.
+# Rồi khởi động lại broker để nó nạp CRL vừa ghi (Mosquitto chỉ đọc CRL lúc khởi động):
+sudo systemctl restart mosquitto
+# Sau đó health mới về status = ok, mqtt = ok.
 ```
 Lệnh khôi phục lỗi thì Server **giữ nguyên trạng thái dừng**: đọc lỗi, thử một bản sao lưu khác, chỉ khởi động lại khi khôi phục thành công (máy trạm vẫn cho quẹt theo lease trong lúc chờ).
 Dump phải đi cùng **đúng bộ khóa** đang dùng (UID mã hóa bằng khóa trong `/etc/nfc-server/keys`). Mất tối đa 24h nhật ký và thay đổi quản trị kể từ bản sao lưu (RPO đã chấp nhận, [Sao Lưu](deployment.md#sao-lưu)).
@@ -112,7 +117,7 @@ Dump phải đi cùng **đúng bộ khóa** đang dùng (UID mã hóa bằng kh�
 
 | Dấu hiệu | Máy nào | Làm gì |
 |---|---|---|
-| Cờ `apply_error`, chi tiết máy ghi `key_version_mismatch` | Máy được **cài lại** (duyệt cài lại) sau thời điểm sao lưu: máy giữ khóa thế hệ mới, CSDL chỉ biết thế hệ cũ, nên máy từ chối mọi snapshot và hết lease sau 24h | Trên máy: `sudo nfc-agent reenroll`; trên Dashboard: **Duyệt cài lại** yêu cầu có cờ trùng |
+| Cờ `apply_error`, chi tiết máy ghi `key_version_mismatch` | Máy được **cài lại** (duyệt cài lại) sau thời điểm sao lưu: máy giữ khóa thế hệ mới, CSDL chỉ biết thế hệ cũ, nên máy từ chối mọi snapshot và hết lease sau 24h | Trên máy: `sudo nfc-agent reenroll`; trên Dashboard: **Duyệt cài lại** yêu cầu có cờ trùng. Khi máy đã online và `in_sync`, trên máy chạy `sudo sh -c 'rm -rf /var/lib/nfc-agent/identity.old.*'` (dấu `*` phải do root mở rộng: `sudo rm -rf …*` âm thầm không xóa gì vì user thường không đọc được thư mục này). Bước này **bắt buộc**: chứng chỉ thế hệ mà máy dùng trước đó không có trong CSDL đã khôi phục, nên Server không thu hồi được; xóa khóa riêng của nó trên máy là cách duy nhất làm nó vô dụng |
 | Máy `enrolled` nhưng không bao giờ kết nối được; log Server có dòng `revoked certificate(s) kept from the existing CRL` | Máy đã **vô hiệu hóa** sau thời điểm sao lưu: CSDL cũ coi là còn hoạt động, nhưng chứng chỉ của nó vẫn bị thu hồi vì Server giữ mọi serial của tệp CRL đang có | **Vô hiệu hóa lại** máy đó trên Dashboard để trạng thái khớp thực tế |
 | Thẻ, user, lịch vừa sửa trước sự cố quay về như cũ | Thay đổi quản trị sau thời điểm sao lưu | Làm lại các thay đổi đó |
 
@@ -120,9 +125,13 @@ CRL không bao giờ thu hẹp: Server luôn giữ các serial đã có trong t�
 
 ### Dựng lại máy chủ hỏng hẳn
 1. Máy chủ mới cùng `SERVER_NAME` (máy trạm tìm Server theo tên và tin CA cũ).
-2. Giải mã bộ khóa **trước** khi cài: `openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in <tệp .enc> | sudo tar -xz --no-same-owner -C /` để có lại `/etc/nfc-server/keys` và `server.env`, rồi chạy `install-server.sh`. Installer giữ nguyên nội dung các tệp đã có và đặt lại chủ sở hữu `nfcsrv` cho chúng (user `nfcsrv` trên máy mới có thể khác UID máy cũ).
-3. Trước khi khởi động Server lần đầu, chép bản CRL đi kèm dump (`nightly/nfclab-<thời điểm>.crl.pem`, cùng thời điểm với tệp `.dump`) vào `/var/lib/nfc-server-crl/crl.pem` (`0644 nfcsrv:mosquitto`), để các thu hồi tới thời điểm đó được giữ. Thu hồi xảy ra sau bản sao lưu đó sẽ mất; xử lý như bảng "Sau khi khôi phục".
-4. Khôi phục CSDL như trên và làm theo bảng "Sau khi khôi phục".
+2. Giải mã bộ khóa **trước** khi cài: `openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in <tệp .enc> | sudo tar -xz --no-same-owner -C /` để có lại `/etc/nfc-server/keys` và `server.env`, rồi chạy `install-server.sh`. Installer giữ nguyên nội dung các tệp đã có và đặt lại chủ sở hữu `nfcsrv` cho chúng (user `nfcsrv` trên máy mới có thể khác UID máy cũ). Lúc này Server chạy trên CSDL rỗng và broker đã nạp một CRL rỗng.
+3. Dừng cả hai rồi đặt lại CRL đi kèm dump (`nightly/nfclab-<thời điểm>.crl.pem`, cùng thời điểm với tệp `.dump`):
+   ```bash
+   sudo systemctl stop nfc-server mosquitto
+   sudo install -o nfcsrv -g mosquitto -m 0644 <tệp>.crl.pem /var/lib/nfc-server-crl/crl.pem
+   ```
+4. Khôi phục CSDL bằng lệnh ở mục trên: Server khởi động, ghi CRL hợp nhất, rồi broker được khởi động lại và nạp CRL đó. Sau đó làm theo bảng "Sau khi khôi phục". Thu hồi xảy ra sau bản sao lưu này không có trong CRL đã chép; xử lý theo bảng.
 5. Nếu không còn bộ khóa: cài mới, phát `ca.pem` mới vào master image và đăng ký lại mọi máy; thẻ phải đăng ký lại.
 
 ### Admin quên mật khẩu

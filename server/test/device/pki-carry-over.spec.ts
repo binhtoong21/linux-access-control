@@ -97,6 +97,61 @@ describe('PKI CRL carry-over', () => {
     expect(readCrl().entries[0].revocationDate).toEqual(oldDate);
   });
 
+  it('serializes overlapping publishes and carries every successfully written serial forward', async () => {
+    const query = jest.spyOn(db.getExecutor(), 'executeQuery')
+      .mockResolvedValueOnce({ rows: [{ cert_serial: dbSerial, revoked_at: dbDate, reason: 'disabled' }] })
+      .mockResolvedValueOnce({ rows: [{ cert_serial: dbOnlySerial, revoked_at: dbDate, reason: 'reinstalled' }] });
+    let releaseFirst!: () => void;
+    let firstStarted!: () => void;
+    const blocked = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    const started = new Promise<void>((resolve) => { firstStarted = resolve; });
+    const sign = ca.crl.bind(ca);
+    const crl = jest.spyOn(ca, 'crl').mockImplementationOnce(async (revoked) => {
+      firstStarted();
+      await blocked;
+      return sign(revoked);
+    });
+    const pki = service();
+    const first = pki.publishCrl();
+    await started;
+    const second = pki.publishCrl();
+    try {
+      // Let an unqueued second publication overtake the blocked first signature.
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(query).toHaveBeenCalledTimes(1);
+      expect(crl).toHaveBeenCalledTimes(1);
+    } finally {
+      releaseFirst();
+      await Promise.all([first, second]);
+    }
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(readCrl().entries.map((entry) => entry.serialNumber.toLowerCase()).sort()).toEqual([dbSerial, dbOnlySerial]);
+
+    // Simulate a DB restore after both writes, without restarting the service.
+    await pki.publishCrl();
+    expect(readCrl().entries.map((entry) => entry.serialNumber.toLowerCase()).sort()).toEqual([dbSerial, dbOnlySerial]);
+  });
+
+  it('continues queued publications after a signing failure', async () => {
+    jest.spyOn(ca, 'crl').mockRejectedValueOnce(new Error('signing failed'));
+    const pki = service();
+    const first = pki.publishCrl();
+    const second = pki.publishCrl();
+    await expect(first).rejects.toThrow('signing failed');
+    await expect(second).resolves.toBeInstanceOf(Date);
+    expect(readCrl().entries).toEqual([]);
+  });
+
+  it('ignores an existing CRL over 1 MiB, warns and continues startup', async () => {
+    writeFileSync(crlFile, Buffer.alloc(1024 * 1024 + 1));
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const pki = service();
+    await expect(pki.onApplicationBootstrap()).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledWith('Existing CRL ignored: CRL file exceeds the 1 MiB limit');
+    expect(pki.crlNextUpdate()).toBeInstanceOf(Date);
+    expect(readCrl().entries).toEqual([]);
+  });
+
   it('ignores a CRL signed by another CA even with the same issuer name, warns and continues startup', async () => {
     const foreignDir = path.join(dir, 'foreign');
     mkdirSync(foreignDir);
