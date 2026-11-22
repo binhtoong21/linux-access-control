@@ -249,10 +249,14 @@ export function AuditTab({
           </Field>
 
           {/* Zone */}
-          <Field label="Zone" htmlFor="audit-filter-zone">
+          <Field
+            label="Zone"
+            htmlFor="audit-filter-zone"
+            hint="Zone của máy lúc Server nhận nhật ký"
+          >
             <select
               id="audit-filter-zone"
-              aria-describedby={fieldDescribedBy('audit-filter-zone', {})}
+              aria-describedby={fieldDescribedBy('audit-filter-zone', { hint: true })}
               aria-label="Chọn zone"
               value={zoneId}
               onChange={(e) => setZoneId(e.target.value)}

@@ -43,7 +43,7 @@ Bản ghi nhật ký phản ánh quyết định của Agent (`LoginDecision`), 
    - `org.gnome.desktop.screensaver lock-enabled=false`
    - `org.gnome.desktop.lockdown disable-lock-screen=true`
    - `org.gnome.desktop.lockdown disable-user-switching=true`
-   Việc tắt Switch User triệt tiêu hoàn toàn trạng thái lửng lơ "về Greeter nhưng Desktop cũ vẫn chạy ngầm", bảo đảm sinh viên chỉ có thể rời máy bằng Đăng xuất (Logout) hoặc chờ phiên tự kết thúc khi hết ca.
+   Việc tắt Switch User bỏ đường dẫn chính tới trạng thái lửng lơ "về Greeter nhưng Desktop cũ vẫn chạy ngầm", bảo đảm sinh viên chỉ có thể rời máy bằng Đăng xuất (Logout) hoặc chờ phiên tự kết thúc khi hết ca.
 **Nguồn:** BR-004, BR-008, BR-009, BR-020, NFR-A02, NFR-C01, NFR-SEC07, kết luận điều chỉnh từ Spike S3-S6.
 
 ### D-007: Phạm vi vai trò hệ thống và cơ chế Fallback mật khẩu

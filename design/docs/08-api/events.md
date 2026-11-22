@@ -26,7 +26,7 @@
 |---|---|---|---|---|---|
 | Hello | `lab/workstation/{ws}/hello` | Edge → Server | 1 / không | — | 3.1 |
 | Heartbeat | `lab/workstation/{ws}/heartbeat` | Edge → Server | 0 / không | — | 3.2 |
-| Outbox batch | `lab/workstation/{ws}/outbox` | Edge → Server | 1 / không | — | 3.3 |
+| Outbox batch | `lab/workstation/{ws}/outbox` | Edge → Server | 1 / không | `outbox` (D-030) | 3.3 |
 | Status / LWT | `lab/workstation/{ws}/status` | Edge (broker thay mặt khi đứt) → Server | 1 / **có** | — | 3.4 |
 | Snapshot | `lab/workstation/{ws}/snapshot` | Server → Edge | 1 / **có** | `snapshot` | 4.1 |
 | Lease | `lab/workstation/{ws}/lease` | Server → Edge | 1 / không | `lease` | 4.2 |

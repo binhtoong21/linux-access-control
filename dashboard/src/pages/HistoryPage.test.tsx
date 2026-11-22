@@ -145,6 +145,7 @@ describe('HistoryPage', () => {
 
     // Check header note
     expect(screen.getByText('Thời điểm theo đồng hồ của máy trạm.')).toBeInTheDocument();
+    expect(screen.getByText('Zone của máy lúc Server nhận nhật ký')).toBeInTheDocument();
 
     // Check late record note: only 1 late record has "nhận lúc"
     const lateNotes = screen.getAllByText(/nhận lúc/);

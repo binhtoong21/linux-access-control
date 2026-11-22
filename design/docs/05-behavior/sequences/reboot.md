@@ -15,9 +15,10 @@ sequenceDiagram
     participant S as Server
 
     alt Tắt hoặc khởi động lại có kế hoạch
-        O->>A: Dừng dịch vụ (sau khi phiên người dùng đã kết thúc)
-        A->>K: Đóng LocalSession active: abandoned (workstation_rebooted), reported, giờ chính xác
+        O->>A: Dừng dịch vụ (SIGTERM)
+        A->>K: Chỉ ghi last_alive_at = lúc dừng, không đóng LocalSession (D-031)
         A-->>S: Cố gắng đẩy outbox trong thời gian ngắn (nếu có kết nối)
+        Note over A,K: SIGTERM cũng đến khi chỉ restart Agent (nâng cấp gói), desktop vẫn chạy, nên bước này không đóng phiên. Phiên được đóng ở lần khởi động sau, nếu boot_id khác
     else Mất điện hoặc sập
         Note over A,K: Không bước nào chạy. Kho giữ nguyên LocalSession, outbox, last_alive_at
     end
