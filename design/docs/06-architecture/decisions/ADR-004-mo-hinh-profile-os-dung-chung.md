@@ -92,7 +92,7 @@ Chúng tôi quyết định áp dụng **Mô hình Profile OS Dùng Chung (Share
        /org/gnome/desktop/lockdown/disable-user-switching
        ```
      * Thực thi lệnh bắt buộc: `sudo dconf update`.
-     Quy chuẩn này triệt tiêu hoàn toàn trạng thái "về Greeter mà phiên cũ vẫn sống", bảo đảm sinh viên chỉ có thể rời máy bằng Đăng xuất (Logout) hoặc chờ hết ca.
+     Quy chuẩn này bỏ các đường dẫn tới trạng thái "về Greeter mà phiên cũ vẫn sống" (Switch User, khóa màn hình; cấu hình đã thử ở S7b), bảo đảm sinh viên chỉ có thể rời máy bằng Đăng xuất (Logout) hoặc chờ hết ca.
 5. **Nhận thức rủi ro & Khuyến nghị vận hành (A4):**
    - Thừa nhận rủi ro `workstation_busy` (A4): Sinh viên rời máy mà quên đăng xuất thì máy tiếp tục bận đến hết hạn ca học; kỹ thuật viên xử lý bằng đăng xuất thủ công (fallback).
    - Thừa nhận giới hạn: Các ứng dụng chạy trong cùng một user OS sẽ chia sẻ cookie, session trình duyệt và lịch sử terminal.

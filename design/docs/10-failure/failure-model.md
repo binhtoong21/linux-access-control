@@ -82,6 +82,7 @@ Không làm chaos engineering có hệ thống; các tình huống hỏng hóc t
 |---|---|---|---|
 | Rút điện cưỡng chế khi ghi liên tục (S5) | `edge.db` | Không hỏng, không phiên mồ côi | Đạt (1 lần trên VM) |
 | Agent chết khi PAM hỏi (S2, S6) | PAM | Rơi về mật khẩu < 25ms | Đạt (22ms) |
+| Agent còn chạy nhưng treo khi PAM hỏi | PAM | Rơi về mật khẩu sau `TIMEOUT` 3 s (ADR-005) | Theo thiết kế, chưa đo riêng |
 | Greeter lỗi kéo dài (S3b, S10) | LightDM | Còn đường đăng nhập đồ họa | Đạt sau khi sửa tệp đếm crash |
 | 20 chu kỳ thay phiên cùng UID dưới tải (S7b) | Teardown | ≤ 3s, không treo D-Bus | Đạt (P95 2314.8 ms) |
 | CRL hết hạn / thiếu tệp (S9) | Broker | Phát hiện điểm tự khóa | Phát hiện, đã thiết kế phòng tránh |

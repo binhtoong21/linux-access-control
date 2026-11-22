@@ -42,7 +42,7 @@ sequenceDiagram
         Note over A: Làm mới thời hạn tin cậy
         A-)B: SnapshotApplied(version)
         B-)D: SnapshotApplied
-        D->>D: acked_version = max(acked_version, version)
+        D->>D: acked_version = đúng version máy báo, không lấy max (D-025)
     else Hỏng, sai máy hoặc cũ hơn
         Note over A: Giữ bản đang dùng, ghi log cục bộ
     end

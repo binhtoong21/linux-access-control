@@ -99,7 +99,7 @@ classDiagram
 | LoginDecision | id (do Edge sinh), outcome, reason, card_uid, user, expires_at, decided_at, data_version |
 | BootId | Định danh một lần khởi động máy |
 | CardMatchKey | Khóa so khớp thẻ trong snapshot: HMAC của UID bằng khóa riêng theo máy. Domain dùng trừu tượng; thuật toán cụ thể ở ADR-007 |
-| UserSnapshot, CardSnapshot, WorkstationSnapshot | Ảnh chụp tại thời điểm sự kiện (mã, tên, hostname, zone) |
+| UserSnapshot, CardSnapshot, WorkstationSnapshot | Ảnh chụp ghi kèm bản ghi nhật ký (mã, tên, hostname, zone), không đổi về sau. UserSnapshot và CardSnapshot là trạng thái lúc máy ra quyết định. WorkstationSnapshot (hostname, zone) là trạng thái **lúc Server nhận** bản ghi: máy offline bị chuyển zone trước khi gửi nhật ký thì các lượt quẹt cũ mang zone mới. Chấp nhận vì hiếm và tra cứu theo máy vẫn đúng |
 
 ## Enumerations
 | Enum | Giá trị |

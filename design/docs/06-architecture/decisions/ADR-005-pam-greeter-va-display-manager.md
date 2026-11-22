@@ -24,7 +24,7 @@ Cần một quyết định kiến trúc chuẩn hóa lựa chọn Display Manag
 
 ## Decision Drivers
 
-- **Trải Nghiệm 0-Chạm Tuyệt Đối (FR-010):** Chuyển từ màn hình chào vào Desktop trong thời gian < 1.0 giây sau khi quẹt thẻ hợp lệ mà không cần thao tác chuột hay bàn phím.
+- **Trải Nghiệm 0-Chạm Tuyệt Đối (FR-010):** Quẹt thẻ hợp lệ là vào Desktop, không cần thao tác chuột hay bàn phím. Greeter phản hồi ngay khi Agent có quyết định; Desktop GNOME sẵn sàng sau 4,8–7,1 s (S7b, trên VM, đo từ lúc bắt đầu đăng nhập tới khi GNOME sẵn sàng).
 - **Tính Bền Vững của Đường Dự Phòng (BR-004, NFR-M01):** Module PAM không được phép làm nghẽn hoặc đóng băng luồng đăng nhập bằng mật khẩu khi Agent daemon chết hoặc socket bị treo.
 - **Bảo Mật Tiến Trình IPC (Least Privilege & SO_PEERCRED):** Chỉ tiến trình có đặc quyền `root` (Display Manager) mới được phép yêu cầu Agent tiêu thụ token xác thực.
 - **Khả Năng Tự Phục Hồi & Can Thiệp Cứu Hộ:** Màn hình chào tự hồi sinh khi crash nhẹ; cung cấp đường cứu hộ rõ ràng qua TTY/SSH khi lỗi script kéo dài.
@@ -126,7 +126,7 @@ Hệ thống phân tách ranh giới an ninh thành 3 kênh Unix Domain Socket �
 ` hoặc `DENIED <lý do>
 `. Agent chỉ cấp khi có lượt cho phép một lần còn hạn (30 s) và `PAM_USER` đúng profile đã chọn; sai user thì không đốt lượt. Kiểm chứng bằng `pamtester` (5/5 kịch bản, fallback khi Agent không chạy ~10 ms).
    - **Bảo vệ cấp nhân qua `SO_PEERCRED`:** Khi nhận kết nối `connect()`, Agent gọi syscall `getsockopt(..., SOL_SOCKET, SO_PEERCRED, ...)` để trích xuất cấu trúc `ucred`. Agent **từ chối tuyệt đối mọi tiến trình không có UID = 0 (root)**. Ngăn chặn triệt để người dùng thường can thiệp vào IPC xác thực.
-   - **Đặc tính Fallback Tức Thì (NFR-M01, BR-004):** Module C hoàn toàn stateless. Khi Agent không phản hồi trong **`TIMEOUT = 3000ms`** (hàm `poll()`) hoặc file socket không tồn tại, `pam_nfc.so` lập tức trả về mã **`PAM_IGNORE`**. Chuỗi PAM rơi xuống `pam_unix.so` mở nhắc lệnh hỏi mật khẩu dự phòng trong < 25ms.
+   - **Đặc tính Fallback Tức Thì (NFR-M01, BR-004):** Module C hoàn toàn stateless. Khi Agent không phản hồi trong **`TIMEOUT = 3000ms`** (hàm `poll()`) hoặc file socket không tồn tại, `pam_nfc.so` trả về mã **`PAM_IGNORE`** và chuỗi PAM rơi xuống `pam_unix.so` hỏi mật khẩu dự phòng. Thời gian tới lúc hỏi mật khẩu phụ thuộc trường hợp: Agent không chạy (không có socket hoặc kết nối bị từ chối) thì gần như tức thì (đo được 22 ms, S2, S6); Agent còn chạy nhưng treo thì phải chờ hết `TIMEOUT = 3000ms`.
    - **Cập nhật danh tính đích (`PAM_USER`):** Module gọi chuẩn `pam_set_item(pamh, PAM_USER, target_username)` để cập nhật tài khoản đích (ví dụ `student`), cho phép tài khoản bị khóa mật khẩu (`passwd -l`) đăng nhập thành công 100% vào Desktop (Spike S3 Ca 8).
 2. **Kênh Đẩy Sự Kiện Greeter (`/run/nfc/greeter-push.sock`):**
    - Phân quyền `0770 root:lightdm` (thuộc thư mục `/run/nfc/` phân quyền `0755 root:root`).
@@ -154,7 +154,7 @@ Giao diện đăng nhập chuyên dụng cho phòng lab (`/usr/local/bin/lab_gre
        "display_name": "Nguyễn Văn A (SV001)"
      }
      ```
-2. **Quy Trình Đăng Nhập 0-Chạm Tức Thì (< 1.0 giây):**
+2. **Quy Trình Đăng Nhập 0-Chạm** (greeter phản hồi ngay khi có quyết định; Desktop sẵn sàng sau 4,8–7,1 s theo S7b):
    - Ngay khi nhận được sự kiện `card_swiped`, Greeter cập nhật giao diện thông báo xanh: *"Thẻ hợp lệ: Nguyễn Văn A! Đang vào Desktop..."*.
    - Greeter lập tức gọi API `lightdm_greeter_authenticate(greeter, "student")` và `lightdm_greeter_start_session_sync(greeter, "ubuntu")`.
    - Màn hình tự động mở thẳng vào Desktop GNOME mà người dùng không cần chạm vào bất kỳ thiết bị nhập liệu nào.
@@ -183,7 +183,7 @@ Dựa trên phát hiện kỹ thuật đắt giá của Spike S6 và S7:
   1. Khi tiến trình Greeter mới khởi động, giao diện dành khoảng **1.2 giây đệm** để hoàn tất việc vẽ khung đồ họa và kết nối D-Bus session.
   2. Greeter chủ động gửi thông điệp `{"action": "greeter_ready"}` sang Agent qua kênh `/run/nfc/greeter-push.sock`.
   3. Chỉ khi nhận được `greeter_ready`, Agent mới kích hoạt bàn giao các yêu cầu quẹt thẻ đang chờ (`staged_auth`).
-  - Triệt tiêu 100% hiện tượng xung đột D-Bus gây treo đen màn hình ~110 giây (ADR-008).
+  - Không còn gặp hiện tượng xung đột D-Bus gây treo đen màn hình ~110 giây trong các lần thử của S7b (ADR-008).
 
 ---
 
@@ -193,8 +193,8 @@ Dựa trên phát hiện kỹ thuật đắt giá của Spike S6 và S7:
    - Màn hình Custom Greeter cung cấp khung nhập mật khẩu dự phòng gồm 2 ô: **Username** và **Password**.
    - Khung này **chỉ dành riêng cho Kỹ thuật viên / Quản trị viên IT** sử dụng tài khoản bảo trì độc lập (ví dụ `labadmin`, `binhtong` có mật khẩu). Sinh viên không có mật khẩu đăng nhập tài khoản dùng chung `student`.
 2. **Kịch Bản Tự Động Hồi Phục Qua Launcher Wrapper Script (`lab-greeter-wrapper.sh`):**
-   - Thay vì LightDM trực tiếp gọi `lab_greeter.py`, `/etc/lightdm/lightdm.conf.d/99-lab-greeter.conf` đặt `greeter-session=lab-greeter`, và tệp `/usr/share/xgreeters/lab-greeter.desktop` trỏ `Exec=/usr/local/bin/lab-greeter-wrapper.sh` (LightDM chọn greeter theo tên tệp `.desktop`, không theo tên script).
-   - Kịch bản `/usr/local/bin/lab-greeter-wrapper.sh`:
+   - Thay vì LightDM trực tiếp gọi `lab_greeter.py`, tệp cấu hình chọn greeter đặt `greeter-session=lab-greeter`, và tệp `/usr/share/xgreeters/lab-greeter.desktop` trỏ `Exec=` tới wrapper (LightDM chọn greeter theo tên tệp `.desktop`, không theo tên script). Đường dẫn khi cài bằng gói `nfc-agent` (M5.1): tệp chọn greeter `/usr/share/lightdm/lightdm.conf.d/99-lab-greeter.conf` (thư mục cấu hình của gói, không phải conffile, để gỡ gói thì LightDM tự về greeter chuẩn), wrapper `/usr/lib/nfc-agent/lab-greeter-wrapper.sh`, greeter `/usr/lib/nfc-agent/lab_greeter.py`. Spike S10 dùng bản cài tay ở `/etc/lightdm/lightdm.conf.d/` và `/usr/local/bin/`.
+   - Kịch bản wrapper (bản cài tay của S10; bản trong gói chỉ khác đường dẫn tới `lab_greeter.py`):
      ```bash
      #!/bin/bash
      # Greeter chạy dưới user lightdm: /run thuộc root (0755) nên KHÔNG ghi được (S10).
@@ -232,10 +232,13 @@ Dựa trên phát hiện kỹ thuật đắt giá của Spike S6 và S7:
    - *Ràng buộc với systemd:* `lightdm.service` dùng `Restart=always` với giới hạn mặc định 5 lần khởi động trong 10s. Ngưỡng fallback (3 crash) phải luôn nhỏ hơn giới hạn này; nếu không, systemd dừng hẳn LightDM trước khi wrapper kịp rơi về greeter chuẩn (S10 phần A).
    - *Bằng chứng ([Spike S10](../../../../spike-results/s10-greeter-wrapper.md)):* với tệp đếm ở `/run`, wrapper không ghi được (`Permission denied`), LightDM crash lặp tới khi systemd dừng hẳn (`Start request repeated too quickly`), màn hình đen, **không có fallback**. Với tệp đếm ở `/var/lib/lightdm`: 3 crash thì rơi về `lightdm-gtk-greeter`, LightDM vẫn `active`; 3 lần đăng nhập GNOME thật liên tiếp qua wrapper không tạo mốc crash nào, không kích hoạt fallback, và chỉ còn đúng 1 tiến trình `lab_greeter.py` (SIGTERM được chuyển tiếp, không có tiến trình mồ côi). Giới hạn: N = 1 cho mỗi kịch bản, trên VM.
 3. **Quy trình Cứu hộ Thủ công Qua Virtual Terminal (TTY2):**
-   - Trong trường hợp xấu nhất, kỹ thuật viên nhấn tổ hợp phím **`Ctrl + Alt + F2`** (TTY2) hoặc SSH từ xa, đăng nhập bằng `labadmin` và chuyển đổi hẳn sang GTK Greeter bằng lệnh:
+   - Trong trường hợp xấu nhất, kỹ thuật viên nhấn tổ hợp phím **`Ctrl + Alt + F2`** (TTY2) hoặc SSH từ xa, đăng nhập bằng `labadmin` và chuyển đổi hẳn sang GTK Greeter bằng lệnh (đã thử trên vm2 với gói `nfc-agent` 0.1.0-4, 2026-11-22: LightDM chạy `lightdm-gtk-greeter`, gỡ tệp thì Lab Greeter quay lại):
      ```bash
-     sudo sed -i 's/lab-greeter-wrapper/lightdm-gtk-greeter/' /etc/lightdm/lightdm.conf.d/99-lab-greeter.conf
+     # /etc/lightdm/lightdm.conf.d được đọc sau /usr/share/lightdm/lightdm.conf.d nên tệp này thắng lựa chọn của gói
+     printf '[Seat:*]\ngreeter-session=lightdm-gtk-greeter\n' | sudo tee /etc/lightdm/lightdm.conf.d/99-zz-rescue.conf
      sudo systemctl restart lightdm
+     # Sửa xong Lab Greeter thì gỡ tệp cứu hộ:
+     # sudo rm /etc/lightdm/lightdm.conf.d/99-zz-rescue.conf && sudo systemctl restart lightdm
      ```
 
 ---
@@ -243,7 +246,7 @@ Dựa trên phát hiện kỹ thuật đắt giá của Spike S6 và S7:
 ## Consequences
 
 ### Positive
-- **Đạt Chuẩn Trải Nghiệm 0-Chạm:** Quá trình đăng nhập diễn ra tự động 100%, không cần chuột hay bàn phím, thời gian mở máy < 1.0 giây.
+- **Đạt Chuẩn Trải Nghiệm 0-Chạm:** Quá trình đăng nhập diễn ra tự động 100%, không cần chuột hay bàn phím; Desktop sẵn sàng sau 4,8–7,1 s (S7b, trên VM).
 - **An Toàn Tuyệt Đối cho Đường Dự Phòng:** Module PAM C không bao giờ chặn (block) tiến trình; fallback mật khẩu hoạt động ổn định trong mọi tình huống Agent chết hoặc treo.
 - **Triệt Tiêu Hoàn Toàn Lỗi Bấm 2 Lần:** Custom Greeter nhận sự kiện đẩy chủ động, loại bỏ hoàn toàn hạn chế của cơ chế pre-authentication cũ.
 - **Bảo Vệ Tiến Trình IPC Cấp Nhân:** Sử dụng `SO_PEERCRED` ngăn chặn người dùng thường giả mạo gửi tín hiệu đăng nhập.
